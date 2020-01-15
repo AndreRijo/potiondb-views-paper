@@ -1,0 +1,113 @@
+
+
+\documentclass{vldb}
+\usepackage{graphicx}
+\usepackage{balance}  % for  \balance command ON LAST PAGE  (only there!)
+
+\begin{document}
+
+topicos
+
+\section{Introduction}
+
+\begin{itemize}
+	\item Num. DC a aumentar
+	\item Replicar totalmente tem problemas
+	\item Replicação parcial
+	\item Queries sobre dados replicados parcialmente
+	\begin{itemize}
+		\item Standard solution?
+	\end{itemize}
+	\item Views materializadas replicadas totalmente
+	\item Contribuições
+\end{itemize}
+
+\section{System overview}
+
+\begin{itemize}
+	\item System model
+	\begin{itemize}
+		\item Replicação parcial
+	\end{itemize}
+	\item System API
+	\begin{itemize}
+		\item "Create table"
+		\item "Create view"
+		\begin{itemize}
+			\item CRDT não uniforme
+			\item put numa table $\implies$ puts nas várias views
+			\begin{itemize}
+				\item consistência das views face aos dados - in sync
+			\end{itemize}
+		\end{itemize}
+	\end{itemize}
+	\item System description
+	\begin{itemize}
+		\item CRDT não uniforme
+		\item Implementação de queries?
+	\end{itemize}
+
+\end{itemize}
+
+\section{Implementation}
+
+\section{Evaluation}
+
+\section{Related Work}
+
+\section{Conclusions}
+
+\section{System overview}
+
+\vspace{8cm}
+Possiveis pontos mais detalhados?
+
+\subsection{System model}
+
+\begin{itemize}
+	\item Network assumptions
+	\item Client-server interaction (refer key-value store interface? Maybe refer this instead in System API?)
+	\item Server-server interaction? (is it needed? We'll already touch this in Replication.)
+	\item System guarantees
+	\begin{itemize}
+		\item CRDTs
+		\item Consistency level	
+	\end{itemize}
+	\item Replication
+		\item Async
+		\item Op-based
+		\item Maintains consistency, i.e., transaction level based.
+		\item Partial (system admin defined, each server only has a subset of the data based on topics. Potencially some data can be replicated everywhere)
+\end{itemize}
+
+\subsection{System API}
+
+\begin{itemize}
+	\item Basically how can we translate a problem to sql-like operations
+	\item Create table
+	\item Create view
+	\item Updates (incluir problema de consistência de views/dados)
+	\item Queries (incluir aqui problema de os CRDTs não uniformes precisarem de mais dados? Ou na zona da view?)
+\end{itemize}
+
+\subsection{System description}
+
+\begin{itemize}
+\item Structure? Maybe that's for implementation? How much detail?
+\begin{itemize}
+	\item Internal partitioning vs external partitioning? Capaz de não ser boa ideia...	
+\end{itemize}
+\item CRDTs and non-uniform CRDTs?
+\end{itemize}
+
+\section{Implementation}
+
+\begin{itemize}
+	\item Go
+	\item Transactions (TM/Mat?)
+	\item Replication (RabbitMQ and other stuff?)
+	\item Communication (protobufs. Also worth noticing the compability with existing AntidoteDB clients)
+	\item CRDTs (version management at least)
+\end{itemize}
+
+\end{document}
