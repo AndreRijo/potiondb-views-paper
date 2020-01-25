@@ -1,14 +1,187 @@
-
-
 \documentclass{vldb}
+
+\usepackage[utf8]{inputenc}
+\usepackage{times}
 \usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{paralist}
+\usepackage[inline]{enumitem}
+
+
+
 \usepackage{balance}  % for  \balance command ON LAST PAGE  (only there!)
+
+
+\newcommand{\grumbler}[2]{{\color{red}{\bf #1:} #2}}
+\newcommand{\andre}[1]{\grumbler{andre}{#1}}
+\newcommand{\nuno}[1]{\grumbler{nuno}{#1}}
+\newcommand{\carla}[1]{\grumbler{carla}{#1}}
+
+\newcommand{\outline}[1]{}
+%\newcommand{\outline}[1]{\grumbler{outline}{#1}}
+
+\vldbTitle{}
+\vldbAuthors{}
+\vldbVolume{12}
+\vldbNumber{xxx}
+\vldbYear{2020}
+\vldbDOI{https://doi.org/TBD}
+
 
 \begin{document}
 
-topicos
+\title{Global Views on Partially Geo-Replicated Data}
+\numberofauthors{3} %  in this sample file, there are a *total*
+% of EIGHT authors. SIX appear on the 'first-page' (for formatting
+% reasons) and the remaining two appear in the \additionalauthors section.
+
+\author{\alignauthor André Rijo\\
+       \affaddr{NOVA LINCS, FCT, Universidade NOVA de Lisboa}\\
+%       \email{v.sousa@campus.fct.unl.pt}
+\alignauthor Carla Ferreira\\
+       \affaddr{NOVA LINCS, FCT, Universidade NOVA de Lisboa}\\
+%       \email{carla.ferreira@fct.unl.pt}
+\alignauthor
+Nuno Preguiça\\
+       \affaddr{NOVA LINCS, FCT, Universidade NOVA de Lisboa}\\
+%       \email{nuno.preguica@fct.unl.pt}
+}
+
+
+\maketitle
+
+\begin{abstract}
+bla
+
+bla
+
+bla
+
+bla
+
+bla
+
+bla
+
+bla
+
+bla
+
+\end{abstract}
 
 \section{Introduction}
+
+%	\item Num. DC a aumentar
+
+The increasing reliance on web service in many domains of activity, from e-commerce to business applications
+and entertainment, leads to stringent requirements regarding latency, availability and fault tolerance \cite{Schurman2009latency,gomez}.
+To address these requirements, cloud platforms have been adding new data centers at different geographic 
+locations. By allowing users to access a service by contacting the closest data center, a global service can
+provide low latency to users spread across the globe. The increasing number of data centers also contributes
+for proving high availability and fault tolerance, by allowing a user to access the service by accessing any
+available data center.
+
+% serviços necessitam de data
+% Replicar totalmente tem problemas
+
+The database is a key component of any web service, storing the service's data. For supporting global
+services running at multiple geographic locations, it is necessary to rely on a geo-replicated database \cite{dynamo},
+which maintains replicas of the data at the data centers where the service is running.
+A number of geo-replicated database have been proposed, providing different consistency semantics.
+Databases that provide strong consistency \cite{spanner,cockroachdb,mdcc} intend to give  the illusion that 
+a single replica exists, requiring coordination among
+multiple replicas for executing (update) operations. This leads to high latency and may compromise 
+availability int he presence of network partitions.
+Database that provide weak consistency \cite{eventual,dynamo,cops} allow any replica to process a
+client request, leading to lower latency and high availability. As a consequence, these databases expose
+temporary state divergence to clients, making it more difficult to program a system. 
+
+In either case, geo-replicated databases typically rely on a full replication model, where each data 
+center replicates the full database, with data being sharded across multiple partitions in each data 
+center. 
+As both the data managed by these systems increases in size and the number of data centers increases,
+this approach leads to a number of problems.
+First, storing all data in all data centers imposes a large overhead in terms of storage. 
+Furthermore, storing some data in all data centers may be unnecessary, as data is only needed at some
+geographic locations.
+Second, increasing the number of data centers makes the replications process more complex and costly, 
+as each update needs to be propagated to all other data centers.
+
+For addressing these problems, partial replication is an attractive approach, with each data center
+replicating only a subset of the data. A number of works have been addressing the challenges of 
+partial replication, for example by proposing algorithms to manage partially replicated data \cite{more,saturn,c3}
+and to decide which data is replicated in which replica \cite{}.
+
+In this paper we address the problem of querying data in a weakly consistent partially geo-replicated database, 
+focusing on recurrent queries for which a programmer would want to generate a (materialized) view.
+For example, consider an e-commerce system with users from multiple geographic locations.
+In this case, the data pertaining users of a given location do not need to be replicated in all data centers
+(but only in a few for fault tolerance). The same applies to other information, such as data on orders and 
+warehouses.
+Other data, such as information on products would be replicated in the regions where the product
+is available.  
+Under this data placement, obtaining the list of best seller products is challenging, as it requires
+accessing data that is located at multiple data centers.
+
+Several possible solutions exist for this problem. 
+First, it is possible to have a data center that replicates all data, and forward these queries to such data center.
+Doing this imposes a latency penalty and requires a data center to host all data and execute all queries of this type. 
+Second, it is possible to execute the query by accessing multiple locations, by using, for example, 
+a distributed processing system with support for geo-partitioned data \cite{Kloudas:2015:POD:2850578.2850582,more}.
+This approach requires running an additional external service and poses challenges for the consistency of the results
+returned and the data observed by users.
+%, mostly when adopting weak consistency models (a local update that should
+%be reflected in the result of the query may not be returned, as the update might have not been read by the 
+%external service that accessed a different replica).
+
+We propose a different approach: to maintain materialized views, as commonly available in relational databases.
+Implementing such feature efficiently in a partially geo-replicated database requires 
+addressing two main challenge challenges. 
+First, it is necessary to guarantee consistency between the base data available in a replica and the 
+relevant materialized views. To achieve this, we designed a replication mechanism where updates 
+to the base data and views are made visible atomically in each replica.
+
+Second, it is necessary to efficiently support views with limits, used for example to support \emph{top-k} 
+queries. To achieve this, we build on the concept of non-uniform replication \cite{Cabrita17Nonuniform}, in which the state
+of different replicas may be different, given that the observable state is (eventually) the same.
+This allows each replica to propagate only the updates that might be relevant to the observable 
+state. Providing support for views required us to extend non-uniform replication from simple data 
+types to more complex structures that could support a view with multiple columns.
+\nuno{can we support updates to the views? why not?}
+
+We present the design and implementation of PotionDB, a geo-replicated key-value store with support  
+for partial replication and materialized views. 
+PotionDB provides weak consistency, for improved latency and availability, and support for highly
+available transactions \cite{hat}.  
+To our knowledge, our work is the first to address the problem of maintaining materialized views
+in such setting.  
+
+We have evaluated our system using micro-benchmarks and TPC-H queries \cite{} \nuno{TPC-H, certo?}.
+The results show that our algorithms for maintaining materialized views impose 
+low overhead when executing and asynchronously replicating transactions, particularly
+for views with limits.
+\nuno{deviamos ter uns micro-benchmarks que comparassem o overhead com limites e sem limites}
+Additionally, the results show that executing queries by relying on the materialized views is much more 
+efficient than using alternative mechanisms.  
+Furthermore, our algorithms for maintaining materialized views in a decentralized way perform better 
+that alternative approaches where the view is computed in a single data center, while being
+able to  keep consistency between the base and view data in every replica.
+
+In this paper we make the following contributions:
+%\begin{enumerate*}[label=(\roman*)]
+\begin{itemize}
+	\item the design of a geo-replicated key-value store  with support for partial replication
+	and views over partially replicated data; 
+	\item replication algorithms for efficiently maintaining consistent materialized views over 
+	partially replicated data;
+	 \item an implementation and evaluation of the proposed approach with micro-benchmarks
+	 and TPC-H.
+\end{itemize}
+
+The remainder of the paper is organized as follows. Section ...
+
+\outline{topicos
 
 \begin{itemize}
 	\item Num. DC a aumentar
@@ -21,6 +194,7 @@ topicos
 	\item Views materializadas replicadas totalmente
 	\item Contribuições
 \end{itemize}
+}
 
 \section{System overview}
 
@@ -56,6 +230,10 @@ topicos
 \section{Related Work}
 
 \section{Conclusions}
+
+
+\bibliographystyle{abbrv}
+\bibliography{bib}
 
 \section{System overview}
 
