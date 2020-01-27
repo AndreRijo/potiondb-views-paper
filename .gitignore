@@ -1,4 +1,12 @@
 .DS_Store
+
+%Generated PDF
+.pdf
+
+%Latex metadata files
 .aux
 .log
 .synctex.gz
+.bbl
+.blg
+.out
