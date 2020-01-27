@@ -4,6 +4,9 @@
 \usepackage{graphicx}
 \usepackage{balance}  % for  \balance command ON LAST PAGE  (only there!)
 
+%Added packages
+\usepackage[inline]{enumitem}	%inline itemizes
+
 \begin{document}
 
 topicos
@@ -109,5 +112,196 @@ Possiveis pontos mais detalhados?
 	\item Communication (protobufs. Also worth noticing the compability with existing AntidoteDB clients)
 	\item CRDTs (version management at least)
 \end{itemize}
+
+\null\newpage
+
+\section{System Overview}
+
+\subsection{System model}
+
+We consider an asynchronous distributed system composed by a set of servers S connected by a network. We assume the network may delay, duplicate or re-order messages, but does not corrupt them. We also assume messages sent are eventually delivered, even if connections may temporarely drop.
+
+Database objects are replicated in one or more servers, but not necessarely in all of them.  We consider a server to be a replica of an object if it replicates such object. New updates are sent periodically to replicas asynchrnously. However, not all updates need to be delivered to every replica - only updates that modify the objects' visible state must be delivered eventually \ref{non-uniform}. %TODO: The phrase before needs to be worked on.
+
+%TODO: I also need to talk here about consistency
+%Partial order?
+
+Clients connect to one or more servers. Updates and queries are executed in a single server and return as soon as its execution ends. Only objects replicated in the server can be accessed, i.e., to access objects not present in a given server the client must connect to a replica of those objects.
+
+\subsection{[PLACEHOLDER]Example scenario}
+\label{subsec:example}
+%TODO: Talk about partial replication before this
+
+For the rest of this paper/section %TODO: Decide
+, we'll consider the following example scenario.
+
+Assume we have a very large company with multiple stores across the world.
+Consider that there's millions of products (each store has a different stock and may sell different items), and tens of millions of clients.
+Also consider that, for both product warranty and statistical purposes, data related to each product unit sold is kept in the database.
+
+Fully replicating the whole dataset would have proibitive costs.
+It is also unecessary, as the relevance of the data (and likehood of being accessed from) is dependent on the location.
+For instance, an asian customer is more likely to consult the stock of stores in his country than in an european country.
+Thus, it makes sence that both asian customers' data and asian stores' to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
+That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on that.
+
+To simplify the example, we'll consider only three types of objects: customers, products and sales.
+The simplified scheme of each object can be found on Figure \ref{fig:objects}.\\
+
+Customer: id: int, name: string, age: int, country: string \\
+Products: id: int, name: string, value: int \\
+Sales: id: int, custID: int, productID: int, amount: int \\
+
+\begin{figure}
+	\label{fig:objects}
+%\begin{table}[]
+	\begin{tabular}{|l|l|}
+		\multicolumn{2}{c}{Customer} \\ \hline
+		id            & int          \\ \hline
+		name          & string       \\ \hline
+		age           & int          \\ \hline
+		country       & string      \\
+		\hline
+	\end{tabular}
+	\raisebox{0.225\height}{\begin{tabular}{|l|l|}
+		\multicolumn{2}{c}{Products} \\ \hline
+		id           & int           \\ \hline
+		name         & string        \\ \hline
+		value        & int   \\
+		\hline       
+	\end{tabular}}
+	\begin{tabular}{|l|l|}
+		\multicolumn{2}{c}{Sales} \\ \hline
+		id            & int       \\ \hline
+		custID        & string    \\ \hline
+		productID     & int       \\ \hline
+		amount        & int	\\
+		\hline      
+	\end{tabular}
+	\caption{Example objects}
+%\end{table}
+\end{figure}
+
+Customers represent clients that at some point in time have bought at least one product from one of the stores.
+Products represents items that may be (or have been) for sale.
+Sales represents the aquisition of one or more units of a product by a client, where custID and productID refer to, respectivelly, the customer's and product's id field.
+
+For the purpose of this example, we'll consider the following replication scheme for each type of object:
+\begin{itemize}
+	\item \emph{Customer:} partially replicated in the data centers present in the continent correspondent to its country;
+	\item \emph{Products:} replicated in all datacenters
+	\item \emph{Sales:} partially replicated in the same datacenters as of the customer who bought the product. 
+\end{itemize}
+
+Note that each object being partially replicated does not prevent queries that refer to data replicated in different datacenters from being executed.
+On section ??? %TODO
+we'll see how can this be done efficiently.
+
+\subsection{System API}
+
+\subsubsection{Key-value store API}
+
+%TODO: Some connection with the topic before.
+%TODO: Proper formatting of GET/UPDATE/LINK structures/examples
+PotionDB is a key-value store database. %TODO: Reference?
+As such, all objects are indexed by a key and support  \emph{get} and \emph{update} operations which, respectively, return/alter the state of the object.
+In PotionDB objects are CRDTs, %TODO: Reference? 
+which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
+As such, both \emph{get} and \emph{update} operations are executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
+
+To facilitate development of applications that want to use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
+A \emph{get} has the following structure for, respectively, full/partial reads: \\
+
+%TODO: Include a comment in front of each one stating which is full and which is partial read. Likely use an array/table to properly set the spacing?
+Get CRDT key bucket crdtType 
+
+Get CRDT key bucket crdtType\{arguments\} \\ 
+
+The triple key, bucket, crdtType uniquely identify an object. 
+Bucket is used mainly for partial replication purposes, as described in Section ???. %TODO
+Arguments can be supplied when only a part of the state needs to be returned, with the possible arguments depending on the type of CRDT. E.g., for a map CRDT, we could use: \\
+
+Get CRDT customer1 customers MAP\{name, age\}\\
+
+to return only the values in the customer1 map CRDT referred by the map keys name and age.
+
+As for updates, they have the following form: \\
+
+Update CRDT key bucket crdtType\{arguments\} \\
+
+Key, bucket and crdtType have the same meaning as in gets.
+The type of arguments depend on the type of CRDT, and each CRDT can support one or more types of update operations. 
+E.g., a map supports both addition and removal of key/value pairs.
+An insertion/update of an entry in a map can be represented as: \\
+
+Update CRDT customer1 customers MAP\{ADD\{name: "David"\}\} \\
+
+\subsubsection{API for view CRDTs}
+%TODO: We ALMOST SURELY need a section before this explaining what is partial replication, it's advantages/disadvantages, why we use it and why views are interesting for that.
+%TODO: This may be more fit to another section, or split in multiple subsections in different sections of the paper
+
+In relational databases (and even some non-relational ones, e.g., Cassandra) it's common to have \emph{Views}. 
+A view can be defined as being the result of a query on one or multiple objects.
+Views can then be accessed as if they were normal objects, thus facilitating the definition of new queries.
+%TODO: Does this need a SQL example here?
+
+Views can either be materialized or not (albeit not all databases support both). %TODO: references 
+In a materialized view, the result of the query is stored as an object, which can then be reused later.
+This can potencially improve drastically the performance of certain queries, but incours an extra cost on object updates, as both the object and the materialized view need to be updated.
+On the other hand, non-materialized views don't have this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
+
+In PotionDB, it is particularly interesting to support materialized views.
+To ilustrate that, recall the example tables and scenario defined in Section \ref{subsec:example}, along with the following query: 
+%TODO: Do some proper emphasis on this
+%TODO: Also consider doing this only for a continent instead of globally.
+
+\emph{Determine the 100 customers who have spent the most across all stores. For each customer, the name, age, country and total value spent must be returned.}
+
+Without a view, to implement this query it would be necessary to communicate with datacenters across the whole world (as sales and customers are partitioned). 
+Since there are millions of customers and sales, we would not only need to download large amounts of data but also do long data joins,
+Only after calculating the total value spent for each customer in the service would we be able to reply with the top 100 customers.
+Due to the sheer amount of data involved, this would have unnaceptable performance.
+
+A possible solution is to use a Top-K CRDT %TODO: ref to NuCRDTs paper
+as a materialized view which keeps the list of the 100 customers with highest (global) spendings.
+This way, the query could be answered by executing only one \emph{get} operation on this CRDT.
+This solution does pose some difficulties, namelly: 
+%associate; keep entries updated even if the CRDT referred is not replicated locally; have new customers/sales be automatically included in the top-k.
+\begin{enumerate*}[label=(\roman*)]
+	\item association of each entry in the top-k with the respective customer and sales' CRDTs;
+	\item translation of updates in customers or sales to updates for the top-k;
+	\item keeping top-k updated even if some entries refer to CRDTs not replicated in the replica in which the top-k is created;
+	\item automatically include customer and sales CRDTs that may be introduced after the creation of the top-k.
+\end{enumerate*}
+
+To support materialized views, we thus introduce another construct in our API, named \emph{link}.
+The intuitive idea is that, after creating the CRDT that will be acting as a view, we can issue a \emph{link} operation in order to provide the "rules" for the automatic updating of the referred CRDT.
+PotionDB will then use these "rules" to keep the CRDT updated.
+
+A link operation has the following structure:
+
+%TODO: Need to think on a better way to represent this. Also, either separate this in parts or in lines at least
+
+Link CRDT key bucket crdtType ...
+\\
+Link CRDT topsales statistics \\
+	Search CRDT sales * sales, MAP \\
+	Get CRDT MAP\{custID, amount\} \\
+	Get CRDT MAP\{id, value\} \\
+	Merge custID = id \\
+	Update 
+	
+
+\textbf{NOTE: PLACEHOLDER TEXT THAT WILL CERTAINTLY HAVE TO BE REWORKED.} I just wanted to get some more work done until I figure out a way to better represent the "link" command :)
+
+
+
+\subsection{System description}
+
+
+
+\null\newpage\null
+
+\null\newpage\null
 
 \end{document}
