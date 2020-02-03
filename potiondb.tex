@@ -92,7 +92,7 @@ A number of geo-replicated database have been proposed, providing different cons
 Databases that provide strong consistency \cite{spanner,cockroachdb,mdcc} intend to give  the illusion that 
 a single replica exists, requiring coordination among
 multiple replicas for executing (update) operations. This leads to high latency and may compromise 
-availability int he presence of network partitions.
+availability in the presence of network partitions.
 Database that provide weak consistency \cite{eventual,dynamo,cops} allow any replica to process a
 client request, leading to lower latency and high availability. As a consequence, these databases expose
 temporary state divergence to clients, making it more difficult to program a system. 
@@ -126,7 +126,7 @@ accessing data that is located at multiple data centers.
 
 Several possible solutions exist for this problem. 
 First, it is possible to have a data center that replicates all data, and forward these queries to such data center.
-Doing this imposes a latency penalty and requires a data center to host all data and execute all queries of this type. 
+Doing this imposes a latency penalty and requires a data center to host all data and execute all queries of this type. %Andre: also refer that this data center would be the bottleneck of the system?
 Second, it is possible to execute the query by accessing multiple locations, by using, for example, 
 a distributed processing system with support for geo-partitioned data \cite{Kloudas:2015:POD:2850578.2850582,more}.
 This approach requires running an additional external service and poses challenges for the consistency of the results
@@ -137,7 +137,7 @@ returned and the data observed by users.
 
 We propose a different approach: to maintain materialized views, as commonly available in relational databases.
 Implementing such feature efficiently in a partially geo-replicated database requires 
-addressing two main challenge challenges. 
+addressing two main challenges. 
 First, it is necessary to guarantee consistency between the base data available in a replica and the 
 relevant materialized views. To achieve this, we designed a replication mechanism where updates 
 to the base data and views are made visible atomically in each replica.
@@ -149,6 +149,7 @@ This allows each replica to propagate only the updates that might be relevant to
 state. Providing support for views required us to extend non-uniform replication from simple data 
 types to more complex structures that could support a view with multiple columns.
 \nuno{can we support updates to the views? why not?}
+\andre{short-answer: no. Since views don't have all data (e.g: only the name of a customer), we can't translate an update in a view to updates in other CRDTs, as such update would be incomplete}
 
 We present the design and implementation of PotionDB, a geo-replicated key-value store with support  
 for partial replication and materialized views. 
@@ -157,7 +158,7 @@ available transactions \cite{hat}.
 To our knowledge, our work is the first to address the problem of maintaining materialized views
 in such setting.  
 
-We have evaluated our system using micro-benchmarks and TPC-H queries \cite{} \nuno{TPC-H, certo?}.
+We have evaluated our system using micro-benchmarks and TPC-H queries \cite{}.
 The results show that our algorithms for maintaining materialized views impose 
 low overhead when executing and asynchronously replicating transactions, particularly
 for views with limits.
@@ -278,6 +279,8 @@ Possiveis pontos mais detalhados?
 \item CRDTs and non-uniform CRDTs?
 \end{itemize}
 
+\andre{I ended up describing the topics of system description in other subsections, apart from Structure. I don't recall going into much detail of what a CRDT is, but that shouldn't be necessary anyway.}
+
 \section{Implementation}
 
 \begin{itemize}
@@ -287,6 +290,8 @@ Possiveis pontos mais detalhados?
 	\item Communication (protobufs. Also worth noticing the compability with existing AntidoteDB clients)
 	\item CRDTs (version management at least)
 \end{itemize}
+
+\andre{A good part of the implementation is already included in other sections, at least indirectly. Mainly Replication and to an extent Transactions/Communication. We need to decide what really is important to refer in the "implementation" section.}
 
 \null\newpage
 
@@ -311,7 +316,7 @@ For the rest of this paper/section %TODO: Decide
 , we'll consider the following example scenario.
 
 Assume we have a very large company with multiple stores across the world.
-Consider that there's millions of products (each store has a different stock and may sell different items), and tens of millions of clients.
+Consider that there are millions of products (each store has a different stock and may sell different items), and tens of millions of clients.
 Also consider that, for both product warranty and statistical purposes, data related to each product unit sold is kept in the database.
 
 Fully replicating the whole dataset would have proibitive costs.
@@ -328,8 +333,8 @@ Products: id: int, name: string, value: int \\
 Sales: id: int, custID: int, productID: int, amount: int \\
 
 \begin{figure}
-	\label{fig:objects}
 %\begin{table}[]
+	\centering
 	\begin{tabular}{|l|l|}
 		\multicolumn{2}{c}{Customer} \\ \hline
 		id            & int          \\ \hline
@@ -337,14 +342,14 @@ Sales: id: int, custID: int, productID: int, amount: int \\
 		age           & int          \\ \hline
 		country       & string      \\
 		\hline
-	\end{tabular}
+	\end{tabular} \hspace{0.7em}
 	\raisebox{0.225\height}{\begin{tabular}{|l|l|}
 		\multicolumn{2}{c}{Products} \\ \hline
 		id           & int           \\ \hline
 		name         & string        \\ \hline
 		value        & int   \\
 		\hline       
-	\end{tabular}}
+	\end{tabular}} \hspace{0.7em}
 	\begin{tabular}{|l|l|}
 		\multicolumn{2}{c}{Sales} \\ \hline
 		id            & int       \\ \hline
@@ -354,6 +359,7 @@ Sales: id: int, custID: int, productID: int, amount: int \\
 		\hline      
 	\end{tabular}
 	\caption{Example objects}
+	\label{fig:objects}
 %\end{table}
 \end{figure}
 
@@ -412,7 +418,8 @@ An insertion/update of an entry in a map can be represented as: \\
 Update CRDT customer1 customers MAP\{ADD\{name: "David"\}\} \\
 
 \subsubsection{API for view CRDTs}
-%TODO: We ALMOST SURELY need a section before this explaining what is partial replication, it's advantages/disadvantages, why we use it and why views are interesting for that.
+\label{subsubsec:APIView}
+%TODO: We ALMOST SURELY need a section before this explaining what is partial replication, its advantages/disadvantages, why we use it and why views are interesting for that.
 %TODO: This may be more fit to another section, or split in multiple subsections in different sections of the paper
 
 In relational databases (and even some non-relational ones, e.g., Cassandra) it's common to have \emph{Views}. 
@@ -450,30 +457,250 @@ This solution does pose some difficulties, namelly:
 \end{enumerate*}
 
 To support materialized views, we thus introduce another construct in our API, named \emph{link}.
-The intuitive idea is that, after creating the CRDT that will be acting as a view, we can issue a \emph{link} operation in order to provide the "rules" for the automatic updating of the referred CRDT.
+The intuitive idea is that, after creating the CRDT that will be acting as a view, we can issue a \emph{link} operation in order to provide the "rules" for the automatic updating of the view CRDT.
 PotionDB will then use these "rules" to keep the CRDT updated.
 
 A link operation has the following structure:
-
-%TODO: Need to think on a better way to represent this. Also, either separate this in parts or in lines at least
-
-Link CRDT key bucket crdtType ...
 \\
-Link CRDT topsales statistics \\
-	Search CRDT sales * sales, MAP \\
-	Get CRDT MAP\{custID, amount\} \\
-	Get CRDT MAP\{id, value\} \\
-	Merge custID = id \\
-	Update 
-	
 
-\textbf{NOTE: PLACEHOLDER TEXT THAT WILL CERTAINTLY HAVE TO BE REWORKED.} I just wanted to get some more work done until I figure out a way to better represent the "link" command :)
+Link CRDT key bucket crdtType \\
+From (key1*, bucket1*, crdtType1), ..., (keyN*, bucketN*, crdtTypeN) \\
+Where conditions \\
+Update updateArgs \\
 
+%TODO: How do we tell the TopK crdt which fields are: a) used for uniquely identifying an entry, b) used for sorting. Maybe as argument in the type? Or a special create/empty update operation?
 
+Similarly to \emph{gets} and \emph{updates}, each triple key, bucket, crdtType uniquely identifies an object.
+The link operation contains four constructs:
+%In short, \emph{link} specifies the CRDT that will be a view, while \emph{from} and \emph{where} specify which CRDTs will trigger updates on the view CRDT.
+%Update specifies how to update the view CRDT. 
+%More precisely:
+
+\begin{itemize}
+	\item \emph{Link}: specifies which CRDT will be acting as a view, i.e., the target of the \emph{Update} construct;
+	\item \emph{From}: Similarly to the \emph{from} construct in SQL, it specifies which CRDT(s) will be used to build the view;
+	In other words, whenever an update happens in one of these CRDTs, an update may also be triggered in the link CRDT.
+	Note that in this construct exclusively, both key and bucket may be a prefix of the keys/buckets of the CRDTs (this is represented by the '*' character).
+	This allows to include objects that may not yet exist in the database but that should also be included when they get added (e.g., new customers);
+	\item \emph{Where}: Similary to the \emph{where} construct in SQL, it specifies using conditions how can the CRDTs returned in front be joined/filtered. E.g., if we only wanted sales related to portuguese customers: where customers.MAP{country} = "Portugal" \emph{and} sales.MAP{custID} = customers.MAP{id} \emph{and} sales.MAP{productID} = products.MAP{id};
+	\item \emph{Update}: Specifies the operation that, for each entry returned by \emph{from} after applying \emph{where}, will be used to update the CRDT specified in \emph{link}.
+\end{itemize}
+
+%TODO: This almost surelly needs to be better explained here
+The intuition is that when Link is first executed for a view CRDT, the view is updated based on the already existing objects that match the \emph{from} and \emph{where} clause.
+Afterwards, whenever a CRDT that matches \emph{from} is updated, the \emph{where} clause is executed for that CRDT only and, if necessary, the view CRDT is updated.
+On Section ??? we discuss in detail different ways to implement this, as well as how it is done in PotionDB. %TODO
+
+%TODO: Proper linkage
+As an example, this link operation generates a TopK CRDT which directly answers the query presented before:
+\\
+Link CRDT topsales statistics TOPK \\
+From (customers*, customers, MAP), (products*, products, MAP), (sales*, sales, MAP) \\
+Where sales.MAP\{customerID\} = customers.MAP\{id\} \emph{and}  sales.MAP\{productID\} = products.MAP\{id\} \\
+Update MAP\{name: customers.MAP\{name\}, age: customers.MAP\{age\}, country: customers.MAP\{country\}, spent: products.MAP\{value\} * sales.MAP\{value\}\} \\
 
 \subsection{System description}
 
 
+\subsection{[PLACEHOLDER]Replication and Consistency}
+
+PotionDB is a weakly consistent partially geo-replicated database.
+Updates and queries are done locally in a replica, without needing to consult other replicas to reply to the clients' operations.
+This implies that states between replicas may temporarly diverge, but eventually they need to converge.
+Also, updates on data must be reflected on both the base data and their views atomically.
+
+In this section we discuss multiple design decisions related with how consistency and replication is handled in PotionDB.
+
+\subsubsection{Internal partitioning}
+
+Internally in PotionDB, objects are automatically partitioned by computing an hash based on the object's key, bucket and type.
+This should not be confused with partial replication, as both partitioning mechanisms have different goals.
+
+The idea of internal partitioning in a replica comes from the observation that, by having data grouped in multiple "slots" (partitions), if different clients access objects in different partitions, then both requests can be processed concurrently by a replica without any conflict.
+In the case of both requests being reads, they can be processed concurrently even if some objects are present in both requests. %TODO: This may need some extra explanation?
+
+In theory this can lead to a considerate performance improvement, as each replica can make use of their multi-core CPUs by having one thread per partition to process requests.
+Other possible solutions include: 
+\begin{enumerate*}[label=(\roman*)] 
+	\item \label{item:locks} using locks to protect the same object from being concurrently modified \cite{???};
+	\item \label{item:single} using only a single thread \cite{???}.
+\end{enumerate*}
+
+Alternative \ref{item:locks} is difficult to implement, as it is needed to find the right level of lock granularity and when should locks be obtained/released \cite{???}. 
+Special care is needed to avoid deadlocking concurrent transactions. 
+There's also concerns with fairness of obtaining locks.
+Our solution does not need to lock data, thus it avoids the overhead from using locks, it is easier to implement and does not have deadlocks.
+
+As for \ref{item:single}, the solution does not take any benefict from the multiple cores of nowadays CPUs \cite{???}. In section \ref{???}, we show that this solution has worse performance when compared to ours, specially in read-only transactions.
+
+%This likelly deserves a section of its own.
+\subsubsection{Transactions and consistency}
+
+Transactions allows to group multiple operations together and have them executed with certain guarantees.
+They facilitate the usage of database systems \cite{???}.
+For example, when registering a sale of a product, it is useful to have the product stock and customer info to be updated simultaneously. %TODO: We might need a better example
+
+In the case of relational databases with strong consistency \cite{???} %TODO: Examples
+, they usually provide ACID (atomicity, strong consistency, isolation, durability) properties for each of their transactions.
+In short, they ensure that if a transaction completes sucessfully, it got executed: 
+\begin{enumerate*}
+	\item all of its operations completed successfully;
+	\item the database is left in a consistent state;
+	\item without interferance of other transactions;
+	\item the effects of the operations won't be lost even if one of the replica fails.
+\end{enumerate*}
+One example in which all ACID properties are quite useful is when transfering money between two users. Isolation is needed to avoid two concurrent money withdraws (as the user may not have enough money for that), while atomicy, durability and consistency together prevent scenarios in which the sum of money between both users would get altered (which would be incorrect).
+
+\andre{TODO: Definitely need to mention here that we can't have ACID in a distributed DB without having strong consistency. But I need papers to back this up.} %Group this with the paragraph below.
+
+Even without all of ACID guarantees transactions are still useful, as is evidencied by multiple No-SQL databases which still provide some sort of transactions \cite{???} with fewer guarantees. %Cassandra, Redis, etc.
+
+%TODO: I need to mention somewhere the benefict of read-only transactions (is there any actually?)
+In PotionDB we also provide support for transactions. 
+Transactions in PotionDB can span any number of partitions (both internal and external) existent in a replica, but it cannot refer to buckets that aren't replicated locally.
+That is, transactions are local to a replica.
+We support both read-only, write-only and mixed transactions, with all of them having the same guarantees.
+%PotionDB transactions provide casual consistency, that is, a transaction sees the effects of all transactions that causally happened before it.
+
+PotionDB's transactions are executed atomically and provide casual consistency. 
+They also run isolated from other transactions executed in the same replica. 
+However, transactions may concurrently modify the same object if they're executed in different replicas.
+Durability isn't ensured, as replication is asynchronous and operations don't need to be written to disk for a transaction to commit. %TODO: We probably need to argue on why this is OK.
+%PotionDB ensures that transactions are atomic and consistent, and also guarantees isolation from other transactions executing in the same replica (but not others).
+%Durability isn't ensured though, as replication is asynchronous and operations don't need to be written to disk for a transaction to commit. 
+
+\andre{We don't exactly guarantee atomicity - if the replica executing the transaction fails while applying updates, the DB will be left in an inconsistent state. Which isn't exactly relevant, since data would be lost in that case anyway... We do guarantee that, if the server doesn't fail, the client either sees the effect of the whole transaction or of none of its operations.}
+
+\andre{Also... how much detail of the transaction execution mechanism should I provide here? Or just talking about the guarantees is enough?}
+
+Each replica maintains a vector clock which summarizes the current DB state.
+Each entry in the vector clock corresponds to the latest commit of each replica that is known locally.
+When a transaction starts, a copy of this vector clock is associated to the transaction.
+The entry correspondent to the local replica is processed differently though - for that entry, a unique, monotonically increasing timestamp is assigned to each transaction.
+
+\andre{Where (and should I?) do I explain how the version management works? Or should we leave that for a short paper in another conference?}
+
+Both updates and reads take the transactions' vector clock into account.
+More precisely, reads execute on the state of the object correspondent to the transaction's vector clock (i.e., ignoring all update operations that may have happened afterwards).
+Updates generate new states which are then marked with the transaction's timestamp, in order for reads to refer to the correct version.
+A transaction is considered commited only after all operations have been applied. 
+At this moment, if it isn't a read-only transaction, the replica's entry on the local vector clock is updated and the client is notified.
+
+PotionDB's guarantees in regard to transactions are related with how the vector clock is handled. More precisely:
+
+%E.g., in a read-only transaction, even if some update operation concurrently modifies objects referred by the read transaction, the results returned by reads will all be using the version specified by the transaction. That is, it is as if the update operation happened after the reads.
+
+\paragraph{Atomicity}  A transaction is atomic because the replica's vector clock is only updated after all operations are successfully applied. 
+If at least one fails, all updates are rendered innefective as we return the CRDTs to their previous state.
+Previous reads on that transaction are irrelevant due to the transaction being considered as aborted.
+Reads on other transactions don't see the effects of a transaction until it is commited, thus aborts don't pose a problem to them.
+
+\paragraph{Consistency} As every transaction has a vector clock associated, we can thus totally order all transactions. 
+A transaction is only executed if all transactions with a smaller vector clock have already been executed. 
+We ensure locally generated transactions are executed by the order specified by the monotonicaly increasing local timestamp.
+Whenever a CRDT with views associated is updated, those views are also updated in the same transaction with the same clock.
+Thus, PotionDB respects causality when executing transactions and, as such, provides causal consistency.
+
+\paragraph{Isolation} %During the execution of a transaction, reads and updates are all executed on top of the version specified by the transaction's vector clock.
+%Inside each partition there is no concurrency and all of a transaction's operations are executed in a row
+There is no concurrency inside each partition.
+Reads are executed on top of the version specified by the transaction's vector clock. %TODO: Should I refer here that txn updates are considered for the read albeit they don't change the state yet?
+Updates are only applied when commiting and are executed sequentially inside the partition.
+Updates from other transactions are either executed before the first operation of the current transaction, or after the last.
+Thus, the effects of each local transaction can be ordered sequentially, which implies isolation.
+
+%TODO: Should I refer the 2 phase-commit? And the fact that commitTS != startTS?
+
+\subsubsection{Views consistency}
+
+Supporting materialized views in a database, as was hinted in Section \ref{subsubsec:APIView}, poses some challenges.
+Namelly, it is required to keep the view and base data synchronized, that is, when one is updated the other must also be updated at the same point in time.
+This becomes particularly challenging when we consider that views may refer to data that isn't replicated locally.
+
+Ideally, updates to the view should be automatically generated based on updates to the base data and appended to the same transaction.
+Nor only does this ensure the view and its base data are always in sync, it also avoids human errors and simplifies the client's code, as it doesn't need to be concerned with correctly updating the views.
+
+\paragraph{Updating view with local data}
+Recall the \emph{link} construct defined in Section \ref{subsubsec:APIView}.
+The intuition here is that whenever an object is updated, all views associated to it should have their \emph{from} and \emph{where} clauses re-executed in order to generate the new set of updates that describe the new view state.
+However, doing so would be inneficient, since it could imply accessing millions of objects uneccesarely just to update one entry.
+
+\andre{How can this actually be implemented efficiently...?}
+
+\paragraph{Updating view with remote data}
+
+\andre{I can't explain much here until we decide on how exactly we want to cover views.}
+
+\begin{itemize}
+	\item Refer the main idea of our solution (and possibly discuss alternatives?)
+	\item Require for view CRDTs to be replicated in all servers with base data for it
+	\item Explain that allows for the view CRDTs updates to be generated
+	\item Explain that since all replicas with a subset of the base data replicate the view CRDT, thus all of those will receive the view updates for all base data -> i.e., global view.
+	\item Maybe include example of top-k?
+\end{itemize}
+
+\subsubsection{External partitioning}
+
+Not all data is relevant everywhere. 
+For example, in an e-commerce system, each customer's data is mostly relevant in the country/continent where they live.
+PotionDB supports this by leveraging on partial replication, allowing the system admin to precisely define where each object is replicated.
+
+Each object is identified by the triple key, bucket and crdtType.
+Buckets define groups of objects that are replicated in the same group of replicas.
+For each replica, the system admin can define which buckets will be replicated in it.
+E.g., for partitioning customers based on their continent, we take the following steps:
+
+\begin{enumerate}
+	\item Define one bucket per continent;
+	\item Configure the servers so that each replica replicates the bucket of its continent + one other for fault tolerance purposes;
+	\item When adding the customers to the database, specify the correct bucket.
+\end{enumerate}
+
+PotionDB's replication mechanism takes in consideration the bucket distribution among the servers, ensuring only servers interested in a given bucket receive updates for that bucket.
+Since data is partially replicated, the client must ensure that it is communicating with a server that replicates all buckets for which he wants to do operations upon, as all operations are executed locally.
+That is, a replica can only receive operations for objects in buckets it replicates.
+
+\subsubsection{Replication}
+
+Replication in PotionDB is asynchronous and partial.
+Operations are executed localy, without needing to contact other replicas.
+New updates are propagated in the background to other replicas periodically.
+Objects in PotionDB are operation-based CRDTs, thus we replicate the arguments of operations instead of the new object state or a delta of it.
+
+Each replica stores only a subset of all existing objects.
+This subset is defined by a list of \emph{buckets}.
+A bucket can be seen as a way to group objects together.
+Each object in the database has both a key and a bucket associated, in order to identify in which servers it should be replicated to.
+
+PotionDB uses RabbitMQ \cite{???} for handling communication between replicas.
+RabbitMQ is a message brooker which allows consumers to register the topics of messages in which they're interested.
+We leverage on topics to ensure each replica only fetches the messages containing updates for objects in buckets they are replicating.
+
+We use RabbitMQ as follows.
+When a replica starts, it subscribes to all messages whose topics match the buckets it replicates.
+On the other hand, when a replica wants to publish new updates, it splits those updates by buckets (without breaking causality), ensuring each message only contains updates for one bucket and whose topic's value is that bucket.
+
+\andre{I don't think the following paragraph is strictly necessary.}
+
+Each PotionDB server runs alongside it a RabbitMQ instance.
+Updates generated in that server are published to the local instance.
+When the server is starting, it contacts the RabbitMQ instances of existing replicas and subscribes the buckets that server will be replicating.
+
+We also use RabbitMQ to support the addition of new replicas without stopping the system.
+However, such mechanism is out of scope of this paper and thus we don't describe it here.
+
+\subsubsection{NuCRDTs replication}
+
+Non-uniform CRDTs \cite{???} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
+E.g., in a Top-K CRDT that only maintains the K elements with highest value, each replica only needs to maintain the elements that are in the top.
+
+The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{???}.
+Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
+
+Non-uniform CRDTs are specially useful for using as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
+E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, the replicas don't need to keep data for all customers in order to replicate the Top-K CRDT.
+
+\andre{What's above, technically, isn't 100\% true: each replica does need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. This WILL BE reflected in the experimental evaluation's graphics.}
 
 \null\newpage\null
 
