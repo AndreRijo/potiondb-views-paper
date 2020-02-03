@@ -20,6 +20,7 @@
 
 \newcommand{\outline}[1]{}
 %\newcommand{\outline}[1]{\grumbler{outline}{#1}}
+\newcommand{\lineemph}[1]{\vspace{\baselineskip}\hspace{2em}\emph{#1}\vspace{\baselineskip}}
 
 \vldbTitle{}
 \vldbAuthors{}
@@ -88,12 +89,12 @@ available data center.
 The database is a key component of any web service, storing the service's data. For supporting global
 services running at multiple geographic locations, it is necessary to rely on a geo-replicated database \cite{dynamo},
 which maintains replicas of the data at the data centers where the service is running.
-A number of geo-replicated database have been proposed, providing different consistency semantics.
+A number of geo-replicated databases have been proposed, providing different consistency semantics.
 Databases that provide strong consistency \cite{spanner,cockroachdb,mdcc} intend to give  the illusion that 
 a single replica exists, requiring coordination among
 multiple replicas for executing (update) operations. This leads to high latency and may compromise 
 availability in the presence of network partitions.
-Database that provide weak consistency \cite{eventual,dynamo,cops} allow any replica to process a
+Databases that provide weak consistency \cite{eventual,dynamo,cops} allow any replica to process a
 client request, leading to lower latency and high availability. As a consequence, these databases expose
 temporary state divergence to clients, making it more difficult to program a system. 
 
@@ -116,7 +117,7 @@ and to decide which data is replicated in which replica \cite{}.
 In this paper we address the problem of querying data in a weakly consistent partially geo-replicated database, 
 focusing on recurrent queries for which a programmer would want to generate a (materialized) view.
 For example, consider an e-commerce system with users from multiple geographic locations.
-In this case, the data pertaining users of a given location do not need to be replicated in all data centers
+In this case, the data pertaining users of a given location does not need to be replicated in all data centers
 (but only in a few for fault tolerance). The same applies to other information, such as data on orders and 
 warehouses.
 Other data, such as information on products would be replicated in the regions where the product
@@ -295,45 +296,26 @@ Possiveis pontos mais detalhados?
 
 \null\newpage
 
-\section{System Overview}
+\section{Motivating example}
+\label{sec:example}
 
-\subsection{System model}
+In order to both facilitate the understanding of the rest of the paper, as well as show the usefulness of queries supported by materialized views, we present the following example scenario.
 
-We consider an asynchronous distributed system composed by a set of servers S connected by a network. We assume the network may delay, duplicate or re-order messages, but does not corrupt them. We also assume messages sent are eventually delivered, even if connections may temporarely drop.
-
-Database objects are replicated in one or more servers, but not necessarely in all of them.  We consider a server to be a replica of an object if it replicates such object. New updates are sent periodically to replicas asynchrnously. However, not all updates need to be delivered to every replica - only updates that modify the objects' visible state must be delivered eventually \ref{non-uniform}. %TODO: The phrase before needs to be worked on.
-
-%TODO: I also need to talk here about consistency
-%Partial order?
-
-Clients connect to one or more servers. Updates and queries are executed in a single server and return as soon as its execution ends. Only objects replicated in the server can be accessed, i.e., to access objects not present in a given server the client must connect to a replica of those objects.
-
-\subsection{[PLACEHOLDER]Example scenario}
-\label{subsec:example}
-%TODO: Talk about partial replication before this
-
-For the rest of this paper/section %TODO: Decide
-, we'll consider the following example scenario.
-
-Assume we have a very large company with multiple stores across the world.
-Consider that there are millions of products (each store has a different stock and may sell different items), and tens of millions of clients.
-Also consider that, for both product warranty and statistical purposes, data related to each product unit sold is kept in the database.
+Consider a large scale commerce company with stores and clients spread across the world.
+Assume the company keeps data of millions of products, with each store having its own stock of products available.
+Also consider that there are millions of both current and past customers and, among other data, all sales ever done are kept in the database, for both product warranty and statistical purposes.
 
 Fully replicating the whole dataset would have proibitive costs.
-It is also unecessary, as the relevance of the data (and likehood of being accessed from) is dependent on the location.
-For instance, an asian customer is more likely to consult the stock of stores in his country than in an european country.
-Thus, it makes sence that both asian customers' data and asian stores' to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
-That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on that.
+It is also unecessary, as both the relevance of the data and likehood of being accessed from are dependent on the location.
+For instance, an asian customer is more likely to consult the stock of stores in his country rather than in an european country.
+Thus, it makes sence that both asian customers' and asian stores' data to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
+That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on such factor.
 
-To simplify the example, we'll consider only three types of objects: customers, products and sales.
-The simplified scheme of each object can be found on Figure \ref{fig:objects}.\\
-
-Customer: id: int, name: string, age: int, country: string \\
-Products: id: int, name: string, value: int \\
-Sales: id: int, custID: int, productID: int, amount: int \\
+To keep the example simple, we will only consider three types of objects: customers, products and sales.
+The simplified scheme of each object can be found on Figure \ref{fig:objects}.
 
 \begin{figure}
-%\begin{table}[]
+	%\begin{table}[]
 	\centering
 	\begin{tabular}{|l|l|}
 		\multicolumn{2}{c}{Customer} \\ \hline
@@ -344,11 +326,11 @@ Sales: id: int, custID: int, productID: int, amount: int \\
 		\hline
 	\end{tabular} \hspace{0.7em}
 	\raisebox{0.225\height}{\begin{tabular}{|l|l|}
-		\multicolumn{2}{c}{Products} \\ \hline
-		id           & int           \\ \hline
-		name         & string        \\ \hline
-		value        & int   \\
-		\hline       
+			\multicolumn{2}{c}{Products} \\ \hline
+			id           & int           \\ \hline
+			name         & string        \\ \hline
+			value        & int   \\
+			\hline       
 	\end{tabular}} \hspace{0.7em}
 	\begin{tabular}{|l|l|}
 		\multicolumn{2}{c}{Sales} \\ \hline
@@ -360,7 +342,7 @@ Sales: id: int, custID: int, productID: int, amount: int \\
 	\end{tabular}
 	\caption{Example objects}
 	\label{fig:objects}
-%\end{table}
+	%\end{table}
 \end{figure}
 
 Customers represent clients that at some point in time have bought at least one product from one of the stores.
@@ -369,49 +351,75 @@ Sales represents the aquisition of one or more units of a product by a client, w
 
 For the purpose of this example, we'll consider the following replication scheme for each type of object:
 \begin{itemize}
-	\item \emph{Customer:} partially replicated in the data centers present in the continent correspondent to its country;
-	\item \emph{Products:} replicated in all datacenters
-	\item \emph{Sales:} partially replicated in the same datacenters as of the customer who bought the product. 
+	\item \emph{Customer:} replicated in the data centers present in the continent correspondent to his country (plus a few other data centers for fault-tolerance purposes);
+	\item \emph{Products:} replicated in all datacenters;
+	\item \emph{Sales:} replicated in the same data centers as of the customer who bought the product. 
 \end{itemize}
 
-Note that each object being partially replicated does not prevent queries that refer to data replicated in different datacenters from being executed.
-On section ??? %TODO
-we'll see how can this be done efficiently.
+Despite the fact that some objects aren't replicated everywhere, PotionDB will still support queries that refer to a global view of the database.
+E.g., queries such as ``top 100 customers who have spent the most across all stores'' must be efficiently handled by PotionDB, even though no server contains all customer and sales data. 
+This kind of queries allows to gather important real-time statistics which allow businesspersons to make decisions and changes on the business strategy to improve its rentability.
+%Note that each object being partially replicated does not prevent queries that refer to data replicated in different datacenters from being executed.
+%On section ??? we'll see how can this be done efficiently.
+
+\andre{Should I refer tpc-h here? Do I need to motivate better the example/relevance of global queries*}
+
+\section{System Overview}
+
+PotionDB is a geo-distributed storage system which provides weak consistency or, more precisely, causal consistency.
+A key feature in PotionDB is the ability to efficiently provide global views on partially replicated data under the conditions mentioned previously.
+In this section we discuss design decisions which made it possible to provide such feature.
+
+\subsection{System model}
+
+We consider an asynchronous distributed system composed by a set of servers S connected by a network. 
+We assume the network may delay, duplicate or re-order messages, but does not corrupt them. 
+We also assume messages sent are eventually delivered, even if connections may temporarely drop.
+
+Database objects are replicated in one or more servers, but not necessarely in all of them.  
+We consider a server to be a replica of an object if it replicates such object. 
+New updates are sent periodically to replicas asynchrnously. 
+We don't require for all updates to be delivered to all replicas, as will be detailed in Sections \ref{subsubsec:replication} and \ref{subsubsec:nureplication}
+%However, not all updates need to be delivered to every replica - only updates that modify the objects' visible state must be delivered eventually \ref{non-uniform}.
+
+Clients connect to one or more servers. 
+Updates and queries are executed in a single server and return as soon as its execution ends.
+Clients may group multiple operations together in a single transaction.
+Only objects replicated in the server may be accessed, i.e., to access objects not present in a given server, the client must connect to a replica of those objects.
 
 \subsection{System API}
 
 \subsubsection{Key-value store API}
 
-%TODO: Some connection with the topic before.
+PotionDB provides a key-value store interface \cite{???}.
 %TODO: Proper formatting of GET/UPDATE/LINK structures/examples
-PotionDB is a key-value store database. %TODO: Reference?
-As such, all objects are indexed by a key and support  \emph{get} and \emph{update} operations which, respectively, return/alter the state of the object.
-In PotionDB objects are CRDTs, %TODO: Reference? 
-which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
-As such, both \emph{get} and \emph{update} operations are executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
+%PotionDB is a key-value store database. %TODO: Reference?
+As such, all objects are indexed by a key and support both \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
+In PotionDB objects are CRDTs \cite{???}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
+This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
 
 To facilitate development of applications that want to use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
-A \emph{get} has the following structure for, respectively, full/partial reads: \\
+A \emph{get} has the following interface: %\\
 
-%TODO: Include a comment in front of each one stating which is full and which is partial read. Likely use an array/table to properly set the spacing?
-Get CRDT key bucket crdtType 
+%Get CRDT key bucket crdtType\{arguments\}\\
+\lineemph{Get CRDT key bucket crdtType\{arguments\}}
 
-Get CRDT key bucket crdtType\{arguments\} \\ 
-
-The triple key, bucket, crdtType uniquely identify an object. 
-Bucket is used mainly for partial replication purposes, as described in Section ???. %TODO
-Arguments can be supplied when only a part of the state needs to be returned, with the possible arguments depending on the type of CRDT. E.g., for a map CRDT, we could use: \\
+The triple key, bucket, crdtType are mandantory arguments used to uniquely identify an object
+Bucket is used mainly for partial replication purposes, as will be described in Section \ref{subsubsec:replication}. 
+Arguments are optional as they're used only for reading part of the state, with the possible arguments depending on the type of CRDT. 
+E.g., for a map CRDT, we could use: \\
 
 Get CRDT customer1 customers MAP\{name, age\}\\
 
-to return only the values in the customer1 map CRDT referred by the map keys name and age.
+%to return only the values in the customer1 map CRDT referred by the map keys name and age.
+to return only the name and age of a customer stored as a map CRDT.
 
-As for updates, they have the following form: \\
+\emph{Updates} have a similar interface: \\
 
 Update CRDT key bucket crdtType\{arguments\} \\
 
-Key, bucket and crdtType have the same meaning as in gets.
-The type of arguments depend on the type of CRDT, and each CRDT can support one or more types of update operations. 
+Key, bucket and crdtType have the same meaning as in \emph{get}.
+The type of arguments depend on the type of CRDT, and each CRDT may support multiple types of update operations. 
 E.g., a map supports both addition and removal of key/value pairs.
 An insertion/update of an entry in a map can be represented as: \\
 
@@ -440,7 +448,7 @@ To ilustrate that, recall the example tables and scenario defined in Section \re
 \emph{Determine the 100 customers who have spent the most across all stores. For each customer, the name, age, country and total value spent must be returned.}
 
 Without a view, to implement this query it would be necessary to communicate with datacenters across the whole world (as sales and customers are partitioned). 
-Since there are millions of customers and sales, we would not only need to download large amounts of data but also do long data joins,
+Since there are millions of customers and sales, we would not only need to download large amounts of data but also do time consuming data joins.
 Only after calculating the total value spent for each customer in the service would we be able to reply with the top 100 customers.
 Due to the sheer amount of data involved, this would have unnaceptable performance.
 
@@ -661,6 +669,7 @@ Since data is partially replicated, the client must ensure that it is communicat
 That is, a replica can only receive operations for objects in buckets it replicates.
 
 \subsubsection{Replication}
+\label{subsubsec:replication}
 
 Replication in PotionDB is asynchronous and partial.
 Operations are executed localy, without needing to contact other replicas.
@@ -670,7 +679,7 @@ Objects in PotionDB are operation-based CRDTs, thus we replicate the arguments o
 Each replica stores only a subset of all existing objects.
 This subset is defined by a list of \emph{buckets}.
 A bucket can be seen as a way to group objects together.
-Each object in the database has both a key and a bucket associated, in order to identify in which servers it should be replicated to.
+Each object in the database has both a key and a bucket associated to it, allowing to identify in which servers each object should be replicated to.
 
 PotionDB uses RabbitMQ \cite{???} for handling communication between replicas.
 RabbitMQ is a message brooker which allows consumers to register the topics of messages in which they're interested.
@@ -690,15 +699,17 @@ We also use RabbitMQ to support the addition of new replicas without stopping th
 However, such mechanism is out of scope of this paper and thus we don't describe it here.
 
 \subsubsection{NuCRDTs replication}
+\label{subsubsec:nureplication}
 
 Non-uniform CRDTs \cite{???} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
 E.g., in a Top-K CRDT that only maintains the K elements with highest value, each replica only needs to maintain the elements that are in the top.
 
 The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{???}.
 Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
+This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT need to be replicated to all of its replicas \cite{???}.
 
 Non-uniform CRDTs are specially useful for using as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
-E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, the replicas don't need to keep data for all customers in order to replicate the Top-K CRDT.
+E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
 
 \andre{What's above, technically, isn't 100\% true: each replica does need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. This WILL BE reflected in the experimental evaluation's graphics.}
 
