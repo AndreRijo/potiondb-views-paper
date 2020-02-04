@@ -20,7 +20,14 @@
 
 \newcommand{\outline}[1]{}
 %\newcommand{\outline}[1]{\grumbler{outline}{#1}}
-\newcommand{\lineemph}[1]{\vspace{\baselineskip}\hspace{2em}\emph{#1}\vspace{\baselineskip}}
+
+\newcommand{\emphvspace}{0.5\baselineskip}
+%Single line
+\newcommand{\lineemph}[1]{\vspace{\emphvspace}\hspace{2em}\emph{#1}\vspace{\emphvspace}}
+%Multi line
+\newcommand{\firstblockemph}[1]{\vspace{\emphvspace}\hspace{2em}\emph{#1}}
+\newcommand{\middleblockemph}[1]{\hspace{2em}\emph{#1}}
+\newcommand{\lastblockemph}[1]{\hspace{2em}\emph{#1}\vspace{\emphvspace}}
 
 \vldbTitle{}
 \vldbAuthors{}
@@ -296,8 +303,11 @@ Possiveis pontos mais detalhados?
 
 \null\newpage
 
-\section{Motivating example}
+\section{Motivation example}
 \label{sec:example}
+
+%TODO: I need to include here the complete example query. And explain why the tradicional way with key-value stores is non-efficient. And why a view theorically makes it both easier and more efficient.
+%Use as a starting point the text in "Old stuff that may still be useful"
 
 In order to both facilitate the understanding of the rest of the paper, as well as show the usefulness of queries supported by materialized views, we present the following example scenario.
 
@@ -359,10 +369,23 @@ For the purpose of this example, we'll consider the following replication scheme
 Despite the fact that some objects aren't replicated everywhere, PotionDB will still support queries that refer to a global view of the database.
 E.g., queries such as ``top 100 customers who have spent the most across all stores'' must be efficiently handled by PotionDB, even though no server contains all customer and sales data. 
 This kind of queries allows to gather important real-time statistics which allow businesspersons to make decisions and changes on the business strategy to improve its rentability.
-%Note that each object being partially replicated does not prevent queries that refer to data replicated in different datacenters from being executed.
-%On section ??? we'll see how can this be done efficiently.
+\andre{Should I refer tpc-h here?}
 
-\andre{Should I refer tpc-h here? Do I need to motivate better the example/relevance of global queries*}
+The following is an example of a query requiring a global view of the database:
+
+\lineemph{Get the top 100 customers who have spent the most across all stores. For each customer, the name, age, country and total value spent must be returned.}
+
+Without views and by using just the three kinds of objects in Figure \ref{fig:objects}, executing this query would require communication with multiple datacenters across the world, as both sales and customers' data is partitioned.
+Since there are millions of customers and sales records, this would imply downloading large amounts of data and also spending a considerable amount of CPU time for data joining.
+After the joins are complete, it is still needed to calculate the total value spent for each customer and sort descendingly based on the total value spent by each customer.
+Only after this whole process is complete can the query be answered correctly.
+Due to the sheer amount of data involved, this query would have unnaceptable performance if executed in this way.
+
+Defining the right view(s) avoids having to do for each query the process referred above.
+For the example query above, a view that keeps, for each customer, his name, age, country and total value, ordered by total value, can answer efficiently the query with a single get operation.
+With this we no longer need to contact multiple datacenters and execute millions of gets and result processing.
+
+On Section \ref{subsec:viewsconsistency} we address multiple difficulties related to supporting and keeping the views updated, as well as our solutions for such difficulties in PotionDB.
 
 \section{System Overview}
 
@@ -392,120 +415,99 @@ Only objects replicated in the server may be accessed, i.e., to access objects n
 \subsubsection{Key-value store API}
 
 PotionDB provides a key-value store interface \cite{???}.
-%TODO: Proper formatting of GET/UPDATE/LINK structures/examples
 %PotionDB is a key-value store database. %TODO: Reference?
-As such, all objects are indexed by a key and support both \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
+As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
 In PotionDB objects are CRDTs \cite{???}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
 This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
 
-To facilitate development of applications that want to use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
+To ease development of applications that use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
 A \emph{get} has the following interface: %\\
 
 %Get CRDT key bucket crdtType\{arguments\}\\
 \lineemph{Get CRDT key bucket crdtType\{arguments\}}
 
-The triple key, bucket, crdtType are mandantory arguments used to uniquely identify an object
+The triple key, bucket, crdtType are mandantory arguments used to uniquely identify an object.
 Bucket is used mainly for partial replication purposes, as will be described in Section \ref{subsubsec:replication}. 
-Arguments are optional as they're used only for reading part of the state, with the possible arguments depending on the type of CRDT. 
-E.g., for a map CRDT, we could use: \\
+Arguments are optional as they're used only if reading part of the state, with the possible arguments depending on the type of CRDT. 
+E.g., for a map CRDT, we could use: 
 
-Get CRDT customer1 customers MAP\{name, age\}\\
+\lineemph{Get CRDT customer1 customers MAP\{name, age\}}
 
 %to return only the values in the customer1 map CRDT referred by the map keys name and age.
 to return only the name and age of a customer stored as a map CRDT.
 
-\emph{Updates} have a similar interface: \\
+\emph{Updates} have a similar interface:
 
-Update CRDT key bucket crdtType\{arguments\} \\
+\lineemph{Update CRDT key bucket crdtType\{arguments\}}
 
 Key, bucket and crdtType have the same meaning as in \emph{get}.
 The type of arguments depend on the type of CRDT, and each CRDT may support multiple types of update operations. 
 E.g., a map supports both addition and removal of key/value pairs.
 An insertion/update of an entry in a map can be represented as: \\
 
-Update CRDT customer1 customers MAP\{ADD\{name: "David"\}\} \\
+\lineemph{Update CRDT customer1 customers MAP\{ADD\{name: \\"David"\}\}}
 
 \subsubsection{API for view CRDTs}
 \label{subsubsec:APIView}
-%TODO: We ALMOST SURELY need a section before this explaining what is partial replication, its advantages/disadvantages, why we use it and why views are interesting for that.
-%TODO: This may be more fit to another section, or split in multiple subsections in different sections of the paper
 
-In relational databases (and even some non-relational ones, e.g., Cassandra) it's common to have \emph{Views}. 
-A view can be defined as being the result of a query on one or multiple objects.
-Views can then be accessed as if they were normal objects, thus facilitating the definition of new queries.
+In relational databases (and even some non-relational ones, e.g., Cassandra \cite{???}) it is common to have \emph{views}. 
+A view can be defined as being the result of a query on one or multiple objects \cite{???}.
+Views can be acessed as if they were normal objects, thus it eases the definition of new queries.
 %TODO: Does this need a SQL example here?
 
 Views can either be materialized or not (albeit not all databases support both). %TODO: references 
-In a materialized view, the result of the query is stored as an object, which can then be reused later.
-This can potencially improve drastically the performance of certain queries, but incours an extra cost on object updates, as both the object and the materialized view need to be updated.
+In a materialized view, the result of the query is stored as an object, which can then be reused later \cite{???}.
+This may potencially improve drastically the performance of certain queries, but incours an extra cost on updates, as both the object and the materialized view need to be updated.
 On the other hand, non-materialized views don't have this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
 
-In PotionDB, it is particularly interesting to support materialized views.
-To ilustrate that, recall the example tables and scenario defined in Section \ref{subsec:example}, along with the following query: 
-%TODO: Do some proper emphasis on this
-%TODO: Also consider doing this only for a continent instead of globally.
+PotionDB supports materialized views.
+%Just like in a relational databases defining the right indexes and materialized views ensures even complex queries may be executed efficiently.
+Similarly to relational databases, defining the right materialized views allows for efficient execution of complex queries.
+In the case of PotionDB, views may even refer to data that isn't replicated locally.
 
-\emph{Determine the 100 customers who have spent the most across all stores. For each customer, the name, age, country and total value spent must be returned.}
+We extend our key-value API with the \emph{link} operation.
+The idea of \emph{link} is to specify how can an object (view) be updated based on updates executed on other objects (base data).
+Whenever an update is issued on the base data, PotionDB will also simultaneously update the view.
 
-Without a view, to implement this query it would be necessary to communicate with datacenters across the whole world (as sales and customers are partitioned). 
-Since there are millions of customers and sales, we would not only need to download large amounts of data but also do time consuming data joins.
-Only after calculating the total value spent for each customer in the service would we be able to reply with the top 100 customers.
-Due to the sheer amount of data involved, this would have unnaceptable performance.
+The link construct has the following structure:
 
-A possible solution is to use a Top-K CRDT %TODO: ref to NuCRDTs paper
-as a materialized view which keeps the list of the 100 customers with highest (global) spendings.
-This way, the query could be answered by executing only one \emph{get} operation on this CRDT.
-This solution does pose some difficulties, namelly: 
-%associate; keep entries updated even if the CRDT referred is not replicated locally; have new customers/sales be automatically included in the top-k.
-\begin{enumerate*}[label=(\roman*)]
-	\item association of each entry in the top-k with the respective customer and sales' CRDTs;
-	\item translation of updates in customers or sales to updates for the top-k;
-	\item keeping top-k updated even if some entries refer to CRDTs not replicated in the replica in which the top-k is created;
-	\item automatically include customer and sales CRDTs that may be introduced after the creation of the top-k.
-\end{enumerate*}
+\firstblockemph{Link CRDT key bucket crdtType}
 
-To support materialized views, we thus introduce another construct in our API, named \emph{link}.
-The intuitive idea is that, after creating the CRDT that will be acting as a view, we can issue a \emph{link} operation in order to provide the "rules" for the automatic updating of the view CRDT.
-PotionDB will then use these "rules" to keep the CRDT updated.
+\middleblockemph{From (key1*, bucket1*, crdtType1), ..., (keyN*, bucketN*, crdtTypeN)}
 
-A link operation has the following structure:
-\\
+\middleblockemph{Where conditions}
 
-Link CRDT key bucket crdtType \\
-From (key1*, bucket1*, crdtType1), ..., (keyN*, bucketN*, crdtTypeN) \\
-Where conditions \\
-Update updateArgs \\
+\lastblockemph{Update updateArgs}
 
-%TODO: How do we tell the TopK crdt which fields are: a) used for uniquely identifying an entry, b) used for sorting. Maybe as argument in the type? Or a special create/empty update operation?
-
-Similarly to \emph{gets} and \emph{updates}, each triple key, bucket, crdtType uniquely identifies an object.
-The link operation contains four constructs:
+Similarly to \emph{get} and \emph{update}, each triple key, bucket, crdtType uniquely identifies an object.
+The link operation can be split in four parts:
 %In short, \emph{link} specifies the CRDT that will be a view, while \emph{from} and \emph{where} specify which CRDTs will trigger updates on the view CRDT.
 %Update specifies how to update the view CRDT. 
 %More precisely:
 
 \begin{itemize}
-	\item \emph{Link}: specifies which CRDT will be acting as a view, i.e., the target of the \emph{Update} construct;
+	\item \emph{Link}: specifies which CRDT will be acting as a view, i.e., the target of  \emph{update};
 	\item \emph{From}: Similarly to the \emph{from} construct in SQL, it specifies which CRDT(s) will be used to build the view;
 	In other words, whenever an update happens in one of these CRDTs, an update may also be triggered in the link CRDT.
 	Note that in this construct exclusively, both key and bucket may be a prefix of the keys/buckets of the CRDTs (this is represented by the '*' character).
 	This allows to include objects that may not yet exist in the database but that should also be included when they get added (e.g., new customers);
-	\item \emph{Where}: Similary to the \emph{where} construct in SQL, it specifies using conditions how can the CRDTs returned in front be joined/filtered. E.g., if we only wanted sales related to portuguese customers: where customers.MAP{country} = "Portugal" \emph{and} sales.MAP{custID} = customers.MAP{id} \emph{and} sales.MAP{productID} = products.MAP{id};
+	\item \emph{Where}: Similary to the \emph{where} construct in SQL, it specifies using conditions how can the CRDTs returned in \emph{from} be joined/filtered. %E.g., if we only wanted sales related to portuguese customers: where customers.MAP{country} = "Portugal" \emph{and} sales.MAP{custID} = customers.MAP{id} \emph{and} sales.MAP{productID} = products.MAP{id};
 	\item \emph{Update}: Specifies the operation that, for each entry returned by \emph{from} after applying \emph{where}, will be used to update the CRDT specified in \emph{link}.
 \end{itemize}
 
-%TODO: This almost surelly needs to be better explained here
-The intuition is that when Link is first executed for a view CRDT, the view is updated based on the already existing objects that match the \emph{from} and \emph{where} clause.
-Afterwards, whenever a CRDT that matches \emph{from} is updated, the \emph{where} clause is executed for that CRDT only and, if necessary, the view CRDT is updated.
-On Section ??? we discuss in detail different ways to implement this, as well as how it is done in PotionDB. %TODO
+The intuition is that when \emph{link} is first executed for a view CRDT, the view is updated based on all existing objects that match the \emph{from} and \emph{where} clauses.
+Afterwards, whenever a CRDT that matches \emph{from} is updated, the \emph{where} clause is executed for that CRDT only and the \emph{update} part is executed on the view.
+In Section \ref{subsec:viewsconsistency} we discuss in detail different possibilities for implementing this, as well as how it is done in PotionDB. %TODO
 
-%TODO: Proper linkage
-As an example, this link operation generates a TopK CRDT which directly answers the query presented before:
-\\
-Link CRDT topsales statistics TOPK \\
-From (customers*, customers, MAP), (products*, products, MAP), (sales*, sales, MAP) \\
-Where sales.MAP\{customerID\} = customers.MAP\{id\} \emph{and}  sales.MAP\{productID\} = products.MAP\{id\} \\
-Update MAP\{name: customers.MAP\{name\}, age: customers.MAP\{age\}, country: customers.MAP\{country\}, spent: products.MAP\{value\} * sales.MAP\{value\}\} \\
+The query presented in Section \ref{sec:example} can be answered with a single \emph{get} on the Top-K CRDT generated by the following \emph{link}:
+
+\firstblockemph{Link CRDT topsales statistics TOPK}
+
+\middleblockemph{From (customers*, customers, MAP), (products*, products, MAP), (sales*, sales, MAP)}
+
+\middleblockemph{Where sales.MAP\{customerID\} = customers.MAP\{id\} \emph{and}  sales.MAP\{productID\} = products.MAP\{id\}}
+
+\lastblockemph{Update MAP\{name: customers.MAP\{name\}, age: \\ customers.MAP\{age\}, country: customers.MAP\{country\}, spent: products.MAP\{value\} * sales.MAP\{value\}\}}
 
 \subsection{System description}
 
@@ -620,6 +622,7 @@ Thus, the effects of each local transaction can be ordered sequentially, which i
 %TODO: Should I refer the 2 phase-commit? And the fact that commitTS != startTS?
 
 \subsubsection{Views consistency}
+\label{subsec:viewsconsistency}
 
 Supporting materialized views in a database, as was hinted in Section \ref{subsubsec:APIView}, poses some challenges.
 Namelly, it is required to keep the view and base data synchronized, that is, when one is updated the other must also be updated at the same point in time.
@@ -712,6 +715,90 @@ Non-uniform CRDTs are specially useful for using as materialized views, as they 
 E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
 
 \andre{What's above, technically, isn't 100\% true: each replica does need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. This WILL BE reflected in the experimental evaluation's graphics.}
+
+\section{Old stuff that may still be useful}
+
+\subsubsection{API for view CRDTs}
+%TODO: We ALMOST SURELY need a section before this explaining what is partial replication, its advantages/disadvantages, why we use it and why views are interesting for that.
+%TODO: This may be more fit to another section, or split in multiple subsections in different sections of the paper
+
+In relational databases (and even some non-relational ones, e.g., Cassandra \cite{???}) it is common to have \emph{views}. 
+A view can be defined as being the result of a query on one or multiple objects \cite{???}.
+Views can be acessed as if they were normal objects, thus it eases the definition of new queries.
+%TODO: Does this need a SQL example here?
+
+Views can either be materialized or not (albeit not all databases support both). %TODO: references 
+In a materialized view, the result of the query is stored as an object, which can then be reused later \cite{???}.
+This may potencially improve drastically the performance of certain queries, but incours an extra cost on updates, as both the object and the materialized view need to be updated.
+On the other hand, non-materialized views don't have this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
+
+
+In PotionDB, it is particularly interesting to support materialized views.
+To ilustrate that, recall the example tables and scenario defined in Section \ref{sec:example}, along with the following query: 
+%TODO: Do some proper emphasis on this
+%TODO: Also consider doing this only for a continent instead of globally.
+
+\lineemph{Determine the top 100 customers who have spent the most across all stores. For each customer, the name, age, country and total value spent must be returned.}
+
+Without a view, to implement this query it would be necessary to communicate with datacenters across the whole world (as sales and customers are partitioned). 
+Since there are millions of customers and sales, we would not only need to download large amounts of data but also do time consuming data joins.
+Only after calculating the total value spent for each customer in the service would we be able to reply with the top 100 customers.
+Due to the sheer amount of data involved, this would have unnaceptable performance.
+
+A possible solution is to use a Top-K CRDT %TODO: ref to NuCRDTs paper
+as a materialized view which keeps the list of the 100 customers with highest (global) spendings.
+This way, the query could be answered by executing only one \emph{get} operation on this CRDT.
+This solution does pose some difficulties, namelly: 
+%associate; keep entries updated even if the CRDT referred is not replicated locally; have new customers/sales be automatically included in the top-k.
+\begin{enumerate*}[label=(\roman*)]
+	\item association of each entry in the top-k with the respective customer and sales' CRDTs;
+	\item translation of updates in customers or sales to updates for the top-k;
+	\item keeping top-k updated even if some entries refer to CRDTs not replicated in the replica in which the top-k is created;
+	\item automatically include customer and sales CRDTs that may be introduced after the creation of the top-k.
+\end{enumerate*}
+
+To support materialized views, we thus introduce another construct in our API, named \emph{link}.
+The intuitive idea is that, after creating the CRDT that will be acting as a view, we can issue a \emph{link} operation in order to provide the "rules" for the automatic updating of the view CRDT.
+PotionDB will then use these "rules" to keep the CRDT updated.
+
+A link operation has the following structure:
+\\
+
+Link CRDT key bucket crdtType \\
+From (key1*, bucket1*, crdtType1), ..., (keyN*, bucketN*, crdtTypeN) \\
+Where conditions \\
+Update updateArgs \\
+
+%TODO: How do we tell the TopK crdt which fields are: a) used for uniquely identifying an entry, b) used for sorting. Maybe as argument in the type? Or a special create/empty update operation?
+
+Similarly to \emph{gets} and \emph{updates}, each triple key, bucket, crdtType uniquely identifies an object.
+The link operation contains four constructs:
+%In short, \emph{link} specifies the CRDT that will be a view, while \emph{from} and \emph{where} specify which CRDTs will trigger updates on the view CRDT.
+%Update specifies how to update the view CRDT. 
+%More precisely:
+
+\begin{itemize}
+	\item \emph{Link}: specifies which CRDT will be acting as a view, i.e., the target of the \emph{Update} construct;
+	\item \emph{From}: Similarly to the \emph{from} construct in SQL, it specifies which CRDT(s) will be used to build the view;
+	In other words, whenever an update happens in one of these CRDTs, an update may also be triggered in the link CRDT.
+	Note that in this construct exclusively, both key and bucket may be a prefix of the keys/buckets of the CRDTs (this is represented by the '*' character).
+	This allows to include objects that may not yet exist in the database but that should also be included when they get added (e.g., new customers);
+	\item \emph{Where}: Similary to the \emph{where} construct in SQL, it specifies using conditions how can the CRDTs returned in front be joined/filtered. E.g., if we only wanted sales related to portuguese customers: where customers.MAP{country} = "Portugal" \emph{and} sales.MAP{custID} = customers.MAP{id} \emph{and} sales.MAP{productID} = products.MAP{id};
+	\item \emph{Update}: Specifies the operation that, for each entry returned by \emph{from} after applying \emph{where}, will be used to update the CRDT specified in \emph{link}.
+\end{itemize}
+
+%TODO: This almost surelly needs to be better explained here
+The intuition is that when Link is first executed for a view CRDT, the view is updated based on the already existing objects that match the \emph{from} and \emph{where} clause.
+Afterwards, whenever a CRDT that matches \emph{from} is updated, the \emph{where} clause is executed for that CRDT only and, if necessary, the view CRDT is updated.
+On Section ??? we discuss in detail different ways to implement this, as well as how it is done in PotionDB. %TODO
+
+%TODO: Proper linkage
+As an example, this link operation generates a TopK CRDT which directly answers the query presented before:
+\\
+Link CRDT topsales statistics TOPK \\
+From (customers*, customers, MAP), (products*, products, MAP), (sales*, sales, MAP) \\
+Where sales.MAP\{customerID\} = customers.MAP\{id\} \emph{and}  sales.MAP\{productID\} = products.MAP\{id\} \\
+Update MAP\{name: customers.MAP\{name\}, age: customers.MAP\{age\}, country: customers.MAP\{country\}, spent: products.MAP\{value\} * sales.MAP\{value\}\} \\
 
 \null\newpage\null
 
