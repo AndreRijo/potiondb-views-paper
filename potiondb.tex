@@ -968,15 +968,21 @@ As the number of clients increases, so does the latency of each request and, unt
 \subsubsection{Scenarios}
 
 We make an extensive evaluation of PotionDB, conducting multiple experiments in order to evaluate how PotionDB scales in different scenarios. %When appropriate, we also execute the same experiments for local PotionDB and single index PotionDB.
-With these experiments, we try to assess the following:
+%With these experiments, we try to assess the following:
+With these experiments, we try to answer the following:
 
-\begin{itemize}
-	\item How does PotionDB compare with other solutions, namely the local and single versions of PotionDB? How does the data locality and size affect the performance?
-	%\item How does PotionDB compare with the other mentioned solutions, on a query per query basis? Namely, how does the locality and size of data affect the performance difference?
-	\item How much is PotionDB able to scale when executing queries only, or when trying to execute both queries and updates simultaneously?
-	\item How does different read/write ratios affect PotionDB's performance?
-	\item How well does each CRDT type scale in PotionDB, namelly when its size grows?
-\end{itemize}
+%\begin{itemize}
+%	\item How does PotionDB compare with other solutions, namely the local and single versions of PotionDB? How does the data locality and size affect the performance?
+%	\item How much is PotionDB able to scale when executing queries only, or when trying to execute both queries and updates simultaneously?
+%	\item How does different read/write ratios affect PotionDB's performance?
+%	\item How well does each CRDT type scale in PotionDB, namelly when its size grows?
+%\end{itemize}
+\begin{enumerate}
+	\item \label{enum:question1} What is the practical benefict of having views of data replicated across different servers, compared to having only views of local data (local PotionDB) or a single index server (single PotionDB)?
+	\item \label{enum:question2}What is the effect on PotionDB's throughput of executing updates, namely as the write/read ratio increases?
+	\item \label{enum:question3}How much can PotionDB scale if we group operations?
+	\item \label{enum:question4}\andre{TODO: benchmarks}
+\end{enumerate}
 
 \subsection{Results}
 
@@ -984,7 +990,7 @@ With these experiments, we try to assess the following:
 
 \andre{I wonder if it's worth mentioning that the number of clients server in single/local versions is much lower compared to normal.}
 
-To evaluate the benefits of having indexes replicated in every replica, we compare PotionDB with the local and single versions, namely in terms of queries per second.
+To evaluate the benefits of having indexes replicated in every replica (\ref{enum:question1}), we compare PotionDB with the local and single versions, namely in terms of queries per second.
 
 \begin{figure}
 	\centering
@@ -1019,7 +1025,7 @@ This smaller drop can be explained due to local clients not being sticky - as th
 
 \subsubsection{PotionDB scaling - queries VS updates}
 
-We now evaluate how much of an impact on PotionDB's throughput has executing updates alongside queries.
+We now evaluate the impact on PotionDB's throughput of executing updates alongside queries, with multiple read/write ratios (\ref{enum:question2}).
 In this scenario, whenever a client wants to execute an operation, it picks at random whenever a query or an update is executed.
 It is worth noting that an update affects both base data and all associated indexes.
 Also note that while index updates are executed in every replica, we only count them once (i.e., if one update is executed 5 times, it still only counts as 1 operation).
@@ -1029,6 +1035,23 @@ Also note that while index updates are executed in every replica, we only count 
 	\includegraphics[width=.95\linewidth]{update_rates_cut}
 	\caption{PotionDB performance with varying update rate.}
 	\label{fig:update_rates}
+\end{figure}
+\begin{figure}
+	\centering
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.95\linewidth]{update_rates_query_cut}
+		\caption{Query-latency}
+		\label{fig:update_rates_query}
+	\end{subfigure}%
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.95\linewidth]{update_rates_update_cut}
+		\caption{Update-latency}
+		\label{fig:update_rates_update}
+	\end{subfigure}
+	\caption{PotionDB performance with varying update rate, with query and update latencies split. Note that updates are done in groups due to having to update both base data and indexes.}
+	\label{fig:update_rates_split}
 \end{figure}
 
 Figure \ref{fig:update_rates} shows the results of executing updates alongside queries, with varying odds of choosing an update.
@@ -1045,25 +1068,40 @@ However, updates in a transaction must lock the partitions they're involved and 
 As such, if the update rate is high, clients executing queries or updates may often have to wait for a transaction with updates to finish executing before executing their own operations.
 \andre{I might have to reffer in an early section with more detail how we do updates in our experiment, namely that our granularity is at order-level and that indexes, orders and items are updated in the same txn.}.
 
+Figure \ref{fig:update_rates_split} shows the same experiment as figure \ref{fig:update_rates}, but showcases the latencies of queries and updates splitted, instead of together.
+It is noticeable that updates have quite higher latencies and scale much less, which is due to both 2-phase commit and grouping of operations (as updates need to be reflected on both base data and indexes).
+
+
 \andre{Probably some concluding note that reffers that for PotionDB's intented usages it is likely that updates are much less frequent than queries, or maybe even that updates could maybe be delayed?}
 
 \subsubsection{Batching}
 
 On the previous scenarios, each client only requested one query at a time, even through updates were executed in groups (whenever one update to a base object is usued, all associated indexes are updated in the same transaction).
 With this we've noticed that, with a low number of clients, an update-only scenario actually has better throughput than a query-only scenario.
-Thus, we now evaluate the effect observable on PotionDB's throughput if multiple queries are included in the same transaction.
+Thus, we now evaluate the effect observable on PotionDB's throughput if multiple queries are included in the same transaction (\ref{enum:question3}).
+
+%\begin{figure}
+%	\centering
+%	\includegraphics[width=.95\linewidth]{ops_per_txn_cut}
+%	\caption{PotionDB performance when batching queries. Note that latency is in logarithmic scale.}
+%	\label{fig:ops_per_txn}
+%\end{figure}
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{ops_per_txn_cut}
-	\caption{PotionDB performance when batching queries. Note that latency is in logarithmic scale.}
+	\includegraphics[width=.95\linewidth]{ops_per_txn_few_cut}
+	\caption{PotionDB performance when batching queries. %Note that latency is in logarithmic scale.}
+	}
 	\label{fig:ops_per_txn}
 \end{figure}
 
-\andre{Note: this graph is temporary - I'll have to repeat the tests with less clients and a few repetitions of the same executions. Also probably with lower values. When I first did this test it was more for curiosity than for really putting it here...}
+%\andre{Note: this graph is temporary - I'll have to repeat the tests with less clients and a few repetitions of the same executions. Also probably with lower values. When I first did this test it was more for curiosity than for really putting it here...}
 
 Figure \ref{fig:ops_per_txn} shows how PotionDB scales in terms of query/s depending on how many queries are executed in each transaction.
-We can see that with batching PotionDB reaches its peak performance with a lower number of clients (high query/s with low latency), and is able to provide higher throughput with lower latency - up to 1.2M ops/s with batching compared to 0.36M ops/s without batching.
+As expected, as we increase the amount of queries per transaction, so does the latency, as there is more data to send, receive and process.
+However, the beneficts for throughput are visible - comparing 1 query/txn with 8 query/txn, we can see the throughput more than double before the server saturates, and latency increase by less than double.
+Increasing the number of queries/txn also leads to PotionDB saturating with less clients, as more time is spent on processing queries instead of waiting/switching clients, thus making better usage of machine resources.
+%We can see that with batching PotionDB reaches its peak performance with a lower number of clients (high query/s with low latency), and is able to provide higher throughput with lower latency - up to 1.2M ops/s with batching compared to 0.36M ops/s without batching.
 
 \subsubsection{CRDT Benchmark}
 
