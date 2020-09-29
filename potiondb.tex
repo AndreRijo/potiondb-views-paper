@@ -62,21 +62,22 @@ Nuno Preguiça\\
 \maketitle
 
 \begin{abstract}
-bla
+\andre{Please review this}
 
-bla
+Many existing web services of global scale have stright latency, availability and fault tolerance requirements.
+To handle this, some services distribute their datacenters accross the globe, with users accessing the closest datacenter.
+As the number of servers increases, so does the replication cost, thus partial replication can be desirable.
+However, some queries may require global data not replicated in every server (e.g. in an online store scenario, the top 10 most sold products globally).
 
-bla
+In this paper, we present PotionDB, a novel geo-distributed key-value store which provides partial replication.
+We present a replication scheme which allows data to be partially replicated, yet still answer queries relative to global data efficiently.
+We leverage on existing partial and non-uniform replication algorithms to provide materialized views of data that may be split accross multiple servers.
+With these views, a client can obtain global information by querying a single server.
+Our evaluation shows that queries concerning global data can be completed in less than one millisecond, while maintaining high throughput despite the extra updates required to keep the views up-to-date. 
 
-bla
+%Geo-replicated, distributed data stores that support complex online applications, such as social networks, must provide an “always- on” experience where operations always complete with low latency. Today’s systems often sacrifice strong consistency to achieve these goals, exposing inconsistencies to their clients and necessitating complex application logic. In this paper, we identify and define a consistency model—causal consistency with convergent conflict handling, or causal+—that is the strongest achieved under these constraints.
+%We present the design and implementation of COPS, a key-value store that delivers this consistency model across the wide-area. A key contribution of COPS is its scalability, which can enforce causal dependencies between keys stored across an entire cluster, rather than a single server like previous systems. The central approach in COPS is tracking and explicitly checking whether causal dependen- cies between keys are satisfied in the local cluster before exposing writes. Further, in COPS-GT, we introduce get transactions in or- der to obtain a consistent view of multiple keys without locking or blocking. Our evaluation shows that COPS completes operations in less than a millisecond, provides throughput similar to previous systems when using one server per cluster, and scales well as we increase the number of servers in each cluster. It also shows that COPS-GT provides similar latency, throughput, and scaling to COPS for common workloads.
 
-bla
-
-bla
-
-bla
-
-bla
 
 \end{abstract}
 
@@ -115,7 +116,7 @@ this approach leads to a number of problems.
 First, storing all data in all data centers imposes a large overhead in terms of storage. 
 Furthermore, storing some data in all data centers may be unnecessary, as data is only needed at some
 geographic locations.
-Second, increasing the number of data centers makes the replications process more complex and costly, 
+Second, increasing the number of data centers makes the replication process more complex and costly, 
 as each update needs to be propagated to all other data centers.
 
 For addressing these problems, partial replication is an attractive approach, with each data center
@@ -138,7 +139,8 @@ Several possible solutions exist for this problem.
 First, it is possible to have a data center that replicates all data, and forward these queries to such data center.
 Doing this imposes a latency penalty and requires a data center to host all data and execute all queries of this type. %Andre: also refer that this data center would be the bottleneck of the system?
 Second, it is possible to execute the query by accessing multiple locations, by using, for example, 
-a distributed processing system with support for geo-partitioned data \cite{Kloudas:2015:POD:2850578.2850582,more}.
+a distributed processing system with support for geo-partitioned data %\cite{Kloudas:2015:POD:2850578.2850582,more}.
+\cite{kloudas2015pixida,more}.
 This approach requires running an additional external service and poses challenges for the consistency of the results
 returned and the data observed by users.
 %, mostly when adopting weak consistency models (a local update that should
@@ -168,7 +170,7 @@ available transactions \cite{hat}.
 To our knowledge, our work is the first to address the problem of maintaining materialized views
 in such setting.  
 
-We have evaluated our system using micro-benchmarks and TPC-H queries \cite{}.
+We have evaluated our system using micro-benchmarks and TPC-H queries \cite{tpch}.
 The results show that our algorithms for maintaining materialized views impose 
 low overhead when executing and asynchronously replicating transactions, particularly
 for views with limits.
