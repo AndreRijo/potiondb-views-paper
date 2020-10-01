@@ -64,14 +64,14 @@ Nuno Preguiça\\
 \begin{abstract}
 \andre{Please review this}
 
-Many existing web services of global scale have stright latency, availability and fault tolerance requirements.
-To handle this, some services distribute their datacenters accross the globe, with users accessing the closest datacenter.
+Many existing web services of global scale have strict latency, availability and fault tolerance requirements.
+To handle this, some services distribute their datacenters across the globe, with users accessing the closest datacenter.
 As the number of servers increases, so does the replication cost, thus partial replication can be desirable.
 However, some queries may require global data not replicated in every server (e.g. in an online store scenario, the top 10 most sold products globally).
 
 In this paper, we present PotionDB, a novel geo-distributed key-value store which provides partial replication.
 We present a replication scheme which allows data to be partially replicated, yet still answer queries relative to global data efficiently.
-We leverage on existing partial and non-uniform replication algorithms to provide materialized views of data that may be split accross multiple servers.
+We leverage on existing partial and non-uniform replication algorithms to provide materialized views of data that may be split across multiple servers.
 With these views, a client can obtain global information by querying a single server.
 Our evaluation shows that queries concerning global data can be completed in less than one millisecond, while maintaining high throughput despite the extra updates required to keep the views up-to-date. 
 
@@ -932,7 +932,7 @@ These specificities are evidencied in the example view updates presented before.
 \section{Evaluation}
 
 In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
-Namely, we try to assess the advantage of all replicas having views spanning data partitioned accross multiple replicas, instead of each replica having an incomplete view with only its local data (local PotionDB).
+Namely, we try to assess the advantage of all replicas having views spanning data partitioned across multiple replicas, instead of each replica having an incomplete view with only its local data (local PotionDB).
 E.g., if we partition customer's data based on the continent of the customer's country, the local view of a server in Europe would only concern the data of european customers, while a global view would include customers from all over the globe.
 We also compare PotionDB with a solution that has one server dedicated to host all indexes (single index PotionDB).
 
@@ -1020,7 +1020,7 @@ Focusing on figure \ref{fig:global_local_single}, it is noticeable that local ve
 This happens because most queries require data from all regions, thus requiring local clients to contact all servers and wait for them all to reply.
 This leads to both more load on each server as well as more time waiting on the client side.
 The single scenario performance is roughly 1/5 of normal's.
-This can be explained as all queries only need to consult the indexes, which due to those being all in one server, implies that the load is all directed to one server instead of being split accross five.
+This can be explained as all queries only need to consult the indexes, which due to those being all in one server, implies that the load is all directed to one server instead of being split across five.
 
 Figure \ref{fig:q3q5} shows that the lower throughput of the local version is due to the locality of the data - Q3 requires data from all servers and has about 1/12 of the performance of normal PotionDB, while Q5 only requires data from one region (thus one server) and has about 2/3 of the performance.
 This smaller drop can be explained due to local clients not being sticky - as the query parameters are selected at random, local clients are forced to constantly query different servers, while each normal client can query always the same server.
@@ -1135,7 +1135,7 @@ Namely, figure \ref{fig:bench_read} concerns a read-only scenario, while \ref{fi
 
 Focusing on figure \ref{fig:bench_read}, it can be observed that increasing the number of operations per transaction greatly increases the throughput (up to 7x more in the tested scenario).
 Increasing the number of CRDTs only seems to have a considerable effect when there's multiple operations in a transaction.
-This may be due to the fact that a lookup operation in a set CRDT executes so quickly that most of the overhead may be in communication between threads or on converting data to the wire, thus not taking much benefict from the CRDTs being split accross different partitions.
+This may be due to the fact that a lookup operation in a set CRDT executes so quickly that most of the overhead may be in communication between threads or on converting data to the wire, thus not taking much benefict from the CRDTs being split across different partitions.
 
 Considering figure \ref{fig:bench_upd}, considerably lower latencies can be observed when using multiple keys with only 1 operation per transaction.
 Based on other tests we done, we can affirm that this difference is bigger the higher the rate of updates are.
@@ -1153,7 +1153,7 @@ Having multiple keys eases this, as only partitions which get updated need to be
 %
 %We first start by comparing the performance between running PotionDB in its intended mode, i.e., with views of global data, versus having each view only include data replicated locally.
 %To distinguish between both, we call the former simply PotionDB and the later Local PotionDB.
-%It is expectable for Local PotionDB to have worse performance, as most TPC-H queries concern data that is replicated accross multiple replicas, which implies that clients need to contact multiple replicas to answer a single query in the case of local views.
+%It is expectable for Local PotionDB to have worse performance, as most TPC-H queries concern data that is replicated across multiple replicas, which implies that clients need to contact multiple replicas to answer a single query in the case of local views.
 %
 %\begin{figure}
 %	\centering
