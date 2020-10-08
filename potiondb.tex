@@ -1213,6 +1213,41 @@ Having multiple keys eases this, as only partitions which get updated need to be
 
 \section{Related Work}
 
+Both strongly and weakly consistent solutions exist to support services that require geo replication of their data.
+%Strong consistency solutions like Spanner \cite{???} \comment{likely introduce others}
+%Some examples include, for strong, Spanner \cite{???} and ???; while for weak ??? and ???.
+Strong consistency solutions like Spanner \cite{spanner} and CockroachDB \cite{cockroachdb} provide the ilusion of a single replica, thus making it easier to provide a consistent view for clients.
+However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions, and high latency is expected as multiple datacenters need to be contacted for executing operations.
+Weak consistent solutions such as Dynamo \cite{dynamo} and COPS \cite{cops} can provide highly available, low latency operations, but providing a consistent view of the database to clients is challenging.
+Causal consistency is a sub-form of weak consistency that alleviates this problem, however anomalities can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
+
+Systems like Dynamo \cite{dynamo}, COPS \cite{cops} and CockroachDB \cite{cockroachdb} provide geo-replication.
+Dynamo provides partial replication, however reads and updates for multiple keys are done independently, thus there's no causal read of multiple reads.
+COPS provides causal+ consistency and supports transactions for reads, however it doesn't support neither partial replication or views.
+CockroachDB is strongly consistent and, thus, may fail due to network partitions, and does not provide partial replication.
+ 
+CRDTs \cite{crdt} are replicated data types that guarantee state convergence, assuming all updates are eventually delivered.
+Thus, they are often used in weakly consistent systems, e.g., Redis \cite{redisCRDT} and Riak \cite{riak}.
+Some types of CRDTs have been introduced that can help with representing views of data, namely computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform}.
+The former computes some result over data (e.g., a sum), while the later focus on minimizing the information that needs to be replicated to correctly reply to queries (e.g.: a top-k CRDT doesn't need all entries to be replicated).
+We leverage on both in our solution.
+
+Alternative solutions to provide global queries on partially replicated data includes using distributed processing systems like Pixida \cite{kloudas2015pixida} or Hourglass \cite{hourglass}.
+However, this impose challenges both consistency-wise, as well as in terms of latency and data transferred.
+The amount of data to be transfered is specially concerning, as if the underlyng systems only provide simple get operations, very high amounts of data may have to be transfered to reply to a small query like a top 10.
+PotionDB avoids this by having materialized views, which allows to have only the required data replicated in every server and thus reply to such query efficiently.
+%COPS doesn't support partial replication
+%Dynamo supports partial replication, but doesn't support views or consistent reads of multiple objects.
+%Start talking about partial replication
+%Mention some geo-distributed DBs, explain that they don't provide partial replication
+%CRDTs, non-uniform replication
+%Maybe at some point refers transactions
+%Refer alternative solution of pixida/parallel jobs.
+%Maybe mention views in consistent databases.
+%Hourglass is mentioned in Pixida paper.
+
+
+
 \section{Conclusions}
 
 \bibliographystyle{abbrv}
