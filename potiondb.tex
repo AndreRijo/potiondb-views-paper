@@ -308,7 +308,7 @@ We also assume messages sent are eventually delivered, even if connections may t
 Database objects are replicated in one or more servers, but not necessarely in all of them.  
 We consider a server to be a replica of an object if it replicates such object. 
 New updates are sent periodically to replicas asynchrnously. 
-We don't require for all updates to be delivered to all replicas, as will be detailed in Sections \ref{subsubsec:replication} and \ref{subsubsec:nureplication}
+We do not require for all updates to be delivered to all replicas, as will be detailed in Sections \ref{subsubsec:replication} and \ref{subsubsec:nureplication}
 %However, not all updates need to be delivered to every replica - only updates that modify the objects' visible state must be delivered eventually \ref{non-uniform}.
 
 Clients connect to one or more servers. 
@@ -319,56 +319,102 @@ Only objects replicated in the server may be accessed, i.e., to access objects n
 \subsection{System API}
 
 \subsubsection{Key-value store API}
+\andre{REWRITTEN}
 
 PotionDB provides a key-value store interface \cite{???}.
 %PotionDB is a key-value store database. %TODO: Reference?
 As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
-In PotionDB objects are CRDTs \cite{???}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
+In PotionDB objects are CRDTs \cite{crdt}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
 This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
 
-To ease development of applications that use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
-A \emph{get} has the following interface: %\\
+An object in PotionDB is uniquely identified by the triple (key, bucket, crdtType).
+Key is the name given by the user to identify the object. Bucket is another name used mainly for partial replication purposes, allowing to control which replicas will replicate the object, as will be described in Section \ref{???}.
+CrdtType identifies the type of the object, e.g., a counter.
+For simplicity, we may sometimes refer to the triple as a unique identifier (uid).
+
+An \emph{get} operation has the following format:
+
+\lineemph{Get uid (optional arguments)}
+
+Where uid is the triple (key, bucket, crdtType) that uniquely identify an object.
+Optional arguments are only used when the intention is to read a part of the state, instead of the whole state.
+These arguments represent read operations that are specific to each type of CRDT, e.g: readValue, hasKey for maps.
+
+To exemplify, consider we wanted to read the full state of a map representing a customer. The get operation would be:
+
+\lineemph{Get (customer1, customers, MAP)}
+
+While to read only the name and age of a customer, we would do:
+
+\lineemph{Get (customer1, customers, MAP) ReadValue(name, age)}
+
+The interface for updates is similar to gets, with the key difference being that ``optional'' arguments are now obligatory.
+Thus, an update has the following format:
+
+\lineemph{Update uid operationName(arguments)}
+
+Where operation name corresponds to the operation we want to apply on the CRDT (e.g., add), while arguments refer to the operation's arguments, if any.
+E.g., if we wanted to modify the age of a customer (again assuming it is represented by a map), we would do:
+
+\lineemph{Update (customer1, customers, MAP) Add({age: 25})}
+
+%To ease development of applications that use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
+%A \emph{get} has the following interface: %\\
 
 %Get CRDT key bucket crdtType\{arguments\}\\
-\lineemph{Get CRDT key bucket crdtType\{arguments\}}
+%\lineemph{Get CRDT key bucket crdtType\{arguments\}}
 
-The triple key, bucket, crdtType are mandantory arguments used to uniquely identify an object.
-Bucket is used mainly for partial replication purposes, as will be described in Section \ref{subsubsec:replication}. 
-Arguments are optional as they're used only if reading part of the state, with the possible arguments depending on the type of CRDT. 
-E.g., for a map CRDT, we could use: 
+%The triple key, bucket, crdtType are mandantory arguments used to uniquely identify an object.
+%Bucket is used mainly for partial replication purposes, as will be described in Section \ref{subsubsec:replication}. 
+%Arguments are optional as they're used only if reading part of the state, with the possible arguments depending on the type of CRDT. 
+%E.g., for a map CRDT, we could use: 
 
-\lineemph{Get CRDT customer1 customers MAP\{name, age\}}
+%\lineemph{Get CRDT customer1 customers MAP\{name, age\}}
 
 %to return only the values in the customer1 map CRDT referred by the map keys name and age.
-to return only the name and age of a customer stored as a map CRDT.
+%to return only the name and age of a customer stored as a map CRDT.
 
-\emph{Updates} have a similar interface:
+%\emph{Updates} have a similar interface:
 
-\lineemph{Update CRDT key bucket crdtType\{arguments\}}
+%\lineemph{Update CRDT key bucket crdtType\{arguments\}}
 
-Key, bucket and crdtType have the same meaning as in \emph{get}.
-The type of arguments depend on the type of CRDT, and each CRDT may support multiple types of update operations. 
-E.g., a map supports both addition and removal of key/value pairs.
-An insertion/update of an entry in a map can be represented as: \\
+%Key, bucket and crdtType have the same meaning as in \emph{get}.
+%The type of arguments depend on the type of CRDT, and each CRDT may support multiple types of update operations. 
+%E.g., a map supports both addition and removal of key/value pairs.
+%An insertion/update of an entry in a map can be represented as: \\
 
-\lineemph{Update CRDT customer1 customers MAP\{ADD\{name: \\"David"\}\}}
+%\lineemph{Update CRDT customer1 customers MAP\{ADD\{name: \\"David"\}\}}
 
 \subsubsection{API for view CRDTs}
 \label{subsubsec:APIVew}
+\andre{WIP}
 
 In relational databases (and even some non-relational ones, e.g., Cassandra \cite{???}) it is common to have \emph{views}. 
 A view can be defined as being the result of a query on one or multiple objects \cite{???}.
-Views can be acessed as if they were normal objects, thus it eases the definition of new queries.
+Views can be acessed as if they were normal objects, easing the definition of new queries.
 %TODO: Does this need a SQL example here?
 
-Views can either be materialized or not (albeit not all databases support both). %TODO: references 
-In a materialized view, the result of the query is stored as an object, which can then be reused later \cite{???}.
-This may potencially improve drastically the performance of certain queries, but incours an extra cost on updates, as both the object and the materialized view need to be updated.
-On the other hand, non-materialized views don't have this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
+Views can either be materialized or not, albeit not all databases support both. %TODO: references 
+In a materialized view, the result of a query is stored as an object, which can then be reused later \cite{???}.
+This may improve drastically the performance of certain queries, but incours an extra cost on updates, as both the object and the materialized view need to be updated.
+On the other hand, non-materialized views don't incur this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
 
 PotionDB supports materialized views.
 Similarly to relational databases, defining the right materialized views allows for efficient execution of complex queries.
-In the case of PotionDB, views may even refer to data that isn't replicated locally.
+In the case of PotionDB, views may even refer to data that isn't replicated locally, that is, it can refer to data split accross multiple servers.
+
+%In PotionDB, views are also CRDTs.
+%The key difference is, however, that the updates for views are generated automatically based on updates executed on other objects.
+We extend our key-value store API presented before with an extra operation, in order to add support for views.
+Thus, we define the \emph{link} operation, which has the following sintax:
+
+\lineemph{Link uid1 op1(args) -> uid2 op2(args)}
+
+To explain the concept behind the link operation, consider the following example:
+
+\andre{OLD TEXT FROM HERE ON}
+
+\lineemph{Link (product1, bucket1, MAP) -> (priceList, indexBucket, )}
 
 We extend our key-value API with SQL-like sintax in order to support views.
 This can be seen as a layer on top of the key-value API which offers two operations: \emph{create table} and \emph{create view}.
@@ -393,7 +439,7 @@ This serves two goals - first, to more easily include existing objects and, seco
 
 One could argue that \emph{bucket} could be used for the purpose of grouping objects for views , but doing such would mix the management of partial replication with views.
 If that were done, a system admin would have to consider both how data should be replicated and which views might be created when defining buckets.
-We believe that splitting view and partial replication management is easier to be deal with.
+We believe that splitting view and partial replication management is easier to be dealt with.
 
 For creating the view itself, the \emph{create view} operation is used, which has the following sintax:
 
