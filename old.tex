@@ -606,4 +606,229 @@ Afterwards, we drop such assumption and discuss how view updates for non-local d
 	\item Maybe include example of top-k?
 \end{itemize}
 
+\section{Views}
+\label{subsec:viewsconsistency}
+
+\andre{Note: This section will likely need to be completely rewritten. Or, at least, I'll have to think how to restructure it and adapt to the ``triggers'' concept.}
+
+Views are useful as they make it easier to specify queries and, in the case of materialized views, it may improve their performance as well.
+An essencial question in supporting materialized views in a database is on keeping them coeherent with the base data they refer to.
+When an object is updated the views must also be updated, otherwise the database becomes inconsistent which may then lead to errors in applications \cite{???}.
+
+Usually in relational databases, views are updated automatically by using triggers associated to the base data tables \cite{???}.
+Due to data being fully replicated and strongly consistent, it is guaranteed that at all times the view reflects the latest correct state \cite{???}.
+
+PotionDB also uses triggers to keep the views updated. However, as PotionDB is a weakly consistent, geo-distributed and partially replicated database, extra challenges are imposed for maintaining materialized views up-to-date, namelly:
+\begin{enumerate}
+	\item Association between views and their base data. 
+	PotionDB is a key-value store, thus multiple objects that would usually belong to the same table in a relational database (e.g., customers) have different keys associated.
+	\item Automatic inclusion of objects created after the view that represent entities of the same kind (e.g., new customers) but necessarely have different keys.
+	\item Keeping the views and base data synchronized at all time.
+	I.e., from the point of view of a client, updates on base data should lead to the view being updated simultaneously.
+	%This isn't a problem in relational databases as they will belong to the same table.
+	\item Keeping views updated even if all necessary data for it isn't present locally due to partial replication.
+	\item Translation of updates in base data to views. 
+	Unlike in relational databases in which all data can be seen as tables with multiple columns, here there are multiple types of objects which have different kinds of properties and operations.
+\end{enumerate}
+
+In this section we detail the inner workings of views.
+First, we show which kind of objects are supported as views and how they're built.
+Secondly, we explain how are the referred problems dealt with in PotionDB.
+%In this section we detail how we deal with the referred problems.
+We start by assuming all required data is present localy and thus focus on the first three challenges.
+Afterwards, we drop such assumption and discuss how view updates for non-local data are handled.
+Finally, we explain how are updates for each kind of view generated based on updates for the base data.
+
+%TODO: I should still refer to this somewhere.
+%Ideally, updates to the view should be automatically generated based on updates to the base data and appended to the same transaction.
+%Nor only does this ensure the view and its base data are always in sync, it also avoids human errors and simplifies the client's code, as it doesn't need to be concerned with correctly updating the views.
+
+\subsection{View CRDTs}
+
+\andre{Suggestions for better names for these ``kinds'' of views?}
+
+\andre{TODO: For each one, include how a SQL update in a table would be converted to updates to both the base and view data.}
+
+We support four kinds of views in PotionDB:
+\begin{enumerate*}[label=(\roman*)]
+	\item Top-K;
+	\item Max/min;
+	\item Average;
+	\item Sum.
+\end{enumerate*}
+The idea is that, depending on the arguments given in the \emph{create view} construct, a different type of CRDT will be generated.
+
+Top-k should be used when the intention is to maintain a sorted set of data, e.g., sort customers by the total value they have spent.
+Depending on the use case, this can be used to maintain only the top entries (e.g., top 100 customers) or all.
+This kind of view can be generated with the following structure:
+
+\firstblockemph{Create View name As}
+
+\middleblockemph{Select Limit number key(table1.a), table1.b, table1.c, ..., tableN.a, ...}
+
+\middleblockemph{From table1, ..., tableN}
+
+\middleblockemph{Where conditions}
+
+\lastblockemph{Order by table1.b, ...}
+
+The mencioned structure generates a Top-K CRDT \cite{???}.
+\emph{Limit} specifies how many entries should be present in the view (optional). \emph{Key} takes one or more arguments and specifies which field(s) will be used to uniquely identify each entry in the top-k.
+\emph{Order} specifies how are elements sorted in the top-k.
+Using \emph{limit} is preferred, as in that case it's possible to leverage on non-uniform replication to reduce the amount of data required to be replicated and stored in each replica \cite{???}.
+
+Max and min views are implemented by, respectivelly, max and min NuCRDTs.
+Since only the highest/lowest value needs to be stored, both these CRDTs leverage on non-uniform replication to avoid sending/storing updates which don't affect the visible state (i.e., the max/min value).
+Both kinds of views can be generated with the following structure:
+
+\firstblockemph{Create View name As}
+
+\middleblockemph{Select max(table1.a)}
+
+\middleblockemph{From table1, ..., tableN}
+
+\lastblockemph{Where conditions}
+
+In \emph{select} we specify which field is used to determinate the max/min entry using, respectivelly, the max or min functions.
+\emph{From} and \emph{where} have the same meanings as before.
+
+\andre{Max could also have the same structure as avg and max/min...?}
+
+Average is also implemented by a NuCRDT which keeps only the sum of all values and the number of values inserted, which is enough to calculate the average \cite{???}.
+On the other hand, sum is implemented by a counter CRDT \cite{???}, which keeps the total added value by each replica.
+Both average and sum are generated by \emph{create view} with similar structure:
+%Both average and sum are generated by similar structures
+
+\firstblockemph{Create View name As}
+
+\middleblockemph{Select table1.a, avg(table1.b)}
+
+\middleblockemph{From table1, ..., tableN}
+
+\middleblockemph{Where conditions}
+
+\lastblockemph{Group by table1.a, ...}
+
+The only change required to generate a sum view instead of an average view is to use \emph{sum}() instead of \emph{avg}() in the \emph{select} clause.
+Group by is optional - if it isn't present, the avg/sum is calculated for all entries. Otherwise, it is calculated separately for each value of the tuples specified in the group by clause and stored in a map CRDT of either avg or counter CRDTs.
+
+\subsection{Updating views with local data}
+
+Building on the API presented in Section \ref{subsubsec:APIVew}, we now describe how we solve the challenges presented at the start of this section.
+
+The association between views and base data, as well as inclusion of objects created after the view, are both handled with the help of the \emph{create table} construct.
+In practice this construct groups multiple CRDTs in a single key.
+When a \emph{create table} construct is issued, CRDTs which match the specified keys and bucket receive a mark specifying the table (possibly more than one) which they belong to.
+Then, when an update is generated for one of those CRDTs, all marks (tables) associated to those CRDTs are notified of the update.
+The tables itself also keep a list of views which refer to it and, as such, the update notification is passed to these views and the respective view update is generated as described previously.
+
+To deal with the inclusion of objects, an extra change is required.
+When a new CRDT is added to the database, its key and bucket are checked with the existent tables.
+Then, for all tables to which there's a match, the new CRDT receives a mark, which guarantees updates to it will be reflected in existing views.
+
+PotionDB ensures the views and base data present locally are always synchronized, that is, from the point of view of a client, when one is updated so is the other.
+This can be done by ensuring that whenever the base data is updated, all views associated to it are also updated in the same transaction.
+The atomicity of PotionDB's transactions ensures that either all updates on the transaction or none happen, which in turn guarantees that base data and their views are updated atomically.
+
+\subsection{Updating views with remote data}
+
+We now drop the assumption that all base data necessary for a view is present in the same replica.
+This leads to the challenge of keeping the views updated even if all the base data required to calculate the view isn't present in a replica.
+
+In PotionDB this is solved by requiring a view (more precisely, its bucket) to be replicated in every replica which contains base data relevant to the view.
+This by itself is enough - since 
+\begin{enumerate*}[label=(\roman*)]
+	\item updating the base data automatically generates a view update and
+	\item updates in a bucket are replicated to every replica of that bucket and only to those,
+\end{enumerate*}
+this implies that all updates of a view will be replicated to all servers which replicate the view, even if it was generated by an object only replicated in a subset of those servers.
+
+\andre{Is this explanation okay? Should I refer any other possible alternative and why our solution is better?}
+
+\subsection{Generating view updates}
+
+\andre{This section might need to be better worked on. I didn't want to include the ``SQL code'' used to generate each view as that would take too much space, but the explanation may be too generic/difficult to understand without that.}
+
+One key property of PotionDB is the automatic updating of views whenever their base data is updated.
+This implies that mechanisms for generating view updates based on base data updates are required.
+Updates are generated differently depending on the type of view.
+%We now leverage on the example tables in Section \ref{sec:example} to explain how are updates for each kind of view generated.
+
+\begin{figure}
+	%\begin{table}[]
+	\centering
+	\begin{tabular}{|l|l|}
+		\multicolumn{2}{c}{TopK} \\
+		\multicolumn{2}{c}{TopCustomers} \\ \hline
+		id            & int [key]         \\ \hline
+		name          & string       \\ \hline
+		age           & int          \\ \hline
+		country       & string      \\ \hline
+		totalSpent & int [order] \\
+		\hline
+	\end{tabular} \hspace{0.1em}
+	\begin{tabular}{|l|l|}
+		\multicolumn{2}{c}{Map of Avg} \\
+		\multicolumn{2}{c}{AvgSales} \\ \hline
+		country & string \\ \hline
+		value        & float  \\
+		\hline       
+	\end{tabular} \hspace{0.1em}
+	\begin{tabular}{|l|l|}
+		\multicolumn{2}{c}{Max} \\
+		\multicolumn{2}{c}{HighestSale} \\ \hline
+		saleId & int \\ \hline
+		value & int \\
+		\hline      
+	\end{tabular}
+	\caption{Example views}
+	\label{fig:views}
+	%\end{table}
+\end{figure}
+
+%top 100 customers who spent the most (top)
+%customers per country (sum) OR average sale value per country (avg)
+%most units sold of a product (max)
+
+Consider the example tables introduced in Section \ref{sec:example}, along with three views whose scheme can be found on Figure \ref{fig:views}.
+The views represent, respectivelly, 
+\begin{enumerate*}[label=(\roman*)]
+	\item \label{item:topk} top 100 customers who spent the most (TopK);
+	\item \label{item:avg} average value of sales in each country (Map of Averages);
+	\item \label{item:max} highest value of a single sale globally (Max).
+\end{enumerate*}
+Even though all three depend on data from more than one table, updates on these views only need to be triggered whenever sales are created/modified/removed.
+This can be infered from the \emph{create view} operation by considering, respectivelly, from which table comes the field in order by, max() and avg().
+
+Assume the addition of the following sale:
+
+\lineemph{Update sales2\_5 sales MAP\{id: 10, custID: 2, productID: 5, amount: 2\}}
+
+\andre{Problem with TopK example: the "totalSpent" is a sum... how do I reflect that?}
+
+This new sale generates the following updates on the views:
+
+\firstblockemph{Update TopCustomers views TOPK\{id: sales2\_5.id, totalSpent: += sales2\_5.amount * product5.value, name: customer2.name, age: customer2.age, country: customer2.country\}}
+
+\middleblockemph{Update AvgSales views MAP\{country: customer2.country, value: Update AVG\{value: sales2\_5.amount * product5.value, count: 1\}\}}
+
+\lastblockemph{Update HighestSale views MAX\{saleId: sales2\_5.id, value: sales2\_5.amount * product5.value\}}
+
+Most of the procedure for generating these updates is common to all kinds of views, which can be summarized in the following steps:
+
+\begin{enumerate}
+	\item Fetch necessary CRDTs from the other tables mencioned in the \emph{from} clause. 
+	Use the \emph{where} condition to know how to select which objects are relevant (in this case, use the IDs in the sales CRDTs).
+	This retriaval is efficient if the table with the trigger refers to other objects directly via, e.g., IDs.
+	%This can be done efficiently as the sales CRDTs keep the IDs for both customers and products
+	\item Use the \emph{select} clause to know which fields to pick from each CRDT.
+	\item Generate the update using as arguments the fields picked in the step before.
+\end{enumerate}
+
+The specific parts that change depending on the view type are the type of update issued (e.g., MAX, TOPK, etc.) and dealing with the ``special'' fields of each view CRDT (e.g., in TOPK, the key and order fields).
+These specificities are evidencied in the example view updates presented before.
+
+\andre{Probably need a better way to conclude this.}
+
+
 \end{document}
