@@ -209,6 +209,39 @@ The remainder of the paper is organized as follows. Section ...
 \end{itemize}
 }
 
+\section{System Overview}
+\label{sec:overview}
+
+In this section we provide an overview of the functionality of PotionDB, focusing on its support for 
+repetitive queries based on views.
+
+PotionDB is designed for supporting global services deployed at multiple data centers. In these settings,
+it is common that (at least some) data items are only needed at some geographic locations. 
+As a running example, we will consider a large e-commerce company with online stores for different countries 
+and clients spread across the world. 
+The information system includes data of millions of products, with some products available only at some locations.
+The system also includes information about customers and their purchases, with clients being associated a given 
+online store. 
+We note that similar patterns occurs in multiple other systems: online games, where players are partitioned depending
+on their locations; \textbf{we need more examples}.
+
+In this context, fully replicating the whole dataset might become too expensive.
+Additionally, as data is tied to some geographic location, one can expect that the large majority of accesses
+occurs on that location.
+\textbf{need better examples}.
+For instance, an asian customer is more likely to consult the stock of stores in his country rather than in an european country.
+Thus, it makes sense that both asian customers' and asian stores' data to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
+That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on such factor.
+To support this 
+
+As a consequence, 
+
+
+
+
+
+
+
 \section{Motivation example}
 \label{sec:example}
 
@@ -293,11 +326,71 @@ With this we no longer need to contact multiple datacenters and execute millions
 
 On Section \ref{subsec:viewsconsistency} we address multiple difficulties related to supporting and keeping views updated, as well as our solutions for such difficulties in PotionDB.
 
-\section{System Overview}
+\section{System Design}
 
 PotionDB is a geo-distributed storage system which provides weak consistency or, more precisely, causal consistency.
 A key feature in PotionDB is the ability to efficiently provide global views on partially replicated data under the conditions mentioned previously.
 In this section we discuss design decisions which made it possible to provide such feature.
+
+\subsection{Database Model and API} 
+
+Explicar qual o modelo da BD: key-value store
+
+Objetos são CRDT.
+
+Objetos organizados em buckets. Falar das partições.
+
+Clientes executam transações com modelo de consistência: Parallel Snapshot Isolation.
+
+Unlike typical key-value stores, suporta a definição de views sobre os dados.
+
+Modelo de consistência estende-se para as views (SEMPRE???).
+
+\subsection{Data Definition API}
+
+(será aqui??)
+apresentar como se define a que partição pertence cada objeto.
+
+
+\subsection{Data Access API}
+
+Apresentar as operações 
+
+\begin{verbatim}
+begin_tx()
+commit_tx()
+rollback_tx()
+
+get( key) -> object
+readOp( key, op, params) -> data
+updateOp( key, op, params)
+\end{verbatim}
+
+Explicar o que são - isto ém qual o resultado esperado.
+
+
+\subsection{View Definition API}
+
+Apresentar as operações - que tipo de views são suportadas.
+
+Explicar o que são e o resultado esperado.
+
+Dizer que do ponto vista do acesso uma view é como se fosse um objeto normal, sendo 
+acedid através da API normal.
+
+
+\subsection{Database Architecture} 
+
+apresentar a arquitetura a nível geral.
+
+Explicar servidores, clientes, sincronização.
+
+\section{Transactions over Partially Replicated Data}
+
+
+\section{Supporting Views}
+
+
 
 \subsection{System model}
 
