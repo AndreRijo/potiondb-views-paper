@@ -1,13 +1,12 @@
 .DS_Store
-potiondb.pdf
 
 %Generated PDF
-.pdf
+*.pdf
 
 %Latex metadata files
-.aux
-.log
-.synctex.gz
-.bbl
-.blg
-.out
+*.aux
+*.log
+*.synctex.gz
+*.bbl
+*.blg
+*.out
