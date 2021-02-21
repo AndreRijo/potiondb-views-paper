@@ -334,17 +334,44 @@ In this section we discuss design decisions which made it possible to provide su
 
 \subsection{Database Model and API} 
 
-Explicar qual o modelo da BD: key-value store
+%Explicar qual o modelo da BD: key-value store
+%
+%Objetos são CRDT.
+%
+%Objetos organizados em buckets. Falar das partições.
+%
+%Clientes executam transações com modelo de consistência: Parallel Snapshot Isolation.
+%
+%Unlike typical key-value stores, suporta a definição de views sobre os dados.
+%
+%Modelo de consistência estende-se para as views (SEMPRE???).
 
-Objetos são CRDT.
+PotionDB provides a key-value store interface \cite{???}.
+%PotionDB is a key-value store database. %TODO: Reference?
+As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
+In PotionDB objects are CRDTs \cite{crdt}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
+This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
+Objects are uniquely identified by the triple (key, bucket, crdtType); we call this triple of unique identifier (uid).
+An object for a given uid is created when an update or read operation is first applied to it.
 
-Objetos organizados em buckets. Falar das partições.
+PotionDB supports partial replication, that is, different objects can be replicated in different subsets of servers.
+We achieve partial replication by associating a ``bucket'' to each object. Buckets define groups of objects that are replicated in the same group of replicas.
+Thus, all objects with the same bucket value will be replicated in the same replicas.
+Each replica contains the list of buckets it replicates.
+When defining the list of buckets, regular expressions can be used.
+This allows, e.g., for a server to replicate any bucket that ends in ``europe''.
+\andre{We only support for buckets things like europe*, *europe, *europe*... basically suffixes and prefixes. How should I mention this?}
 
-Clientes executam transações com modelo de consistência: Parallel Snapshot Isolation.
+\andre{Should we refer that our views are ``novel'' due to supporting data not replicated locally?}
 
-Unlike typical key-value stores, suporta a definição de views sobre os dados.
+Unlike typical key-value stores, PotionDB provides support for materialzed views.
+As in relational databases, defining the right materialized views allows for efficient execution of complex queries.
+We highlight that views can refer to data not replicated locally, i.e., it is possible to have views spanning data partitioned across multiple replicas.
+Thus, queries that would usually require consulting multiple servers in a typical geo-distributed database can be executed quickly in just one PotionDB server.
+Views are updated automatically by using user-defined triggers.
+Whenever an object is updated, all the views that refer to it are updated in the same transaction - thus, a sticky client sees updates to the base data and their views as if they happened at the same point in time.
+We leave the description of the inner workings of views and triggers to Section \ref{sec:views}.
 
-Modelo de consistência estende-se para as views (SEMPRE???).
 
 \subsection{Data Definition API}
 
@@ -354,29 +381,150 @@ apresentar como se define a que partição pertence cada objeto.
 
 \subsection{Data Access API}
 
-Apresentar as operações 
+\andre{I repeated the uid explanation from Database Model and API to here... where should it stay?}
 
-\begin{verbatim}
-begin_tx()
-commit_tx()
-rollback_tx()
+PotionDB provides a key-value store interface \ref{???} with support for transactions.
+Objects are uniquely identified (uid) by the triple (key, bucket, crdtType), where key is a user provided name for the object, bucket identifies where the object should be replicated and crdtType is the type of object.
+We support both \emph{read} and \emph{update} operations on an object, as well as operations to \emph{start}, \emph{commit} and \emph{abort} transactions.
+More precisely, said operations have the following format:
 
-get( key) -> object
-readOp( key, op, params) -> data
-updateOp( key, op, params)
-\end{verbatim}
+\firstblockemph{get(uid) $\rightarrow$ object}
 
-Explicar o que são - isto ém qual o resultado esperado.
+\middleblockemph{read(uid, op, params) $\rightarrow$ data}
+
+\middleblockemph{update(uid, op, params))} \\
+
+\middleblockemph{beginTx(startTs)}
+
+\middleblockemph{commitTx()}
+
+\lastblockemph{abortTx()}
+
+We now explain the arguments of each operation and the expected result.
+\andre(Any suggestions for a better phrase here...?)
+
+\emph{get(uid) $\rightarrow$ object}. Given an object identified by \emph{uid}, it returns the state of the object.
+E.g., in a set, it returns all the elements in the set.
+
+\emph{read(uid, op, params) $\rightarrow$ data}. Performs a partial read in the object identified by \emph{uid}, returning the result of said read. 
+\emph{Op} identifies the type of read operation to apply, while params correspond to the arguments necessary (if any) for that read operation.
+E.g., in a set, emph{get(uid, lookup, ``e'')} returns \emph{true} if the set identified by uid contains the element ``e'', \emph{false} otherwise.
+
+\emph{update(uid, op, params)}. Applies an update to the object identified by \emph{uid}, modifying its state.
+\emph{Op} and \emph{params} have the same meaning as in \emph{read()}.
+E.g., in a set, \emph{update(uid, add, ``e'')} adds the element ``e'' to the set identified by uid.
+
+\emph{beginTx(startTs)}. Starts a new transaction. Optionally, a starting timestamp \emph{startTs} can be supplied. This ensures that a client won't read older versions when contacting a different replica from where he executed his previous operations.
+\andre{TODO: Add reference to some place where I explain this properly...?}
+
+\emph{commitTx()}. Commits a transaction, applying the effect of every update operation issued since the respective \emph{beginTx}.
+
+\emph{abortTx}. Cancels a transaction, ensuring the updates issued since the respective \emph{beginTx} have no effect.
+
+\andre{I think somewhere I'll have to explain the following: a) how beginTx works when receiving a startTs; b) how are commits/aborts handled (i.e., when updates are applied); c) that reads return right away and consider the temporary effects of updates issued in that transaction}
+
+
+%\begin{verbatim}
+%begin_tx()
+%commit_tx()
+%rollback_tx()
+%
+%get( key) -> object
+%readOp( key, op, params) -> data
+%updateOp( key, op, params)
+%\end{verbatim}
+%
+%Explicar o que são - isto ém qual o resultado esperado.
 
 
 \subsection{View Definition API}
 
-Apresentar as operações - que tipo de views são suportadas.
+PotionDB supports materialized views, which can speed up the execution of certain queries by summarizing data spread accross multiple objects.
+The data referred by a view does not need to be all replicated in a single server - such data can be partitionated accross multiple servers (we detail how this works in Section \ref{sec:views}).
+In terms of reading, views work exactly like non-view objects, using the same \emph{get} and \emph{read} interface.
+On the other hand, updates work differently - views are automatically updated as defined by user supplied \emph{triggers}.
+A view object is created when the first read, or an update generated by a trigger, is defined for it.
 
-Explicar o que são e o resultado esperado.
+We support the following type of views:
+\begin{itemize}
+	\item max, min, sum and average: aggregation functions used to summarize information from (usually) multiple counter objects;
+	\item topK/leaderboard: keeps a list of the ``n'' elements with ``highest score''. I.e., a list of pairs (id, score) ordered from highest to lower score. In practice, this implements the functions \emph{limit} and \emph{orderby}. An example of this view can be the top 100 customers with highest spendings in a store.
+	\item common types of objects like counters, registers, sets and maps can be used as views. E.g., it is possible to have a counter which keeps track of how many times a given object was modified.
+\end{itemize}
 
-Dizer que do ponto vista do acesso uma view é como se fosse um objeto normal, sendo 
-acedid através da API normal.
+As referred, views are updated automatically by making use of user-supplied triggers.
+The intuition behind triggers is to automatically generate updates to views, by defining how updates on certain objects translate into updates on views.
+\andre{How do I refer that this is a common practice too in relational databases?}
+We extend our key-value store API presented before with the following operation, in order to support the definition of triggers:
+
+\firstblockemph{Create Trigger name}
+
+\middleblockemph{On uid1}
+
+\middleblockemph{With operationName1(arguments)}
+
+\middleblockemph{Do Update uid2}
+
+\lastblockemph{With operationName2(arguments)}
+
+\emph{Create Trigger name} specifies the name associated to this trigger, so that it can later be removed if needed.
+\emph{On uid1} specifies the object that activates this trigger, while \emph{with operationName1(arguments)} specifies the type of operation, as we may want a trigger to only be fired on, e.g., adds.
+\emph{Do Update uid2} specifies the object (view) which will be updated by the trigger, while \emph{with}  \emph{operationName2} \emph{(arguments)} specifies which operation will be applied on the view.
+
+A simple example would be:
+
+\firstblockemph{Create Trigger t1}
+
+\middleblockemph{On (key1, bucket, COUNTER)}
+
+\middleblockemph{With inc(c)}
+
+\middleblockemph{Do Update (key2, bucket, REGISTER)}
+
+\lastblockemph{With set(c)}
+
+With this trigger, everytime an increment (but not decrements) is done to the counter identified by (key1, bucket, COUNTER), an update is fired to the register object identified by (key2, bucket, REGISTER).
+The value used to increment the counter (argument \emph{c}) is then used to update the register.
+In practice, this makes the register keep track of the latest increment applied to the counter.
+
+It is also possible to define more generic triggers that are fired whenever a subset of objects are updated.
+This is done by allowing the key and bucket of uid1, i.e., the object that triggers, to be a regular expression.
+We support the RE2 \cite{RE2sintax} sintax for regular expressions.
+
+To exemplify a generic trigger, consider that we have multiple counter objects identified by (counter1, bucket, COUNTER), (counter2, bucket, COUNTER), ..., (counterN, bucket, COUNTER), along with one topK object identified by (topk1, bucket, TOPK).
+Assume our goal is for the topK to register the maximum increment of each counter.
+One way of achieving this is by defining the following trigger:
+
+\firstblockemph{Create Trigger t2}
+
+\middleblockemph{On (counter[0-9]\textsuperscript{+}, bucket, COUNTER)}
+
+\middleblockemph{With inc(c)}
+
+\middleblockemph{Do Update (topk1, bucket, TOPK)}
+
+\lastblockemph{With add(counter[0-9]\textsuperscript{+}, c)}
+
+In this particular case, any object that simultaneously meets the requirements of
+\begin{enumerate*}[label=(\roman*)] 
+	\item being a counter; 
+	\item belonging to the bucket \emph{bucket};
+	\item key starts with \emph{counter}, followed by one or more numbers;
+\end{enumerate*}
+will trigger an update to the topk whenever an increment is applied.
+The key of the counter object is used for the id of the entry in the topk.
+
+We leave the details on the inner workings of triggers, as well as views, to Section \ref{sec:views}.
+
+\andre{No idea if the phrase above is needed, or if I could had ended the section with the paragraph before}
+
+
+%Apresentar as operações - que tipo de views são suportadas.
+%
+%Explicar o que são e o resultado esperado.
+%
+%Dizer que do ponto vista do acesso uma view é como se fosse um objeto normal, sendo 
+%acedid através da API normal.
 
 
 \subsection{Database Architecture} 
@@ -424,6 +572,13 @@ An object in PotionDB is uniquely identified by the triple (key, bucket, crdtTyp
 Key is the name given by the user to identify the object. Bucket is another name used mainly for partial replication purposes, allowing to control which replicas will replicate the object, as will be described in Section \ref{subsec:replication}.
 CrdtType identifies the type of the object, e.g., a counter.
 For simplicity, we may sometimes refer to the triple as a unique identifier (uid).
+
+Clients connect to one or more servers. 
+Updates and queries are executed in a single server and return as soon as its execution ends.
+Clients may group multiple operations together in a single transaction.
+Only objects replicated in the server may be accessed, i.e., to access objects not present in a given server, the client must connect to a replica of those objects.
+Our transactions provide parallel snapshot isolation \cite{???}, i.e., operations executed in a single replica are executed as in snapshot isolation, while transactions in different replicas can be executed concurrently.
+We note that the usage of CRDTs ensures concurrent execution does not prevent convergence of the objects.
 
 An \emph{get} operation has the following format:
 
@@ -787,7 +942,7 @@ We provide causal consistency (i.e., weak consistency) instead of strong consist
 As evidenced in both academy and industry, while ACID properties are quite useful, they are also quite limiting in terms of fault tolerance and performance \cite{???}.
 
 \section{Views}
-\label{subsec:viewsconsistency}
+\label{sec:views}
 
 Views are useful as they make it easier to specify queries and, in the case of materialized views, it may improve their performance as well.
 An essencial question in supporting materialized views in a database is on keeping them coeherent with the base data they refer to.
