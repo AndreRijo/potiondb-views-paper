@@ -349,10 +349,12 @@ In this section we discuss design decisions which made it possible to provide su
 PotionDB provides a key-value store interface \cite{???}.
 %PotionDB is a key-value store database. %TODO: Reference?
 As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
-In PotionDB objects are CRDTs \cite{crdt}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
-This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
 Objects are uniquely identified by the triple (key, bucket, crdtType); we call this triple of unique identifier (uid).
 An object for a given uid is created when an update or read operation is first applied to it.
+
+In PotionDB objects are CRDTs \cite{crdt}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
+This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
+PotionDB offers transactions with parallel snapshot isolation consistency \cite{???}, i.e., operations executed in a single replica are executed as in snapshot isolation, while transactions in different replicas can be executed concurrently and still ensure convergence due to the usage of CRDTs.
 
 PotionDB supports partial replication, that is, different objects can be replicated in different subsets of servers.
 We achieve partial replication by associating a ``bucket'' to each object. Buckets define groups of objects that are replicated in the same group of replicas.
@@ -364,7 +366,7 @@ This allows, e.g., for a server to replicate any bucket that ends in ``europe''.
 
 \andre{Should we refer that our views are ``novel'' due to supporting data not replicated locally?}
 
-Unlike typical key-value stores, PotionDB provides support for materialzed views.
+Unlike typical key-value stores, PotionDB provides support for materialized views.
 As in relational databases, defining the right materialized views allows for efficient execution of complex queries.
 We highlight that views can refer to data not replicated locally, i.e., it is possible to have views spanning data partitioned across multiple replicas.
 Thus, queries that would usually require consulting multiple servers in a typical geo-distributed database can be executed quickly in just one PotionDB server.
@@ -529,9 +531,44 @@ We leave the details on the inner workings of triggers, as well as views, to Sec
 
 \subsection{Database Architecture} 
 
-apresentar a arquitetura a nível geral.
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{potiondb_architecture}
+	\caption{PotionDB Architecture}
+	\label{fig:potiondbArch}
+\end{figure}
 
-Explicar servidores, clientes, sincronização.
+PotionDB is a key-value, geo-distributed store as illustrated in Figure \ref{fig:potiondbArch}.
+Clients communicate with one or more servers to execute their operations.
+Transactions are executed locally in one server, with updates being propagated asynchronously to other replicas.
+
+Each replica contains only a subset of the objects - the system admin defines which groups (buckets) each server replicates (see Section \ref{???}).
+If objects are partitioned correctly according to an application's needs, each client should only need to communicate with one server to do his operations, as all the data relevant to a client should be in one server.
+In the case of not all required data being in one server, the client will need to contact multiple and execute a transaction in each server.
+Note that this case should be exceptional - in most cases views will be replicated in all servers, thus reducing the need to consult other servers.
+
+\andre{Should I even mention Cure here, and if yes, what else should I say about it, mainly in terms of similarities/differences with PotionDB}
+
+\andre{Maybe the figure reference should only be here?}
+
+The internal architecture of each PotionDB replica is similar to Cure \ref{???}.
+Each PotionDB replica can be separated in three main components:
+\begin{enumerate*}[label=(\roman*)]
+	\item TransactionManager (TM), which is responsible for receiving and replying to client requests, attributing timestamps to transactions and forwarding operations to Materializer;
+	\item Materializer (MAT) which stores the object and applies both local and remote read/write operations, ensuring parallel snapshot isolation while executing those.
+\end{enumerate*}
+
+\begin{itemize}
+	\item TransactionManager (TM), which is responsible for receiving and replying to client requests, attributing timestamps to transactions and forwarding operations to Materializer;
+	\item Materializer (MAT) which stores the object and applies both local and remote read/write operations, ensuring parallel snapshot isolation while executing those.
+	Local updates of a transaction are forwarded to the replicator once the transaction finishes executing;
+	\item Replicator + RabbitMQ is responsible for both propagating updates to other replicas as well as receiving them. Operations are replicated asynchronously. We give more details on the replication  mechanism in Section \ref{subsec:replication}.
+\end{itemize}
+
+
+%apresentar a arquitetura a nível geral.
+
+%Explicar servidores, clientes, sincronização.
 
 \section{Transactions over Partially Replicated Data}
 
