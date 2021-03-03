@@ -334,56 +334,261 @@ In this section we discuss design decisions which made it possible to provide su
 
 \subsection{Database Model and API} 
 
-Explicar qual o modelo da BD: key-value store
+%Explicar qual o modelo da BD: key-value store
+%
+%Objetos são CRDT.
+%
+%Objetos organizados em buckets. Falar das partições.
+%
+%Clientes executam transações com modelo de consistência: Parallel Snapshot Isolation.
+%
+%Unlike typical key-value stores, suporta a definição de views sobre os dados.
+%
+%Modelo de consistência estende-se para as views (SEMPRE???).
 
-Objetos são CRDT.
+PotionDB provides a key-value store interface \cite{???}.
+%PotionDB is a key-value store database. %TODO: Reference?
+As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
+Objects are uniquely identified by the triple (key, bucket, crdtType); we call this triple of unique identifier (uid).
+An object for a given uid is created when an update or read operation is first applied to it.
 
-Objetos organizados em buckets. Falar das partições.
+In PotionDB objects are CRDTs \cite{crdt}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
+This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
+PotionDB offers transactions with parallel snapshot isolation consistency \cite{???}, i.e., operations executed in a single replica are executed as in snapshot isolation, while transactions in different replicas can be executed concurrently and still ensure convergence due to the usage of CRDTs.
 
-Clientes executam transações com modelo de consistência: Parallel Snapshot Isolation.
+PotionDB supports partial replication, that is, different objects can be replicated in different subsets of servers.
+We achieve partial replication by associating a ``bucket'' to each object. Buckets define groups of objects that are replicated in the same group of replicas.
+Thus, all objects with the same bucket value will be replicated in the same replicas.
+Each replica contains the list of buckets it replicates.
+When defining the list of buckets, regular expressions can be used.
+This allows, e.g., for a server to replicate any bucket that ends in ``europe''.
+\andre{We only support for buckets things like europe*, *europe, *europe*... basically suffixes and prefixes. How should I mention this?}
 
-Unlike typical key-value stores, suporta a definição de views sobre os dados.
+\andre{Should we refer that our views are ``novel'' due to supporting data not replicated locally?}
 
-Modelo de consistência estende-se para as views (SEMPRE???).
+Unlike typical key-value stores, PotionDB provides support for materialized views.
+As in relational databases, defining the right materialized views allows for efficient execution of complex queries.
+We highlight that views can refer to data not replicated locally, i.e., it is possible to have views spanning data partitioned across multiple replicas.
+Thus, queries that would usually require consulting multiple servers in a typical geo-distributed database can be executed quickly in just one PotionDB server.
+Views are updated automatically by using user-defined triggers.
+Whenever an object is updated, all the views that refer to it are updated in the same transaction - thus, a sticky client sees updates to the base data and their views as if they happened at the same point in time.
+We leave the description of the inner workings of views and triggers to Section \ref{sec:views}.
+
 
 \subsection{Data Definition API}
 
-(será aqui??)
-apresentar como se define a que partição pertence cada objeto.
+As previously mentioned, PotionDB provides support for partial replication.
+As such, it is essential to have a mechanism to choose which servers should replicate each object.
+
+All objects in PotionDB have a ``bucket'' associated to it.
+Buckets define groups of objects that are replicated in the same subset of replicas. In other words, two objects with the same bucket value will be replicated in the same set of replicas.
+For each replica, the system admin can define which buckets will be replicated in it.
+
+To exemplify, recall the commerce example presented in Section \ref{sec:example}.
+The customers can be partitioned based on their country's continent by taking the following steps: 
+
+\begin{enumerate}
+	\item Define one bucket per continent;
+	\item Configure the servers so that each replica replicates the bucket of its continent + another one for fault tolerance purposes;
+	\item When adding a customer to the database, specify the bucket correspondent to the customer's continent.
+\end{enumerate}
+
+Section \ref{subsec:replication} gives more details on how PotionDB handles replication, namely how it ensures each object is only sent to the right subset of replicas.
+
+%It's worth noting that clients must ensure they are communicating with a server which replicates the buckets they want to operate on, since each server only replicates a subset of the buckets and doesn't forward operations to other servers.
+
+%(será aqui??)
+%apresentar como se define a que partição pertence cada objeto.
 
 
 \subsection{Data Access API}
 
-Apresentar as operações 
+\andre{I repeated the uid explanation from Database Model and API to here... where should it stay?}
 
-\begin{verbatim}
-begin_tx()
-commit_tx()
-rollback_tx()
+PotionDB provides a key-value store interface \ref{???} with support for transactions.
+Objects are uniquely identified (uid) by the triple (key, bucket, crdtType), where key is a user provided name for the object, bucket identifies where the object should be replicated and crdtType is the type of object.
+We support both \emph{read} and \emph{update} operations on an object, as well as operations to \emph{start}, \emph{commit} and \emph{abort} transactions.
+More precisely, said operations have the following format:
 
-get( key) -> object
-readOp( key, op, params) -> data
-updateOp( key, op, params)
-\end{verbatim}
+\firstblockemph{get(uid) $\rightarrow$ object}
 
-Explicar o que são - isto ém qual o resultado esperado.
+\middleblockemph{read(uid, op, params) $\rightarrow$ data}
+
+\middleblockemph{update(uid, op, params))} \\
+
+\middleblockemph{beginTx(startTs)}
+
+\middleblockemph{commitTx()}
+
+\lastblockemph{abortTx()}
+
+We now explain the arguments of each operation and the expected result.
+\andre(Any suggestions for a better phrase here...?)
+
+\emph{get(uid) $\rightarrow$ object}. Given an object identified by \emph{uid}, it returns the state of the object.
+E.g., in a set, it returns all the elements in the set.
+
+\emph{read(uid, op, params) $\rightarrow$ data}. Performs a partial read in the object identified by \emph{uid}, returning the result of said read. 
+\emph{Op} identifies the type of read operation to apply, while params correspond to the arguments necessary (if any) for that read operation.
+E.g., in a set, emph{get(uid, lookup, ``e'')} returns \emph{true} if the set identified by uid contains the element ``e'', \emph{false} otherwise.
+
+\emph{update(uid, op, params)}. Applies an update to the object identified by \emph{uid}, modifying its state.
+\emph{Op} and \emph{params} have the same meaning as in \emph{read()}.
+E.g., in a set, \emph{update(uid, add, ``e'')} adds the element ``e'' to the set identified by uid.
+
+\emph{beginTx(startTs)}. Starts a new transaction. Optionally, a starting timestamp \emph{startTs} can be supplied. This ensures that a client won't read older versions when contacting a different replica from where he executed his previous operations.
+\andre{TODO: Add reference to some place where I explain this properly...?}
+
+\emph{commitTx()}. Commits a transaction, applying the effect of every update operation issued since the respective \emph{beginTx}.
+
+\emph{abortTx}. Cancels a transaction, ensuring the updates issued since the respective \emph{beginTx} have no effect.
+
+\andre{I think somewhere I'll have to explain the following: a) how beginTx works when receiving a startTs; b) how are commits/aborts handled (i.e., when updates are applied); c) that reads return right away and consider the temporary effects of updates issued in that transaction}
+
+
+%\begin{verbatim}
+%begin_tx()
+%commit_tx()
+%rollback_tx()
+%
+%get( key) -> object
+%readOp( key, op, params) -> data
+%updateOp( key, op, params)
+%\end{verbatim}
+%
+%Explicar o que são - isto ém qual o resultado esperado.
 
 
 \subsection{View Definition API}
 
-Apresentar as operações - que tipo de views são suportadas.
+PotionDB supports materialized views, which can speed up the execution of certain queries by summarizing data spread accross multiple objects.
+The data referred by a view does not need to be all replicated in a single server - such data can be partitionated accross multiple servers (we detail how this works in Section \ref{sec:views}).
+In terms of reading, views work exactly like non-view objects, using the same \emph{get} and \emph{read} interface.
+On the other hand, updates work differently - views are automatically updated as defined by user supplied \emph{triggers}.
+A view object is created when the first read, or an update generated by a trigger, is defined for it.
 
-Explicar o que são e o resultado esperado.
+We support the following type of views:
+\begin{itemize}
+	\item max, min, sum and average: aggregation functions used to summarize information from (usually) multiple counter objects;
+	\item topK/leaderboard: keeps a list of the ``n'' elements with ``highest score''. I.e., a list of pairs (id, score) ordered from highest to lower score. In practice, this implements the functions \emph{limit} and \emph{orderby}. An example of this view can be the top 100 customers with highest spendings in a store.
+	\item common types of objects like counters, registers, sets and maps can be used as views. E.g., it is possible to have a counter which keeps track of how many times a given object was modified.
+\end{itemize}
 
-Dizer que do ponto vista do acesso uma view é como se fosse um objeto normal, sendo 
-acedid através da API normal.
+As referred, views are updated automatically by making use of user-supplied triggers.
+The intuition behind triggers is to automatically generate updates to views, by defining how updates on certain objects translate into updates on views.
+\andre{How do I refer that this is a common practice too in relational databases?}
+We extend our key-value store API presented before with the following operation, in order to support the definition of triggers:
+
+\firstblockemph{Create Trigger name}
+
+\middleblockemph{On uid1}
+
+\middleblockemph{With operationName1(arguments)}
+
+\middleblockemph{Do Update uid2}
+
+\lastblockemph{With operationName2(arguments)}
+
+\emph{Create Trigger name} specifies the name associated to this trigger, so that it can later be removed if needed.
+\emph{On uid1} specifies the object that activates this trigger, while \emph{with operationName1(arguments)} specifies the type of operation, as we may want a trigger to only be fired on, e.g., adds.
+\emph{Do Update uid2} specifies the object (view) which will be updated by the trigger, while \emph{with}  \emph{operationName2} \emph{(arguments)} specifies which operation will be applied on the view.
+
+A simple example would be:
+
+\firstblockemph{Create Trigger t1}
+
+\middleblockemph{On (key1, bucket, COUNTER)}
+
+\middleblockemph{With inc(c)}
+
+\middleblockemph{Do Update (key2, bucket, REGISTER)}
+
+\lastblockemph{With set(c)}
+
+With this trigger, everytime an increment (but not decrements) is done to the counter identified by (key1, bucket, COUNTER), an update is fired to the register object identified by (key2, bucket, REGISTER).
+The value used to increment the counter (argument \emph{c}) is then used to update the register.
+In practice, this makes the register keep track of the latest increment applied to the counter.
+
+It is also possible to define more generic triggers that are fired whenever a subset of objects are updated.
+This is done by allowing the key and bucket of uid1, i.e., the object that triggers, to be a regular expression.
+We support the RE2 \cite{RE2sintax} sintax for regular expressions.
+
+To exemplify a generic trigger, consider that we have multiple counter objects identified by (counter1, bucket, COUNTER), (counter2, bucket, COUNTER), ..., (counterN, bucket, COUNTER), along with one topK object identified by (topk1, bucket, TOPK).
+Assume our goal is for the topK to register the maximum increment of each counter.
+One way of achieving this is by defining the following trigger:
+
+\firstblockemph{Create Trigger t2}
+
+\middleblockemph{On (counter[0-9]\textsuperscript{+}, bucket, COUNTER)}
+
+\middleblockemph{With inc(c)}
+
+\middleblockemph{Do Update (topk1, bucket, TOPK)}
+
+\lastblockemph{With add(counter[0-9]\textsuperscript{+}, c)}
+
+In this particular case, any object that simultaneously meets the requirements of
+\begin{enumerate*}[label=(\roman*)] 
+	\item being a counter; 
+	\item belonging to the bucket \emph{bucket};
+	\item key starts with \emph{counter}, followed by one or more numbers;
+\end{enumerate*}
+will trigger an update to the topk whenever an increment is applied.
+The key of the counter object is used for the id of the entry in the topk.
+
+We leave the details on the inner workings of triggers, as well as views, to Section \ref{sec:views}.
+
+\andre{No idea if the phrase above is needed, or if I could had ended the section with the paragraph before}
+
+
+%Apresentar as operações - que tipo de views são suportadas.
+%
+%Explicar o que são e o resultado esperado.
+%
+%Dizer que do ponto vista do acesso uma view é como se fosse um objeto normal, sendo 
+%acedid através da API normal.
 
 
 \subsection{Database Architecture} 
 
-apresentar a arquitetura a nível geral.
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{potiondb_architecture}
+	\caption{PotionDB Architecture}
+	\label{fig:potiondbArch}
+\end{figure}
 
-Explicar servidores, clientes, sincronização.
+PotionDB is a key-value, geo-distributed store as illustrated in Figure \ref{fig:potiondbArch}.
+Clients communicate with one or more servers to execute their operations.
+Transactions are executed locally in one server, with updates being propagated asynchronously to other replicas.
+
+Each replica contains only a subset of the objects - the system admin defines which groups (buckets) each server replicates (see Section \ref{???}).
+If objects are partitioned correctly according to an application's needs, each client should only need to communicate with one server to do his operations, as all the data relevant to a client should be in one server.
+In the case of not all required data being in one server, the client will need to contact multiple and execute a transaction in each server.
+Note that this case should be exceptional - in most cases views will be replicated in all servers, thus reducing the need to consult other servers.
+
+\andre{Should I even mention Cure here, and if yes, what else should I say about it, mainly in terms of similarities/differences with PotionDB}
+
+\andre{Maybe the figure reference should only be here?}
+
+The internal architecture of each PotionDB replica is similar to Cure \ref{???}.
+Each PotionDB replica can be separated in three main components:
+\begin{enumerate*}[label=(\roman*)]
+	\item TransactionManager (TM), which is responsible for receiving and replying to client requests, attributing timestamps to transactions and forwarding operations to Materializer;
+	\item Materializer (MAT) which stores the object and applies both local and remote read/write operations, ensuring parallel snapshot isolation while executing those.
+\end{enumerate*}
+
+\begin{itemize}
+	\item TransactionManager (TM), which is responsible for receiving and replying to client requests, attributing timestamps to transactions and forwarding operations to Materializer;
+	\item Materializer (MAT) which stores the object and applies both local and remote read/write operations, ensuring parallel snapshot isolation while executing those.
+	Local updates of a transaction are forwarded to the replicator once the transaction finishes executing;
+	\item Replicator + RabbitMQ is responsible for both propagating updates to other replicas as well as receiving them. Operations are replicated asynchronously. We give more details on the replication  mechanism in Section \ref{subsec:replication}.
+\end{itemize}
+
+
+%apresentar a arquitetura a nível geral.
+
+%Explicar servidores, clientes, sincronização.
 
 \section{Transactions over Partially Replicated Data}
 
@@ -391,188 +596,6 @@ Explicar servidores, clientes, sincronização.
 \section{Supporting Views}
 
 
-
-\subsection{System model}
-
-We consider an asynchronous distributed system composed by a set of servers S connected by a network. 
-We assume the network may delay, duplicate or re-order messages, but does not corrupt them. 
-We also assume messages sent are eventually delivered, even if connections may temporarely drop.
-
-Database objects are replicated in one or more servers, but not necessarely in all of them.  
-We consider a server to be a replica of an object if it replicates such object. 
-New updates are sent periodically to replicas asynchrnously. 
-We don't require for all updates to be delivered to all replicas, as will be detailed in Sections \ref{subsubsec:replication} and \ref{subsubsec:nureplication}
-%However, not all updates need to be delivered to every replica - only updates that modify the objects' visible state must be delivered eventually \ref{non-uniform}.
-
-Clients connect to one or more servers. 
-Updates and queries are executed in a single server and return as soon as its execution ends.
-Clients may group multiple operations together in a single transaction.
-Only objects replicated in the server may be accessed, i.e., to access objects not present in a given server, the client must connect to a replica of those objects.
-
-\subsection{System API}
-
-\subsubsection{Key-value store API}
-
-PotionDB provides a key-value store interface \cite{???}.
-%PotionDB is a key-value store database. %TODO: Reference?
-As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
-In PotionDB objects are CRDTs \cite{???}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
-This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
-
-To ease development of applications that use PotionDB, both \emph{gets} and \emph{updates} may refer to either the full object state or part of it.
-A \emph{get} has the following interface: %\\
-
-%Get CRDT key bucket crdtType\{arguments\}\\
-\lineemph{Get CRDT key bucket crdtType\{arguments\}}
-
-The triple key, bucket, crdtType are mandantory arguments used to uniquely identify an object.
-Bucket is used mainly for partial replication purposes, as will be described in Section \ref{subsubsec:replication}. 
-Arguments are optional as they're used only if reading part of the state, with the possible arguments depending on the type of CRDT. 
-E.g., for a map CRDT, we could use: 
-
-\lineemph{Get CRDT customer1 customers MAP\{name, age\}}
-
-%to return only the values in the customer1 map CRDT referred by the map keys name and age.
-to return only the name and age of a customer stored as a map CRDT.
-
-\emph{Updates} have a similar interface:
-
-\lineemph{Update CRDT key bucket crdtType\{arguments\}}
-
-Key, bucket and crdtType have the same meaning as in \emph{get}.
-The type of arguments depend on the type of CRDT, and each CRDT may support multiple types of update operations. 
-E.g., a map supports both addition and removal of key/value pairs.
-An insertion/update of an entry in a map can be represented as: \\
-
-\lineemph{Update CRDT customer1 customers MAP\{ADD\{name: \\"David"\}\}}
-
-\subsubsection{API for view CRDTs}
-\label{subsubsec:APIVew}
-
-In relational databases (and even some non-relational ones, e.g., Cassandra \cite{???}) it is common to have \emph{views}. 
-A view can be defined as being the result of a query on one or multiple objects \cite{???}.
-Views can be acessed as if they were normal objects, thus it eases the definition of new queries.
-%TODO: Does this need a SQL example here?
-
-Views can either be materialized or not (albeit not all databases support both). %TODO: references 
-In a materialized view, the result of the query is stored as an object, which can then be reused later \cite{???}.
-This may potencially improve drastically the performance of certain queries, but incours an extra cost on updates, as both the object and the materialized view need to be updated.
-On the other hand, non-materialized views don't have this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
-
-PotionDB supports materialized views.
-Similarly to relational databases, defining the right materialized views allows for efficient execution of complex queries.
-In the case of PotionDB, views may even refer to data that isn't replicated locally.
-
-We extend our key-value API with SQL-like sintax in order to support views.
-This can be seen as a layer on top of the key-value API which offers two operations: \emph{create table} and \emph{create view}.
-This layer then converts those operations to one or more \emph{gets} and \emph{updates}.
-
-The \emph{create table} operation has the following structure:
-
-\firstblockemph{Create Table name As}
-
-\lastblockemph{From (key1*, bucket1*), (key2*, bucket2), ..., (keyN*, bucketN) crdtType}
-%We extend our key-value API with the \emph{create view} operation.
-%The operation sintax is similar to SQL's - the data to fill the view is choosen using \emph{select} and \emph{from}
-%The operation sintax is similar to SQL's:
-
-\andre{Should the create table operation also have where? E.g., group only customers of a certain nation.}
-
-The goal of \emph{create table} is to group together multiple CRDTs under the same name, which can then be referred to by \emph{create view}.
-The \emph{from} clause specifies the objects to be grouped.
-Note the use of the ``*'' symbol - it means that every value which starts with the string before ``*'' will match.
-E.g., for ``customer*'', both ``customer'' and ``customer1'' match.
-This serves two goals - first, to more easily include existing objects and, second, to also allow to include future objects that may be latter added which should also belong to the group.
-
-One could argue that \emph{bucket} could be used for the purpose of grouping objects for views , but doing such would mix the management of partial replication with views.
-If that were done, a system admin would have to consider both how data should be replicated and which views might be created when defining buckets.
-We believe that splitting view and partial replication management is easier to be deal with.
-
-For creating the view itself, the \emph{create view} operation is used, which has the following sintax:
-
-\firstblockemph{Create View key bucket As}
-
-\middleblockemph{Select table1.a, table1.b, ..., tableN.a, tableN.b, ...}
-
-\middleblockemph{From table1, ..., tableN}
-
-\middleblockemph{Where conditions}
-
-\middleblockemph{Group by table1.a, ...}
-
-\lastblockemph{Order by table1.a, ...}
-
-All the clauses in create view have the same meanings as in SQL.
-\emph{From} specifies which tables to take information from, while \emph{select} chooses which fields should populate the view. 
-Note that both fields and read operations can be issued in select, which allows to use as base others objects besides maps.
-\emph{Where} restricts which objects should populate the view, while \emph{group} and \emph{orderBy} are optional and serve to organize the objects in the view.
-
-Depending on \emph{select} and the presence of \emph{group by} and \emph{order by}, different types of CRDTs may be generated by the \emph{create view} operation.
-Section \ref{subsec:viewsconsistency} covers in detail which kinds of views are supported in PotionDB, along with how views are kept correct and in sync with their base data.
-
-\andre{Should I still give here an example? Before I had here an example of a view operation that generated a TopK which answered the query in Section \ref{sec:example} with just a simple get. But now it would seem odd to include such example here imo.}
-
-\subsubsection{[OLD]API for view CRDTs}
-\label{subsubsec:OLDAPIView}
-
-In relational databases (and even some non-relational ones, e.g., Cassandra \cite{???}) it is common to have \emph{views}. 
-A view can be defined as being the result of a query on one or multiple objects \cite{???}.
-Views can be acessed as if they were normal objects, thus it eases the definition of new queries.
-%TODO: Does this need a SQL example here?
-
-Views can either be materialized or not (albeit not all databases support both). %TODO: references 
-In a materialized view, the result of the query is stored as an object, which can then be reused later \cite{???}.
-This may potencially improve drastically the performance of certain queries, but incours an extra cost on updates, as both the object and the materialized view need to be updated.
-On the other hand, non-materialized views don't have this extra cost, but they also don't usually improve the performance of queries, as their result is re-calculated on each query.
-
-PotionDB supports materialized views.
-%Just like in a relational databases defining the right indexes and materialized views ensures even complex queries may be executed efficiently.
-Similarly to relational databases, defining the right materialized views allows for efficient execution of complex queries.
-In the case of PotionDB, views may even refer to data that isn't replicated locally.
-
-We extend our key-value API with the \emph{link} operation.
-The idea of \emph{link} is to specify how can an object (view) be updated based on updates executed on other objects (base data).
-Whenever an update is issued on the base data, PotionDB will also simultaneously update the view.
-
-The link construct has the following structure:
-
-\firstblockemph{Link CRDT key bucket crdtType}
-
-\middleblockemph{From (key1*, bucket1*, crdtType1), ..., (keyN*, bucketN*, crdtTypeN)}
-
-\middleblockemph{Where conditions}
-
-\lastblockemph{Update updateArgs}
-
-Similarly to \emph{get} and \emph{update}, each triple key, bucket, crdtType uniquely identifies an object.
-The link operation can be split in four parts:
-%In short, \emph{link} specifies the CRDT that will be a view, while \emph{from} and \emph{where} specify which CRDTs will trigger updates on the view CRDT.
-%Update specifies how to update the view CRDT. 
-%More precisely:
-
-\begin{itemize}
-	\item \emph{Link}: specifies which CRDT will be acting as a view, i.e., the target of  \emph{update};
-	\item \emph{From}: Similarly to the \emph{from} construct in SQL, it specifies which CRDT(s) will be used to build the view;
-	In other words, whenever an update happens in one of these CRDTs, an update may also be triggered in the link CRDT.
-	Note that in this construct exclusively, both key and bucket may be a prefix of the keys/buckets of the CRDTs (this is represented by the '*' character).
-	This allows to include objects that may not yet exist in the database but that should also be included when they get added (e.g., new customers);
-	\item \emph{Where}: Similary to the \emph{where} construct in SQL, it specifies using conditions how can the CRDTs returned in \emph{from} be joined/filtered. %E.g., if we only wanted sales related to portuguese customers: where customers.MAP{country} = "Portugal" \emph{and} sales.MAP{custID} = customers.MAP{id} \emph{and} sales.MAP{productID} = products.MAP{id};
-	\item \emph{Update}: Specifies the operation that, for each entry returned by \emph{from} after applying \emph{where}, will be used to update the CRDT specified in \emph{link}.
-\end{itemize}
-
-The intuition is that when \emph{link} is first executed for a view CRDT, the view is updated based on all existing objects that match the \emph{from} and \emph{where} clauses.
-Afterwards, whenever a CRDT that matches \emph{from} is updated, the \emph{where} clause is executed for that CRDT only and the \emph{update} part is executed on the view.
-In Section \ref{subsec:viewsconsistency} we discuss in detail different possibilities for implementing this, as well as how it is done in PotionDB. %TODO
-
-The query presented in Section \ref{sec:example} can be answered with a single \emph{get} on the Top-K CRDT generated by the following \emph{link}:
-
-\firstblockemph{Link CRDT topsales statistics TOPK}
-
-\middleblockemph{From (customers*, customers, MAP), (products*, products, MAP), (sales*, sales, MAP)}
-
-\middleblockemph{Where sales.MAP\{customerID\} = customers.MAP\{id\} \emph{and}  sales.MAP\{productID\} = products.MAP\{id\}}
-
-\lastblockemph{Update MAP\{name: customers.MAP\{name\}, age: \\ customers.MAP\{age\}, country: customers.MAP\{country\}, spent: products.MAP\{value\} * sales.MAP\{value\}\}}
 
 \section{Partitioning, Replication and Consistency}
 
@@ -593,13 +616,13 @@ Inside a server objects are split across multiple partitions.
 Each object is assigned to one partition automatically.
 The partition to which an object is assigned to is determined by computing an hash based on the object's key, bucket and type.
 
-The idea of partitioning objects internally in a server comes from the observation that, by having data grouped in multiple ``slot'' (i.e., partitions), if different clients access objects in different partitions, then both requests can be processed concurrently by a replica without any conflict.
+The idea of partitioning objects internally in a server comes from the observation that, by having data grouped in multiple ``slots'' (i.e., partitions), if different clients access objects in different partitions, then both requests can be processed concurrently by a replica without any conflict.
 And if both requests are read only, then they can be processed concurrently even if some objects are present in both requests, as reads don't conflict \cite{???}.
 Each partition has one thread associated, which allows PotionDB to efficiently use multi-core CPUs.
 
 At a first glance it may seem odd to partition based on a hash with the goal of improving performance.
 However, this is justified by the expected use of PotionDB - simirlarly to relational databases, the most frequent and complicated queries are expected to have, for each one, a single view that answers them directly, thus requiring only a single operation.
-Due to the nature of hashing, these views are very likelly be spread across multiple partitions.
+Due to the nature of hashing, these views are very likelly to be spread across multiple partitions.
 This implies that multiple queries can be executed concurrently without conflicts even in the presence of concurrent updates that only affect unrelated objects.
 Our practical evaluation shows that this partitioning improves PotionDB's performance quite considerably. %TODO: This very likelly won't be included in the Practical evaluation section. I may have to run some benchmarks and report the results here.
 
@@ -617,7 +640,7 @@ Other possible solutions to make use of multi-core CPUs are possible, for instan
 	%\item \label{item:single} using only a single thread \cite{???}.
 %\end{enumerate*}
 
-Alternative \ref{item:locks} is difficult to implement, as it is needed to find the right level of lock granularity and when should locks be obtained/released \cite{???}. 
+Alternative \ref{item:locks} is difficult to implement, as it is required to find the right level of lock granularity and when should locks be obtained/released \cite{???}. 
 Special care is needed to avoid deadlocking concurrent transactions. 
 There's also concerns with both fairness and overhead of obtaining locks.
 Our solution does not need to lock data, thus it avoids the overhead from using locks, is easier to implement and does not have deadlocks.
@@ -633,7 +656,7 @@ Finally, while this can allow more clients to be processed in the same period of
 Since PotionDB is a partially replicated \cite{???} database, it is necessary to have a mechanism which allows to precisely define in which servers should an object be replicated in.
 
 We achieve this by requiring each object to be identified not only by its key, but also by a ``bucket''.
-Buckets define groups of objects that are replicated in the same group of replicas, that is, two objects with the same bucket value will be replicated in the same replicas.
+Buckets define groups of objects that are replicated in the same group of replicas. In other words, two objects with the same bucket value will be replicated in the same set of replicas.
 For each replica, the system admin can define which buckets will be replicated in it.
 
 To exemplify, recall the commerce example presented in Section \ref{sec:example}.
@@ -649,6 +672,9 @@ The customers can be partitioned based on their country's continent by taking th
 It's worth noting that clients must ensure they are communicating with a server which replicates the buckets they want to operate on, since each server only replicates a subset of the buckets and doesn't forward operations to other servers.
 
 \subsection{Replication}
+\label{subsec:replication}
+
+\andre{Note: If we decide to keep this section, maybe I should add a scheme showing each server "subscribing" buckets and another with the operations being sent?}
 
 %Explain the basic idea of replication (async, partial, etc). Also include NuCRDTs here.
 Replication in PotionDB is asynchronous and partial.
@@ -657,16 +683,19 @@ Periodically, new updates are propagated asynchronously to other replicas.
 All objects in PotionDB are operation-based CRDTs, thus the information required to propagate an update consists in the operation type and its arguments.
 
 \subsubsection{RabbitMQ}
+\label{subsubsec:rabbitmq}
 
 PotionDB uses RabbitMQ \cite{???} for handling communication between replicas.
 RabbitMQ is a message brooker which allows consumers to register the topics of messages in which they're interested.
 We leverage on topics to ensure each replica only fetches the messages containing updates for objects in buckets they are replicating.
 
 We use RabbitMQ as follows.
-Each PotionDB servers runs alongside it a RabbitMQ instance.
+Each PotionDB server runs alongside it a RabbitMQ instance.
 When a replica starts, it contacts other server's RabbitMQs and subscribes to all messages whose topics match the buckets it replicates.
-When a replica wants to publish new updates, it splits those updates by buckets (while keeping causality), ensuring each message only contains updates for one bucket and whose topic value is that bucket.
+When a replica wants to publish new updates, it splits those updates by buckets (while maintaining causality), ensuring each message only contains updates for one bucket and whose topic value is that bucket.
 Those updates are then sent to the local RabbitMQ instance, which then forwards them to interested PotionDB instances.
+A receiving replica then rebuilds the transactions, applying the transaction once every update (for the buckets it replicates) of a transaction is received.
+Causality related transactions will be applied according to their original order.
 
 We also use RabbitMQ to support the addition of new replicas without stopping the system.
 However, such mechanism is outside of the scope of this paper and thus we don't describe it here.
@@ -675,16 +704,17 @@ However, such mechanism is outside of the scope of this paper and thus we don't 
 \label{subsubsec:nureplication}
 
 Non-uniform CRDTs \cite{???} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
-E.g., in a Top-K CRDT that only maintains the K elements with highest value, only those K elements must be replicated in every replica.
+E.g., in a topK CRDT that only maintains the K elements with highest value, only those K elements must be replicated in every replica.
 
 The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{???}.
 Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
 This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT must be replicated to all replicas \cite{???}.
 
 Non-uniform CRDTs are specially useful for using as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
-E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
+E.g., if we consider the scenario described in Section \ref{sec:example} and a topK of ``top 100 consumers who spent the most'', even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the topK CRDT.
+%E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
 
-\andre{What's above, technically, isn't 100\% true: all replicas together need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. This WILL BE reflected in the experimental evaluation's graphics. However, no single replica needs to keep all entries (albeit, as of now, one does).}
+\andre{What's above, technically, isn't 100\% true: all replicas together need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. However, no single replica needs to keep all entries (albeit, as of now, one does).}
 
 PotionDB fully supports NuCRDTs.
 Thus, when an operation is applied on a NuCRDT, the operation is only replicated to all of that CRDT's replicas iff that operation changed the visible state.
@@ -773,7 +803,8 @@ A transaction is only executed if all transactions with a smaller vector clock h
 We ensure locally generated transactions are executed by the order specified by the monotonicaly increasing local timestamp.
 For concurrent transactions any order is possible and consistent with casual consistency.
 CRDTs ensure concurrent operations don't pose a problem as they're commutative \cite{???}.
-Whenever a CRDT with views associated is updated, the views are also updated in the same transaction with the same clock.
+Whenever a CRDT is about to be updated, all of its matching triggers are executed and the resulting updates are included in the same transaction with the same clock.
+%Whenever a CRDT with views associated is updated, the views are also updated in the same transaction with the same clock.
 Thus, PotionDB respects causality when executing transactions and, as such, provides causal consistency.
 
 \paragraph{Isolation} %During the execution of a transaction, reads and updates are all executed on top of the version specified by the transaction's vector clock.
@@ -785,12 +816,12 @@ Updates from other transactions are either executed before the first operation o
 Thus, the effects of each local transaction can be ordered sequentially, which implies isolation.
 We do not guarantee isolation between transactions executing in different replicas however.
 
-It is important to note that even though we provide atomicity, consistency and isolation guarantees, the latter two are equivalent to the ones provided in ACID.
+It is important to note that even though we provide atomicity, consistency and isolation guarantees, the latter two are not equivalent to the ones provided in ACID.
 We provide causal consistency (i.e., weak consistency) instead of strong consistency; we don't guarantee isolation between servers (which is required in ACID).
-As evidenced in both academy and industry, while ACID properties are quite useful, they are also severlerly limiting in terms of fault tolerance and performance \cite{???}.
+As evidenced in both academy and industry, while ACID properties are quite useful, they are also quite limiting in terms of fault tolerance and performance \cite{???}.
 
 \section{Views}
-\label{subsec:viewsconsistency}
+\label{sec:views}
 
 Views are useful as they make it easier to specify queries and, in the case of materialized views, it may improve their performance as well.
 An essencial question in supporting materialized views in a database is on keeping them coeherent with the base data they refer to.
@@ -799,226 +830,96 @@ When an object is updated the views must also be updated, otherwise the database
 Usually in relational databases, views are updated automatically by using triggers associated to the base data tables \cite{???}.
 Due to data being fully replicated and strongly consistent, it is guaranteed that at all times the view reflects the latest correct state \cite{???}.
 
-PotionDB is a weakly consistent, geo-distributed and partially replicated database.
-This poses considerable challenges for maintaining materialized views, namelly:
+PotionDB also uses triggers to keep the views updated. However, as PotionDB is a weakly consistent, geo-distributed and partially replicated database, extra challenges are imposed for maintaining materialized views up-to-date, namelly:
 \begin{enumerate}
 	\item Association between views and their base data. 
 	PotionDB is a key-value store, thus multiple objects that would usually belong to the same table in a relational database (e.g., customers) have different keys associated.
 	\item Automatic inclusion of objects created after the view that represent entities of the same kind (e.g., new customers) but necessarely have different keys.
-	\item Keeping the views and base data synchronized at all time.
-	I.e., from the point of view of a client, updates on base data should lead to the view being updated simultaneously.
-	%This isn't a problem in relational databases as they will belong to the same table.
-	\item Keeping views updated even if all necessary data for it isn't present locally due to partial replication.
 	\item Translation of updates in base data to views. 
 	Unlike in relational databases in which all data can be seen as tables with multiple columns, here there are multiple types of objects which have different kinds of properties and operations.
+	\item Keeping the views and base data synchronized at all time.
+	I.e., from the perspective of a client, updates on base data should lead to the view being updated simultaneously.
+	%This isn't a problem in relational databases as they will belong to the same table.
+	\item Keeping views updated even if all necessary data for it isn't present locally due to partial replication.
 \end{enumerate}
 
-In this section we detail the inner workings of views.
-First, we show which kind of objects are supported as views and how they're built.
-Secondly, we explain how are the referred problems dealt with in PotionDB.
-%In this section we detail how we deal with the referred problems.
-We start by assuming all required data is present localy and thus focus on the first three challenges.
-Afterwards, we drop such assumption and discuss how view updates for non-local data are handled.
-Finally, we explain how are updates for each kind of view generated based on updates for the base data.
+In this section we detail the inner workings of views and triggers, and show how we address the points referred above.
+We start by explaining what we define as a view, how are triggers used and updates generated for the views.
+We end with discussing how our replication mechanism ensures view updates are sent to every replica that replicates those, even if they don't replicate the relevant base data.
 
-%TODO: I should still refer to this somewhere.
-%Ideally, updates to the view should be automatically generated based on updates to the base data and appended to the same transaction.
-%Nor only does this ensure the view and its base data are always in sync, it also avoids human errors and simplifies the client's code, as it doesn't need to be concerned with correctly updating the views.
+\subsection{View CRDTs and Triggers}
 
-\subsection{View CRDTs}
+We define as a view CRDT any CRDT that is updated automatically based on updates to other existing CRDTs.
+To define how views should be updated, we leverage on the concept of triggers.
 
-\andre{Suggestions for better names for these ``kinds'' of views?}
+A trigger defines how updates on an object (source) translate to updates on another object (view).
+The API was already described in Section \ref{subsubsec:APIVew}, thus in this section we focus on how triggers work internally.
 
-\andre{TODO: For each one, include how a SQL update in a table would be converted to updates to both the base and view data.}
-
-We support four kinds of views in PotionDB:
+\paragraph{Storage}We store triggers in PotionDB as special objects.
+They do not need to be stored as CRDTs, as:
 \begin{enumerate*}[label=(\roman*)]
-	\item Top-K;
-	\item Max/min;
-	\item Average;
-	\item Sum.
+	\item each trigger is immutable (it can not be modified after being created);
+	\item we assume trigger names are unique and, thus, there won't be any concurrent add/remove of a trigger.
 \end{enumerate*}
-The idea is that, depending on the arguments given in the \emph{create view} construct, a different type of CRDT will be generated.
+While the latter point may seem questionable, we believe it is a fair assumption as triggers will not be created commonly by the clients, as they are usually defined by system admins and often before the database is populated.
+Triggers are replicated as explained in Section \ref{subsubsec:rabbitmq}.
 
-Top-k should be used when the intention is to maintain a sorted set of data, e.g., sort customers by the total value they have spent.
-Depending on the use case, this can be used to maintain only the top entries (e.g., top 100 customers) or all.
-This kind of view can be generated with the following structure:
+\andre{Maybe the claim above needs a citation? Suggestions?}
 
-\firstblockemph{Create View name As}
+\andre{Note: The storage description above is how I expect to implement it in the near future. At the moment clients store the triggers, but the next step will be for the servers to store them (clients will then have to fetch them)}
 
-\middleblockemph{Select Limit number key(table1.a), table1.b, table1.c, ..., tableN.a, ...}
+\andre{I probably need a better title for the paragraph below. Suggestions?}
 
-\middleblockemph{From table1, ..., tableN}
+\paragraph{Clients apply triggers} When a client starts, the existing triggers are fetched from the database, and stored on the client.
+Then, whenever a client requests an update, it checks its triggers in order to generate the appropriate updates for the views.
 
-\middleblockemph{Where conditions}
+\paragraph{Matching} As explained in Section \ref{subsubsec:APIVew}, triggers can either be specific to one CRDT or generic (i.e., match with multiple source CRDTs).
+Non-generic triggers are stored in a map whose key is the uid (key, bucket, crdtType) of the source CRDT.
+Thus, non-generic triggers can be directly indexed when an update to a source CRDT is issued.
+On the other hand, for generic triggers, we index them by CRDT and operation type, as both the key and the bucket may be regular expressions.
+For a given update, every trigger whose CRDT and operation type is equal to those of the update, is tested to see if the key and bucket respect the regular expressions and, thus, a view should be updated.
 
-\lastblockemph{Order by table1.b, ...}
+\paragraph{Update generation}
+Each trigger contains both a source operation and a view operation, which are relative to, respectively, the source and view CRDTs.
+On the source operation we can define variables that will then be used on the view operation. E.g., if the source operation is \emph{inc(c)}, the 'c' is a variable that can then be used in the view operation, e.g., \emph{add('id1', c)}.
+When an operation is prepared, the variables are replaced by their respective values, e.g., \emph{inc(5)} gets translated into \emph{add('id1', c)}.
+Updates generated by triggers are added to the same transaction of the initial update, thus ensuring both updates to views and base data become visible at the same time.
 
-The mencioned structure generates a Top-K CRDT \cite{???}.
-\emph{Limit} specifies how many entries should be present in the view (optional). \emph{Key} takes one or more arguments and specifies which field(s) will be used to uniquely identify each entry in the top-k.
-\emph{Order} specifies how are elements sorted in the top-k.
-Using \emph{limit} is preferred, as in that case it's possible to leverage on non-uniform replication to reduce the amount of data required to be replicated and stored in each replica \cite{???}.
+\subsection{Implications of partial replication  on views}
 
-Max and min views are implemented by, respectivelly, max and min NuCRDTs.
-Since only the highest/lowest value needs to be stored, both these CRDTs leverage on non-uniform replication to avoid sending/storing updates which don't affect the visible state (i.e., the max/min value).
-Both kinds of views can be generated with the following structure:
+%We now explain how views in PotionDB don't require all of its base data to be present in the same server as the view. To demonstrate this, we will first assume one of the servers contains all the base data for a given view, and then drop such assumption.
+We now explain what are the implications of partial replication in PotionDB's views and, more precisely, how does replication need to be configured in order for views to work properly.
 
-\firstblockemph{Create View name As}
+For now, we will assume that there is one server (PotionDB1) which contains all the base data that may be used to generate a given view.
+If the clients always contact PotionDB1 to update such base objects, and thus the view, PotionDB's replication mechanism would ensure that all replicas which replicate the view's bucket would receive its updates (see Section \ref{subsubsec:rabbitmq}).
+Since updates are sent separately, grouped by bucket, other replicas will receive the view updates as long as they replicate the view's bucket, even if they don't replicate the respective base data.
+Thus, we have concluded that it is not necessary for every replica to replicate the base data of a view, as long as one server has all the base data.
 
-\middleblockemph{Select max(table1.a)}
-
-\middleblockemph{From table1, ..., tableN}
-
-\lastblockemph{Where conditions}
-
-In \emph{select} we specify which field is used to determinate the max/min entry using, respectivelly, the max or min functions.
-\emph{From} and \emph{where} have the same meanings as before.
-
-\andre{Max could also have the same structure as avg and max/min...?}
-
-Average is also implemented by a NuCRDT which keeps only the sum of all values and the number of values inserted, which is enough to calculate the average \cite{???}.
-On the other hand, sum is implemented by a counter CRDT \cite{???}, which keeps the total added value by each replica.
-Both average and sum are generated by \emph{create view} with similar structure:
-%Both average and sum are generated by similar structures
-
-\firstblockemph{Create View name As}
-
-\middleblockemph{Select table1.a, avg(table1.b)}
-
-\middleblockemph{From table1, ..., tableN}
-
-\middleblockemph{Where conditions}
-
-\lastblockemph{Group by table1.a, ...}
-
-The only change required to generate a sum view instead of an average view is to use \emph{sum}() instead of \emph{avg}() in the \emph{select} clause.
-Group by is optional - if it isn't present, the avg/sum is calculated for all entries. Otherwise, it is calculated separately for each value of the tuples specified in the group by clause and stored in a map CRDT of either avg or counter CRDTs.
-
-\subsection{Updating views with local data}
-
-Building on the API presented in Section \ref{subsubsec:APIVew}, we now describe how we solve the challenges presented at the start of this section.
-
-The association between views and base data, as well as inclusion of objects created after the view, are both handled with the help of the \emph{create table} construct.
-In practice this construct groups multiple CRDTs in a single key.
-When a \emph{create table} construct is issued, CRDTs which match the specified keys and bucket receive a mark specifying the table (possibly more than one) which they belong to.
-Then, when an update is generated for one of those CRDTs, all marks (tables) associated to those CRDTs are notified of the update.
-The tables itself also keep a list of views which refer to it and, as such, the update notification is passed to these views and the respective view update is generated as described previously.
-
-To deal with the inclusion of objects, an extra change is required.
-When a new CRDT is added to the database, its key and bucket are checked with the existent tables.
-Then, for all tables to which there's a match, the new CRDT receives a mark, which guarantees updates to it will be reflected in existing views.
-
-PotionDB ensures the views and base data present locally are always synchronized, that is, from the point of view of a client, when one is updated so is the other.
-This can be done by ensuring that whenever the base data is updated, all views associated to it are also updated in the same transaction.
-The atomicity of PotionDB's transactions ensures that either all updates on the transaction or none happen, which in turn guarantees that base data and their views are updated atomically.
-
-\subsection{Updating views with remote data}
-
-We now drop the assumption that all base data necessary for a view is present in the same replica.
-This leads to the challenge of keeping the views updated even if all the base data required to calculate the view isn't present in a replica.
-
-In PotionDB this is solved by requiring a view (more precisely, its bucket) to be replicated in every replica which contains base data relevant to the view.
-This by itself is enough - since 
+We now drop the assumption that one server has all the base data, assuming instead that all relevant data is split across multiple servers.
+Assuming that when a client wants to update one of the base objects, the contacted server (PotionDB2) replicates such object, we have two scenarios:
 \begin{enumerate*}[label=(\roman*)]
-\item updating the base data automatically generates a view update and
-\item updates in a bucket are replicated to every replica of that bucket and only to those,
+	\item PotionDB2 replicates the view and, thus, both updates to base data and view are applied and replicated to other replicas (as described previously);
+	\item PotionDB2 doesn't replicate the view, thus updates to the view are ignored, as we require that clients send their updates to servers which replicate the referred buckets.
 \end{enumerate*}
-this implies that all updates of a view will be replicated to all servers which replicate the view, even if it was generated by an object only replicated in a subset of those servers.
+In short, whenever a base object is updated, as long as such server also replicates the view's bucket, both the base object update and view's will be replicated to the relevant servers.
 
-\andre{Is this explanation okay? Should I refer any other possible alternative and why our solution is better?}
+With this, we can now define how replication must be configured in order for views to work correctly.
+The simpler solution is to have a special bucket for views, which is replicated in every server.
+This ensures some server will always have any data that may be relevant to the view.
+However, the precise requirement is that a view's bucket must be replicated in every server that contains, or may eventually contain, objects relevant to such view.
 
-\subsection{Generating view updates}
+We note that it would be possible to ease this requirement further if the clients send updates of base data and views to different servers, as in this case one single server replicating the view would be enough, even if such server had none of its base data.
+However, this would imply that the update of the view and of the base data would not be in the same transaction.
+This in turn has the downside of, in servers which replicate both the view and some of its base data, to have the updates of the view and base data applied at different times, thus possibly giving an inconsistent representation of the database to the client for a certain period of time.
 
-\andre{This section might need to be better worked on. I didn't want to include the ``SQL code'' used to generate each view as that would take too much space, but the explanation may be too generic/difficult to understand without that.}
+%Explain how it isn't necessary to have all data replicated everywhere, and how it suffices to have views replicated in every replica in which there may be a relevant base data.
+%
 
-One key property of PotionDB is the automatic updating of views whenever their base data is updated.
-This implies that mechanisms for generating view updates based on base data updates are required.
-Updates are generated differently depending on the type of view.
-%We now leverage on the example tables in Section \ref{sec:example} to explain how are updates for each kind of view generated.
-
-\begin{figure}
-	%\begin{table}[]
-	\centering
-	\begin{tabular}{|l|l|}
-		\multicolumn{2}{c}{TopK} \\
-		\multicolumn{2}{c}{TopCustomers} \\ \hline
-		id            & int [key]         \\ \hline
-		name          & string       \\ \hline
-		age           & int          \\ \hline
-		country       & string      \\ \hline
-		totalSpent & int [order] \\
-		\hline
-	\end{tabular} \hspace{0.1em}
-	\begin{tabular}{|l|l|}
-			\multicolumn{2}{c}{Map of Avg} \\
-			\multicolumn{2}{c}{AvgSales} \\ \hline
-			country & string \\ \hline
-			value        & float  \\
-			\hline       
-	\end{tabular} \hspace{0.1em}
-	\begin{tabular}{|l|l|}
-		\multicolumn{2}{c}{Max} \\
-		\multicolumn{2}{c}{HighestSale} \\ \hline
-		saleId & int \\ \hline
-		value & int \\
-		\hline      
-	\end{tabular}
-	\caption{Example views}
-	\label{fig:views}
-	%\end{table}
-\end{figure}
-
-%top 100 customers who spent the most (top)
-%customers per country (sum) OR average sale value per country (avg)
-%most units sold of a product (max)
-
-Consider the example tables introduced in Section \ref{sec:example}, along with three views whose scheme can be found on Figure \ref{fig:views}.
-The views represent, respectivelly, 
-\begin{enumerate*}[label=(\roman*)]
-	\item \label{item:topk} top 100 customers who spent the most (TopK);
-	\item \label{item:avg} average value of sales in each country (Map of Averages);
-	\item \label{item:max} highest value of a single sale globally (Max).
-\end{enumerate*}
-Even though all three depend on data from more than one table, updates on these views only need to be triggered whenever sales are created/modified/removed.
-This can be infered from the \emph{create view} operation by considering, respectivelly, from which table comes the field in order by, max() and avg().
-
-Assume the addition of the following sale:
-
-\lineemph{Update sales2\_5 sales MAP\{id: 10, custID: 2, productID: 5, amount: 2\}}
-
-\andre{Problem with TopK example: the "totalSpent" is a sum... how do I reflect that?}
-
-This new sale generates the following updates on the views:
-
-\firstblockemph{Update TopCustomers views TOPK\{id: sales2\_5.id, totalSpent: += sales2\_5.amount * product5.value, name: customer2.name, age: customer2.age, country: customer2.country\}}
-
-\middleblockemph{Update AvgSales views MAP\{country: customer2.country, value: Update AVG\{value: sales2\_5.amount * product5.value, count: 1\}\}}
-
-\lastblockemph{Update HighestSale views MAX\{saleId: sales2\_5.id, value: sales2\_5.amount * product5.value\}}
-
-Most of the procedure for generating these updates is common to all kinds of views, which can be summarized in the following steps:
-
-\begin{enumerate}
-	\item Fetch necessary CRDTs from the other tables mencioned in the \emph{from} clause. 
-	Use the \emph{where} condition to know how to select which objects are relevant (in this case, use the IDs in the sales CRDTs).
-	This retriaval is efficient if the table with the trigger refers to other objects directly via, e.g., IDs.
-	%This can be done efficiently as the sales CRDTs keep the IDs for both customers and products
-	\item Use the \emph{select} clause to know which fields to pick from each CRDT.
-	\item Generate the update using as arguments the fields picked in the step before.
-\end{enumerate}
-
-The specific parts that change depending on the view type are the type of update issued (e.g., MAX, TOPK, etc.) and dealing with the ``special'' fields of each view CRDT (e.g., in TOPK, the key and order fields).
-These specificities are evidencied in the example view updates presented before.
-
-\andre{Probably need a better way to conclude this.}
-
-
-
-
-
-
-
-
+%Explain how triggers are stored and used
+	%Server stores them on a special object; clients fetch triggers; clients generate view updates
+%Explain the update procedure on clients
+	%Prepare main update; check non-generic triggers; check generic triggers; send all updates
+%Address points 4 and 5 - same transaction; bucket mechanism ensures view updates are sent to every replica.
 
 \section{Implementation}
 
