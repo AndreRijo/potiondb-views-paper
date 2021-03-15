@@ -324,7 +324,7 @@ Defining the right view(s) avoids having to do for each query the process referr
 For the example query above, a view that keeps, for each customer, his name, age, country and total value, ordered by total value, can answer efficiently the query with a single get operation.
 With this we no longer need to contact multiple datacenters and execute millions of gets and result processing.
 
-On Section \ref{subsec:viewsconsistency} we address multiple difficulties related to supporting and keeping views updated, as well as our solutions for such difficulties in PotionDB.
+On Section \ref{sec:views} we address multiple difficulties related to supporting and keeping views updated, as well as our solutions for such difficulties in PotionDB.
 
 \section{System Design}
 
@@ -332,7 +332,8 @@ PotionDB is a geo-distributed storage system which provides weak consistency or,
 A key feature in PotionDB is the ability to efficiently provide global views on partially replicated data under the conditions mentioned previously.
 In this section we discuss design decisions which made it possible to provide such feature.
 
-\subsection{Database Model and API} 
+\subsection{Database Model and API}
+\label{subsec:databasemodel}
 
 %Explicar qual o modelo da BD: key-value store
 %
@@ -346,7 +347,7 @@ In this section we discuss design decisions which made it possible to provide su
 %
 %Modelo de consistência estende-se para as views (SEMPRE???).
 
-PotionDB provides a key-value store interface \cite{???}.
+PotionDB provides a key-value store interface.
 %PotionDB is a key-value store database. %TODO: Reference?
 As such, all objects are indexed by a key and support \emph{get} and \emph{update} operations which, respectively, query/modify the state of an object.
 Objects are uniquely identified by the triple (key, bucket, crdtType); we call this triple of unique identifier (uid).
@@ -354,7 +355,7 @@ An object for a given uid is created when an update or read operation is first a
 
 In PotionDB objects are CRDTs \cite{crdt}, which ensures that even if objects are modified concurrently in different replicas, their states will eventually converge.
 This allows for both \emph{get} and \emph{update} operations to be executed locally, with the effects of \emph{updates} being propagated asynchronously to other replicas.
-PotionDB offers transactions with parallel snapshot isolation consistency \cite{???}, i.e., operations executed in a single replica are executed as in snapshot isolation, while transactions in different replicas can be executed concurrently and still ensure convergence due to the usage of CRDTs.
+PotionDB offers transactions with parallel snapshot isolation consistency \cite{parallelSI}, i.e., operations executed in a single replica are executed as in snapshot isolation, while transactions in different replicas can be executed concurrently and still ensure convergence due to the usage of CRDTs.
 
 PotionDB supports partial replication, that is, different objects can be replicated in different subsets of servers.
 We achieve partial replication by associating a ``bucket'' to each object. Buckets define groups of objects that are replicated in the same group of replicas.
@@ -405,7 +406,7 @@ Section \ref{subsec:replication} gives more details on how PotionDB handles repl
 
 \andre{I repeated the uid explanation from Database Model and API to here... where should it stay?}
 
-PotionDB provides a key-value store interface \ref{???} with support for transactions.
+PotionDB provides a key-value store interface with support for transactions.
 Objects are uniquely identified (uid) by the triple (key, bucket, crdtType), where key is a user provided name for the object, bucket identifies where the object should be replicated and crdtType is the type of object.
 We support both \emph{read} and \emph{update} operations on an object, as well as operations to \emph{start}, \emph{commit} and \emph{abort} transactions.
 More precisely, said operations have the following format:
@@ -571,7 +572,7 @@ Note that this case should be exceptional - in most cases views will be replicat
 
 \andre{Maybe the figure reference should only be here?}
 
-The internal architecture of each PotionDB replica is similar to Cure \ref{???}.
+The internal architecture of each PotionDB replica is similar to Cure \cite{cure}.
 Each PotionDB replica can be separated in three main components:
 \begin{enumerate*}[label=(\roman*)]
 	\item TransactionManager (TM), which is responsible for receiving and replying to client requests, attributing timestamps to transactions and forwarding operations to Materializer;
@@ -595,36 +596,54 @@ Each PotionDB replica can be separated in three main components:
 
 \section{Supporting Views}
 
+\andre{Possible topics for this?}
+\begin{itemize}
+	\item "Introduction?" (challenges? As in Section \ref{sec:views})
+	\item NuCRDTs
+	\item Triggers
+	\item View distribution and transactions (that is, explain how we require views to be in every replica that contains base data relevant to the view + view updates are bundled in the same transaction as the base object update. Definitely needs a better title.)
+\end{itemize}
+
+\andre{Also check Section \ref{sec:views}... maybe most of it is okay/re-usable?}
 
 
 \section{Partitioning, Replication and Consistency}
 
 %In this section we discuss three important design decisions in PotionDB:
 In this section we describe important mechanisms in PotionDB: partitioning, replication and transactions.
-The referred mechanisms are the basis for efficiently supporting queries on global data, while still maintaing reasonable update performance and space overhead.
+The referred mechanisms are the basis for efficiently supporting queries on global data, while maintaing reasonable update performance and space overhead.
 
 \subsection{Partitions}
 
+\andre{I've decided to, for now, use here the terms partition/sharding for, respectively, internal \& external partitioning. Maybe I should do the same in previous sections (namely Section 4)?}
+
 In PotionDB objects are partitioned both internally in a server and externally between different servers.
-Both partitioning mechanisms work differently and have different goals, which we explain in this subsection.
+Internally, we partition in order to efficiently utilize multicore CPUs, while externally we partition to reduce the amount of data stored and processed in each server, making usage of data locality.
 
-\subsubsection{Internal partitions}
+To simplicify, we refer to external and internal partitioning as, respectively, sharding and partitioning.
+We now explain how both mechanisms work in PotionDB.
+%Both partitioning mechanisms work differently and have different goals, which we explain in this subsection.
 
-\andre{This likely needs to be better motivated/explained...}
+\subsubsection{Partitioning}
 
-Inside a server objects are split across multiple partitions.
-Each object is assigned to one partition automatically.
-The partition to which an object is assigned to is determined by computing an hash based on the object's key, bucket and type.
+In a PotionDB instance, objects are split across multiple partitions.
+Each partition has one thread associated to it, which allows requests in different partitions to potencially be processed in parallel. 
+Each object is assigned to one partition automatically, based on a hash of the composition of the object's key, bucket and type.
+%Inside a server objects are split across multiple partitions.
+%Each object is assigned to one partition automatically.
+%The partition to which an object is assigned to is determined by computing an hash based on the object's key, bucket and type.
 
-The idea of partitioning objects internally in a server comes from the observation that, by having data grouped in multiple ``slots'' (i.e., partitions), if different clients access objects in different partitions, then both requests can be processed concurrently by a replica without any conflict.
-And if both requests are read only, then they can be processed concurrently even if some objects are present in both requests, as reads don't conflict \cite{???}.
-Each partition has one thread associated, which allows PotionDB to efficiently use multi-core CPUs.
+The intuition behind partitioning objects in a server comes from the observation that, by having data grouped in multiple ``slots'' (i.e., partitions), if different clients access objects in different partitions, then both requests can be processed in parallel by a replica without any conflict.
+And if both requests are read only, they can be processed in parallel even if some objects are present in both requests, as reads don't conflict \cite{???}.
 
 At a first glance it may seem odd to partition based on a hash with the goal of improving performance.
 However, this is justified by the expected use of PotionDB - simirlarly to relational databases, the most frequent and complicated queries are expected to have, for each one, a single view that answers them directly, thus requiring only a single operation.
-Due to the nature of hashing, these views are very likelly to be spread across multiple partitions.
+Due to the nature of hashing, these views are likelly to be spread across multiple partitions.
 This implies that multiple queries can be executed concurrently without conflicts even in the presence of concurrent updates that only affect unrelated objects.
-Our practical evaluation shows that this partitioning improves PotionDB's performance quite considerably. %TODO: This very likelly won't be included in the Practical evaluation section. I may have to run some benchmarks and report the results here.
+Our practical evaluation shows that this partitioning improves PotionDB's performance quite considerably. \andre{Does it actually show that? Should we show that?}
+%TODO: This very likelly won't be included in the Practical evaluation section. I may have to run some benchmarks and report the results here.
+
+\andre{What's below is probably not needed. It's just a comparison with other alternatives}
 
 %A possible alternative to internal partitioning and still make use of multi-core CPUs would be to use locks to control access to the same object, in order to prevent write conflicts \cite{???}.
 Other possible solutions to make use of multi-core CPUs are possible, for instance:
@@ -647,11 +666,13 @@ Our solution does not need to lock data, thus it avoids the overhead from using 
 
 As for \ref{item:multiplePotion}, this would imply more replicas running in the system, which increases both replication and storage costs.
 This would also imply concurrency conflicts even in the same computer.
-Finally, while this can allow more clients to be processed in the same period of time, and is quite easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. %TODO: Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.
+Finally, while this can allow more clients to be processed in the same period of time, and is quite easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. \andre{Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.}
 
 %As for \ref{item:single}, the solution does not take any benefict from  the multiple cores of nowadays CPUs \cite{???}. In section \ref{???}, we show that this solution has worse performance than ours, specially with read-only transactions.
 
-\subsubsection{External partitions}
+\subsubsection{Sharding}
+
+\andre{This has a lot of overlap with Section \ref{subsec:databasemodel}}
 
 Since PotionDB is a partially replicated \cite{???} database, it is necessary to have a mechanism which allows to precisely define in which servers should an object be replicated in.
 
@@ -703,22 +724,22 @@ However, such mechanism is outside of the scope of this paper and thus we don't 
 \subsubsection{NuCRDTs replication}
 \label{subsubsec:nureplication}
 
-Non-uniform CRDTs \cite{???} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
+Non-uniform CRDTs \cite{Cabrita17Nonuniform} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
 E.g., in a topK CRDT that only maintains the K elements with highest value, only those K elements must be replicated in every replica.
 
-The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{???}.
+The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{Cabrita17Nonuniform}.
 Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
-This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT must be replicated to all replicas \cite{???}.
+This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT must be replicated to all replicas \cite{Cabrita17Nonuniform}.
 
 Non-uniform CRDTs are specially useful for using as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
 E.g., if we consider the scenario described in Section \ref{sec:example} and a topK of ``top 100 consumers who spent the most'', even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the topK CRDT.
 %E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
 
-\andre{What's above, technically, isn't 100\% true: all replicas together need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. However, no single replica needs to keep all entries (albeit, as of now, one does).}
+\andre{What's above, technically, isn't 100\% true: all replicas together need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. However, no single replica needs to keep all entries.}
 
 PotionDB fully supports NuCRDTs.
 Thus, when an operation is applied on a NuCRDT, the operation is only replicated to all of that CRDT's replicas iff that operation changed the visible state.
-Some operations however may only have an effect later (e.g: in a top-k, an element may rise to the top after another one gets removed) \cite{???}.
+Some operations however may only have an effect later (e.g: in a topK, an element may rise to the top after another one gets removed) \cite{Cabrita17Nonuniform}.
 Operations in that category are only replicated to all replicas when it affects the visible state.
 
 \andre{Should I refer that those operations in the last category are/should (as they aren't as of now) be sent to a few replicas for fault-tolerance purposes?}
