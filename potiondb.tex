@@ -125,7 +125,7 @@ partial replication, for example by proposing algorithms to manage partially rep
 and to decide which data is replicated in which replica \cite{}.
 
 In this paper we address the problem of querying data in a weakly consistent partially geo-replicated database, 
-focusing on recurrent queries for which a programmer would want to generate a (materialized) view.
+focusing on recurrent queries for which the application could use a (materialized) view.
 For example, consider an e-commerce system with users from multiple geographic locations.
 In this case, the data pertaining users of a given location does not need to be replicated in all data centers
 (but only in a few for fault tolerance). The same applies to other information, such as data on orders and 
@@ -220,27 +220,46 @@ it is common that (at least some) data items are only needed at some geographic 
 As a running example, we will consider a large e-commerce company with online stores for different countries 
 and clients spread across the world. 
 The information system includes data of millions of products, with some products available only at some locations.
-The system also includes information about customers and their purchases, with clients being associated a given 
+The system also includes information about customers and their purchases, with clients being associated with a given 
 online store. 
 We note that similar patterns occurs in multiple other systems: online games, where players are partitioned depending
-on their locations; \textbf{we need more examples}.
+on their locations; social networks and news sites, where users connect to a regional site.
 
 In this context, fully replicating the whole dataset might become too expensive.
 Additionally, as data is tied to some geographic location, one can expect that the large majority of accesses
-occurs on that location.
-\textbf{need better examples}.
-For instance, an asian customer is more likely to consult the stock of stores in his country rather than in an european country.
-Thus, it makes sense that both asian customers' and asian stores' data to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
-That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on such factor.
-To support this 
+occurs on that location. 
+To address this, PotionDB servers will run at multiple geographic locations.
+Data items are replicated in only a subset of the locations, for providing high availability and fault tolerance.
+By not replicating data in all data centers, PotionDB allows to minimize the replication cost (when
+compared to solutions featuring full replication).
 
-As a consequence, 
+Returning to our examples, an online store might want to maintain the top selling products or top selling products
+for buyers that bought some product (for recommendations).
+An online game might want to maintain a leaderboard. 
+A news site might maintain a list of topics with more likes across all regional sites.
+All this information is relevant and must be replicated in all sites, while it needs to be computed with 
+data from all data centers, i.e., there is no single data center that keeps all information for doing
+these computations. 
+Furthermore, it is common that only the top elements need to be maintained -- e.g. an online store
+is only interested in the top N products sold.
+
+To address this functionality, PotionDB supports the definition of materialized views that 
+are the result of a computation over all data in the database. As data is updated, the materialized 
+views are updated in the same transaction. 
+
+\subsection{Consistency}
+
+
+%\textbf{need better examples}.
+%For instance, an asian customer is more likely to consult the stock of stores in his country rather than in an european country.
+%Thus, it makes sense that both asian customers' and asian stores' data to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
+%That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on such factor.
 
 
 
 
 
-
+\if 0
 
 \section{Motivation example}
 \label{sec:example}
@@ -325,6 +344,9 @@ For the example query above, a view that keeps, for each customer, his name, age
 With this we no longer need to contact multiple datacenters and execute millions of gets and result processing.
 
 On Section \ref{sec:views} we address multiple difficulties related to supporting and keeping views updated, as well as our solutions for such difficulties in PotionDB.
+
+
+\fi
 
 \section{System Design}
 
