@@ -461,6 +461,7 @@ E.g., in a set, \emph{update(uid, add, ``e'')} adds the element ``e'' to the set
 
 
 \subsection{View Definition API}
+\label{subsec:viewAPI}
 
 PotionDB supports materialized views, which can speed up the execution of certain queries by summarizing data spread accross multiple objects.
 The data referred by a view does not need to be all replicated in a single server - such data can be partitionated accross multiple servers (we detail how this works in Section \ref{sec:views}).
@@ -595,17 +596,135 @@ Each PotionDB replica can be separated in three main components:
 
 
 \section{Supporting Views}
+\label{sec:views}
 
-\andre{Possible topics for this?}
-\begin{itemize}
-	\item "Introduction?" (challenges? As in Section \ref{sec:views})
-	\item NuCRDTs
-	\item Triggers
-	\item View distribution and transactions (that is, explain how we require views to be in every replica that contains base data relevant to the view + view updates are bundled in the same transaction as the base object update. Definitely needs a better title.)
-\end{itemize}
+\andre{I ended up not mentioning the challenges of supporting views, but let me know if I should fit those somehow}
 
-\andre{Also check Section \ref{sec:views}... maybe most of it is okay/re-usable?}
+In this section we elaborate on the mechanisms we use in PotionDB in order to support views.
+Namely, we detail how views are updated when a relevant object gets updated, how partial replication affects views and how we keep the storage overhead of views reasonable.
 
+%\andre{Possible topics for this?}
+%\begin{itemize}
+%	\item "Introduction?" (challenges? As in Section \ref{sec:views})
+%	\item NuCRDTs
+%	\item Triggers
+%	\item View distribution and transactions (that is, explain how we require views to be in every replica that contains base data relevant to the view + view updates are bundled in the same transaction as the base object update. Definitely needs a better title.)
+%\end{itemize}
+%
+%\andre{Also check Section \ref{sec:views}... maybe most of it is okay/re-usable?}
+
+\subsection{Triggers}
+\andre{Please check for repetition/overlap with section \ref{subsec:viewAPI}}
+
+When an object is updated, all views to which that object may be relevant must be updated as well.
+Another concern is how updates to an object are converted into view updates, specially when considering that any object supported by PotionDB can be used as a view.
+We leverage on the usage of triggers to deal with both concerns.
+
+The intuition behind triggers in databases is to automatically do an action when a read or update to given object(s) happen.
+Similarly to some relational DBs \cite{???}, in PotionDB we use triggers to automatically generate updates to views when related objects are updated.
+In Section \ref{subsec:viewAPI} we presented the interface for triggers. In this section we focus on how they are used.
+
+\subsubsection{Storage}
+
+\andre{We likely need to refer in the replication section how we replicate triggers? }
+
+We store triggers in PotionDB as plain objects, i.e., not as CRDTs.
+They do not need to be handled as CRDTs since:
+\begin{enumerate*}[label=(\roman*)]
+	\item each trigger is immutable (it can not be modified after being created);
+	\item we assume trigger names are unique and, thus, there will not be any concurrent add/remove of a trigger.
+\end{enumerate*}
+While the latter point may seem questionable, we believe it is a fair assumption as triggers will not be created commonly by the clients, as they are usually defined by system admins and often before the database is populated.
+Triggers are replicated as explained in Section \ref{???}.
+
+\subsubsection{Matching}
+
+As shown on Section \ref{subsec:viewAPI}, triggers can either be specific to one object or generic and thus concern multiple objects.
+Single-target triggers are stored in a map indexed by the trigger's source object key, type and bucket, thus allowing direct access when an object is updated.
+On the other hand, generic triggers are stored in a different map indexed by the source object type, as well as the operation type that fires the trigger (both elements cannot be generic).
+When an update happens, the entry which contains the triggers (if any) for the source object and operation type is fetched.
+For each trigger in said entry, the regular expression of the key and bucket is tested with the key and bucket of the object being updated.
+A view update is generated if both match.
+
+\subsubsection{Update generation}
+
+\andre{two questions: a) should the part of clients applying the triggers be in its own subsection; b) should I mention that in the future we intend for servers to apply the triggers?}
+
+On startup, clients fetch the list of triggers from a replica.
+When a client intends to update an object, the triggers are checked as described previously.
+For all triggers that match, view updates are generated.
+Both the original object's and all generated view's updates are grouped in the same transaction, thus ensuring PotionDB will apply all of them with the same logical clock.
+
+Recalling the API presented in Section \ref{subsec:viewAPI}, all triggers have a source and a target (view).
+The source operation defines which object(s) and operation fires the trigger, as well as any variables, while the view part defines the operation to be generated and to which object.
+Any variables used in the source can be used in view operation.
+When an update happens, the variables are replaced with the actual values.
+
+\andre{Should I just use a figure/table for this example instead of the paragraph below?}
+
+To exemplify, consider a trigger with a source counter identified by the triple (counter[0-9]*, bucket1, COUNTER) and the operation inc(c).
+Consider also a topk view identified by the triple (topk1, bucket1, TOPK) and the operation add(counter[0-9]*, c).
+The update inc(5) to the object (counter12, bucket1, COUNTER) would generate the update add(counter12, 5) to the topk view.
+
+\subsection{View consistency}
+
+As previously mentioned, view updates are grouped with the source object in the same transaction.
+PotionDB ensures that in a replica, all the updates of a transaction become visible at one moment in time.
+This implies that a client can not see a state in which an object has been updated in a replica but its views have not.
+
+%However, this still leave the following questions open: %\emph{How does partial replication affect views? How
+%\emph{How do we ensure all replicas of a view receive view updates, even if they do not replicate the base data?}
+However, this still leaves questions related to how partial replication may affect view updating. Namely, on how it is ensured that views are kept up-to-date even if not all relevant objects to a view are replicated in one replica.
+
+%\andre{For as long as the clients generate the view updates, we don't require for views to be replicated in every replica. Do I still mention this? This section makes a bit less sense with triggers on client side.}
+
+%\andre{The only thing that makes sense for now is to explain how }
+
+When a client wants to execute a transaction, all the operations are sent to one replica.
+A replica ignores all operations concerning buckets it does not replicate. 
+Thus if a client wants to manipulate objects which are scattered across multiple servers, the client must contact multiple servers and send a transaction to enough servers in order to ensure each object to be updated is replicated in at least one of those servers.
+This limitation can pose a problem concerning view updating - if a server contains an object relevant to a view but said view is not replicated there, the view update would be discarded.
+
+\andre{I should refer in future work/some other place that we plan to address this limitation (not supporting updates for objects not replicated locally)? Do we actually want to address it? If not, we should justify/defend it}.
+
+One possible solution for this is to require every server to replicate views.
+This can be easily achieved by having one or more buckets just for views and having all servers replicate those buckets.
+With this, a server will never discard an update to a view.
+Due to how replication works (see Section \ref{subsec:replication}), this also ensures that all servers will replicate view updates and thus have their views up-to-date.
+We note that this requirement is not a limitation - in fact, given the expected use case of PotionDB, it would already be desired for views to be replicated everywhere in most cases.
+Even so, the exact requirement to keep views up-to-date is ligther:
+more precisely, what is required is for a view to be replicated in every server in which there may be objects relevant to the view.
+This lighter requirement might be useful for cases in which the view doesn't concern data from the whole globe but instead, e.g., from one given country.
+
+%16/03/21:
+%Para a secção "Supporting Views":
+%- Explicar NuCRDTs
+%- Explicar como se actualizam as vistas
+%- Triggers
+%- juntar operações
+%- Se for apresentar as dificuldades/desafios, fazer algo curto.
+%- Não explicar a consistência aqui.
+
+\subsection{Non-uniform CRDTs}
+
+Non-uniform CRDTs \cite{Cabrita17Nonuniform} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
+E.g., in a topK, only the K elements with highest value are required to answer a query.
+Thus, non-uniform CRDTs capitalize on this by only requiring those K elements to be replicated in every replica, which allows to reduce storage overhead.
+
+Cabrita et. al. introduce the concept of non-uniform eventual consistency. 
+The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{Cabrita17Nonuniform}.
+Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
+This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT must be replicated to all replicas \cite{Cabrita17Nonuniform}.
+
+Non-uniform CRDTs are specially useful to serve as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
+E.g., if we consider the scenario described in Section \ref{sec:example} and a topK of ``top 100 consumers who spent the most'', even if there's millions of customers globally, each replica does not need to keep data for all customers in order to correctly apply reads in the topK CRDT.
+
+PotionDB fully supports the usage of NuCRDTs for its objects.
+Thus, when an operation is applied on a NuCRDT object, the operation is only replicated to all of that CRDT's replicas iff that operation changed the visible state.
+Some operations however may only have an effect later (e.g: in a topK, an element may rise to the top after another one gets removed) \cite{Cabrita17Nonuniform}.
+Operations in that category are only replicated from one replica to the others when it affects the visible state.
+
+\andre{Should I specify, *clearly*, that all replicas "together" need to keep the whole CRDT state? As in, if we concatenated the state of each replica, we would get the full state. I already hint this in the previous paragraph.}
 
 \section{Partitioning, Replication and Consistency}
 
@@ -695,7 +814,7 @@ It's worth noting that clients must ensure they are communicating with a server 
 \subsection{Replication}
 \label{subsec:replication}
 
-\andre{Note: If we decide to keep this section, maybe I should add a scheme showing each server "subscribing" buckets and another with the operations being sent?}
+\andre{Note: If we decide to keep this section, maybe I should add a scheme showing each server "subscribing" buckets and another with the operations being sent? Also now that NuCRDTs were moved to Section \ref{sec:views}, we likely need to rethink what should be explained here.}
 
 %Explain the basic idea of replication (async, partial, etc). Also include NuCRDTs here.
 Replication in PotionDB is asynchronous and partial.
@@ -721,28 +840,28 @@ Causality related transactions will be applied according to their original order
 We also use RabbitMQ to support the addition of new replicas without stopping the system.
 However, such mechanism is outside of the scope of this paper and thus we don't describe it here.
 
-\subsubsection{NuCRDTs replication}
-\label{subsubsec:nureplication}
-
-Non-uniform CRDTs \cite{Cabrita17Nonuniform} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
-E.g., in a topK CRDT that only maintains the K elements with highest value, only those K elements must be replicated in every replica.
-
-The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{Cabrita17Nonuniform}.
-Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
-This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT must be replicated to all replicas \cite{Cabrita17Nonuniform}.
-
-Non-uniform CRDTs are specially useful for using as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
-E.g., if we consider the scenario described in Section \ref{sec:example} and a topK of ``top 100 consumers who spent the most'', even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the topK CRDT.
-%E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
-
-\andre{What's above, technically, isn't 100\% true: all replicas together need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. However, no single replica needs to keep all entries.}
-
-PotionDB fully supports NuCRDTs.
-Thus, when an operation is applied on a NuCRDT, the operation is only replicated to all of that CRDT's replicas iff that operation changed the visible state.
-Some operations however may only have an effect later (e.g: in a topK, an element may rise to the top after another one gets removed) \cite{Cabrita17Nonuniform}.
-Operations in that category are only replicated to all replicas when it affects the visible state.
-
-\andre{Should I refer that those operations in the last category are/should (as they aren't as of now) be sent to a few replicas for fault-tolerance purposes?}
+%\subsubsection{NuCRDTs replication}
+%\label{subsubsec:nureplication}
+%
+%Non-uniform CRDTs \cite{Cabrita17Nonuniform} leverage on the fact that, for certain objects, not all of the object's data is necessary to answer queries.
+%E.g., in a topK CRDT that only maintains the K elements with highest value, only those K elements must be replicated in every replica.
+%
+%The key difference between eventual consistency and non-uniform eventual consistency is that, instead of requiring for the states of each object to be eventually equivalent, it requires for the \emph{observable} stables to be eventually equivalent \cite{Cabrita17Nonuniform}.
+%Two states are defined as observable equivalent iff, for each possible query, the result is equivalent when executed on either states.
+%This allows to save both storage space and communication overhead, as not all updates in a non-uniform CRDT must be replicated to all replicas \cite{Cabrita17Nonuniform}.
+%
+%Non-uniform CRDTs are specially useful for using as materialized views, as they allow to keep summaries of data easily while also being space-efficient.
+%E.g., if we consider the scenario described in Section \ref{sec:example} and a topK of ``top 100 consumers who spent the most'', even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the topK CRDT.
+%%E.g., in the scenario described in Section \ref{subsubsec:APIView}, even if there's millions of customers globally, replicas don't need to keep data for all customers in order to correctly apply reads in the Top-K CRDT.
+%
+%\andre{What's above, technically, isn't 100\% true: all replicas together need to keep ALL entries of the top-k due to removes being supported. Thus, an entry for all customers in the system. However, no single replica needs to keep all entries.}
+%
+%PotionDB fully supports NuCRDTs.
+%Thus, when an operation is applied on a NuCRDT, the operation is only replicated to all of that CRDT's replicas iff that operation changed the visible state.
+%Some operations however may only have an effect later (e.g: in a topK, an element may rise to the top after another one gets removed) \cite{Cabrita17Nonuniform}.
+%Operations in that category are only replicated to all replicas when it affects the visible state.
+%
+%\andre{Should I refer that those operations in the last category are/should (as they aren't as of now) be sent to a few replicas for fault-tolerance purposes?}
 
 \subsection{Transactions}
 
@@ -842,7 +961,7 @@ We provide causal consistency (i.e., weak consistency) instead of strong consist
 As evidenced in both academy and industry, while ACID properties are quite useful, they are also quite limiting in terms of fault tolerance and performance \cite{???}.
 
 \section{Views}
-\label{sec:views}
+\label{sec:oldviews}
 
 Views are useful as they make it easier to specify queries and, in the case of materialized views, it may improve their performance as well.
 An essencial question in supporting materialized views in a database is on keeping them coeherent with the base data they refer to.
