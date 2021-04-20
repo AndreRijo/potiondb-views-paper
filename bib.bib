@@ -49,64 +49,6 @@
  address = {New York, NY, USA},
 }
 
-
-@inproceedings{dynamo,
-    Acmid = {1294281},
-    XAddress = {New York, NY, USA},
-    Author = {DeCandia, Giuseppe and Hastorun, Deniz and Jampani, Madan and Kakulapati, Gunavardhan and Lakshman, Avinash and Pilchin, Alex and Sivasubramanian, Swaminathan and Vosshall, Peter and Vogels, Werner},
-    Booktitle = {Proceedings\ of the 21st ACM SIGOPS Symposium on Operating Systems Principles},
-    _doi = {10.1145/1294261.1294281},
-    _isbn_ = {978-1-59593-591-5},
-    Keywords = {performance, reliability, scalability},
-    Address = {Stevenson, Washington, USA},
-    Numpages = {16},
-    Pages = {205--220},
-    Publisher = {ACM},
-    Series = {SOSP '07},
-    Title = {{Dynamo: Amazon's Highly Available Key-value Store}},
-    _Url= {http://_doi.acm.org/10.1145/1294261.1294281},
-    Year = {2007},
-    Bdsk-Url-1 = {http://_doi.acm.org/10.1145/1294261.1294281},
-    Bdsk-Url-2 = {http://dx._doi.org/10.1145/1294261.1294281}
-}
-
-@inproceedings{cops,
-    Acmid = {2043593},
-    XAddress = {New York, NY, USA},
-    Author = {Lloyd, Wyatt and Freedman, Michael J. and Kaminsky, Michael and Andersen, David G.},
-    Booktitle = {Proceedings\ of the 23rd ACM Symposium on Operating Systems Principles},
-    _doi = {10.1145/2043556.2043593},
-    _isbn_ = {978-1-4503-0977-6},
-    Keywords = {ALPS systems, causal + consistency, key-value storage, read transactions, scalable wide-area replication},
-    Address = {Cascais, Portugal},
-    Numpages = {16},
-    Pages = {401--416},
-    Publisher = {ACM},
-    Series = {SOSP '11},
-    Title = {{Don't Settle for Eventual: Scalable Causal Consistency for Wide-area Storage with COPS}},
-    _Url= {http://_doi.acm.org/10.1145/2043556.2043593},
-    Year = {2011},
-    Bdsk-Url-1 = {http://_doi.acm.org/10.1145/2043556.2043593},
-    Bdsk-Url-2 = {http://dx._doi.org/10.1145/2043556.2043593}
-}
-
-@inproceedings{spanner,
-    Acmid = {2387905},
-    XAddress = {Berkeley, CA, USA},
-    Author = {Corbett, James C. and Dean, Jeffrey and Epstein, Michael and Fikes, Andrew and Frost, Christopher and Furman, J. J. and Ghemawat, Sanjay and Gubarev, Andrey and Heiser, Christopher and Hochschild, Peter and Hsieh, Wilson and Kanthak, Sebastian and Kogan, Eugene and Li, Hongyi and Lloyd, Alexander and Melnik, Sergey and Mwaura, David and Nagle, David and Quinlan, Sean and Rao, Rajesh and Rolig, Lindsay and Saito, Yasushi and Szymaniak, Michal and Taylor, Christopher and Wang, Ruth and Woodford, Dale},
-    Booktitle = {Proceedings\ 10th USENIX Conference on Operating Systems Design and Implementation},
-    _isbn_ = {978-1-931971-96-6},
-    Address = {Hollywood, USA},
-    Numpages = {14},
-    Pages = {251--264},
-    Publisher = {USENIX Association},
-    Series = {OSDI'12},
-    Title = {{Spanner: Google's Globally-distributed Database}},
-    _Url= {http://dl.acm.org/citation.cfm?id=2387880.2387905},
-    Year = {2012},
-    Bdsk-Url-1 = {http://dl.acm.org/citation.cfm?id=2387880.2387905}
-}
-
 @inproceedings{mdcc,
 	Acmid = {2465363},
 	XAddress = {New York, NY, USA},
@@ -235,4 +177,259 @@ year={2017}
 	pages={405--414},
 	year={2016},
 	organization={IEEE}
+}
+
+%Strong Consistency
+
+@article{megastore,
+	title={Megastore: Providing scalable, highly available storage for interactive services},
+	author={Baker, Jason and Bond, Chris and Corbett, James C and Furman, JJ and Khorlin, Andrey and Larson, James and Leon, Jean-Michel and Li, Yawei and Lloyd, Alexander and Yushprakh, Vadim},
+	year={2011}
+}
+
+@inproceedings{redblue,
+	title={Making geo-replicated systems fast as possible, consistent when necessary},
+	author={Li, Cheng and Porto, Daniel and Clement, Allen and Gehrke, Johannes and Pregui{\c{c}}a, Nuno and Rodrigues, Rodrigo},
+	booktitle={10th $\{$USENIX$\}$ Symposium on Operating Systems Design and Implementation ($\{$OSDI$\}$ 12)},
+	pages={265--278},
+	year={2012}
+}
+
+@inproceedings{scatter,
+	title={Scalable consistency in Scatter},
+	author={Glendenning, Lisa and Beschastnikh, Ivan and Krishnamurthy, Arvind and Anderson, Thomas},
+	booktitle={Proceedings of the Twenty-Third ACM Symposium on Operating Systems Principles},
+	pages={15--28},
+	year={2011}
+}
+
+@inproceedings{krikellas2010strongly,
+	title={Strongly consistent replication for a bargain},
+	author={Krikellas, Konstantinos and Elnikety, Sameh and Vagena, Zografoula and Hodson, Orion},
+	booktitle={2010 IEEE 26th International Conference on Data Engineering (ICDE 2010)},
+	pages={52--63},
+	year={2010},
+	organization={IEEE}
+}
+
+@inproceedings{scatter,
+	title={Scalable consistency in Scatter},
+	author={Glendenning, Lisa and Beschastnikh, Ivan and Krishnamurthy, Arvind and Anderson, Thomas},
+	booktitle={Proceedings of the Twenty-Third ACM Symposium on Operating Systems Principles},
+	pages={15--28},
+	year={2011}
+}
+
+@article{spanner,
+	title={Spanner: Google’s globally distributed database},
+	author={Corbett, James C and Dean, Jeffrey and Epstein, Michael and Fikes, Andrew and Frost, Christopher and Furman, Jeffrey John and Ghemawat, Sanjay and Gubarev, Andrey and Heiser, Christopher and Hochschild, Peter and others},
+	journal={ACM Transactions on Computer Systems (TOCS)},
+	volume={31},
+	number={3},
+	pages={1--22},
+	year={2013},
+	publisher={ACM New York, NY, USA}
+}
+
+@article{slog,
+	title={Slog: Serializable, low-latency, geo-replicated transactions},
+	author={Ren, Kun and Li, Dennis and Abadi, Daniel J},
+	journal={Proceedings of the VLDB Endowment},
+	volume={12},
+	number={11},
+	year={2019}
+}
+
+%Weak consistency
+
+@inproceedings{chainreaction,
+	title={ChainReaction: a causal+ consistent datastore based on chain replication},
+	author={Almeida, S{\'e}rgio and Leit{\~a}o, Jo{\~a}o and Rodrigues, Lu{\'\i}s},
+	booktitle={Proceedings of the 8th ACM European Conference on Computer Systems},
+	pages={85--98},
+	year={2013}
+}
+
+@inproceedings{cops,
+	Acmid = {2043593},
+	XAddress = {New York, NY, USA},
+	Author = {Lloyd, Wyatt and Freedman, Michael J. and Kaminsky, Michael and Andersen, David G.},
+	Booktitle = {Proceedings\ of the 23rd ACM Symposium on Operating Systems Principles},
+	_doi = {10.1145/2043556.2043593},
+	_isbn_ = {978-1-4503-0977-6},
+	Keywords = {ALPS systems, causal + consistency, key-value storage, read transactions, scalable wide-area replication},
+	Address = {Cascais, Portugal},
+	Numpages = {16},
+	Pages = {401--416},
+	Publisher = {ACM},
+	Series = {SOSP '11},
+	Title = {{Don't Settle for Eventual: Scalable Causal Consistency for Wide-area Storage with COPS}},
+	_Url= {http://_doi.acm.org/10.1145/2043556.2043593},
+	Year = {2011},
+	Bdsk-Url-1 = {http://_doi.acm.org/10.1145/2043556.2043593},
+	Bdsk-Url-2 = {http://dx._doi.org/10.1145/2043556.2043593}
+}
+
+@article{cassandra,
+	title={Cassandra: a decentralized structured storage system},
+	author={Lakshman, Avinash and Malik, Prashant},
+	journal={ACM SIGOPS Operating Systems Review},
+	volume={44},
+	number={2},
+	pages={35--40},
+	year={2010},
+	publisher={ACM New York, NY, USA}
+}
+
+@inproceedings{dynamo,
+	Acmid = {1294281},
+	XAddress = {New York, NY, USA},
+	Author = {DeCandia, Giuseppe and Hastorun, Deniz and Jampani, Madan and Kakulapati, Gunavardhan and Lakshman, Avinash and Pilchin, Alex and Sivasubramanian, Swaminathan and Vosshall, Peter and Vogels, Werner},
+	Booktitle = {Proceedings\ of the 21st ACM SIGOPS Symposium on Operating Systems Principles},
+	_doi = {10.1145/1294261.1294281},
+	_isbn_ = {978-1-59593-591-5},
+	Keywords = {performance, reliability, scalability},
+	Address = {Stevenson, Washington, USA},
+	Numpages = {16},
+	Pages = {205--220},
+	Publisher = {ACM},
+	Series = {SOSP '07},
+	Title = {{Dynamo: Amazon's Highly Available Key-value Store}},
+	_Url= {http://_doi.acm.org/10.1145/1294261.1294281},
+	Year = {2007},
+	Bdsk-Url-1 = {http://_doi.acm.org/10.1145/1294261.1294281},
+	Bdsk-Url-2 = {http://dx._doi.org/10.1145/1294261.1294281}
+}
+
+@misc{couchDB,
+	author = {Apache Software Foundation},
+	title = {Apache CouchDB® 3.1.1 Documentation},
+	howpublished = {~\url{https://docs.couchdb.org/en/stable/}},
+	year = {2020}
+}
+
+%Index
+
+@article{lee2020asymmetric,
+	title={Asymmetric-partition replication for highly scalable distributed transaction processing in practice},
+	author={Lee, Juchang and Kim, Kyu Hwan and Lee, Hyejeong and Andrei, Mihnea and Ko, Seongyun and Keller, Friedrich and Han, Wook-Shin},
+	journal={Proceedings of the VLDB Endowment},
+	volume={13},
+	number={12},
+	pages={3112--3124},
+	year={2020},
+	publisher={VLDB Endowment}
+}
+
+@inproceedings{bindex,
+	title={BinDex: A Two-Layered Index for Fast and Robust Scans},
+	author={Li, Linwei and Zhang, Kai and Guo, Jiading and He, Wen and He, Zhenying and Jing, Yinan and Han, Weili and Wang, X Sean},
+	booktitle={Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data},
+	pages={909--923},
+	year={2020}
+}
+
+@inproceedings{lisa,
+	title={LISA: A learned index structure for spatial data},
+	author={Li, Pengfei and Lu, Hua and Zheng, Qian and Yang, Long and Pan, Gang},
+	booktitle={Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data},
+	pages={2119--2133},
+	year={2020}
+}
+
+@inproceedings{alex,
+	title={ALEX: an updatable adaptive learned index},
+	author={Ding, Jialin and Minhas, Umar Farooq and Yu, Jia and Wang, Chi and Do, Jaeyoung and Li, Yinan and Zhang, Hantian and Chandramouli, Badrish and Gehrke, Johannes and Kossmann, Donald and others},
+	booktitle={Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data},
+	pages={969--984},
+	year={2020}
+}
+
+@inproceedings{slik,
+	title={$\{$SLIK$\}$: Scalable Low-Latency Indexes for a Key-Value Store},
+	author={Kejriwal, Ankita and Gopalan, Arjun and Gupta, Ashish and Jia, Zhihao and Yang, Stephen and Ousterhout, John},
+	booktitle={2016 $\{$USENIX$\}$ Annual Technical Conference ($\{$USENIX$\}$$\{$ATC$\}$ 16)},
+	pages={57--70},
+	year={2016}
+}
+
+
+%Views/similar
+
+@article{analyticdb,
+	title={Analyticdb: Real-time olap database system at alibaba cloud},
+	author={Zhan, Chaoqun and Su, Maomeng and Wei, Chuangxian and Peng, Xiaoqiang and Lin, Liang and Wang, Sheng and Chen, Zhe and Li, Feifei and Pan, Yue and Zheng, Fang and others},
+	journal={Proceedings of the VLDB Endowment},
+	volume={12},
+	number={12},
+	pages={2059--2070},
+	year={2019},
+	publisher={VLDB Endowment}
+}
+
+@inproceedings{chronocache,
+	title={ChronoCache: Predictive and Adaptive Mid-Tier Query Result Caching},
+	author={Glasbergen, Brad and Langendoen, Kyle and Abebe, Michael and Daudjee, Khuzaima},
+	booktitle={Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data},
+	pages={2391--2406},
+	year={2020}
+}
+
+@inproceedings{marviq,
+	title={Marviq: Quality-Aware Geospatial Visualization of Range-Selection Queries Using Materialization},
+	author={Dong, Liming and Bai, Qiushi and Kim, Taewoo and Chen, Taiji and Liu, Weidong and Li, Chen},
+	booktitle={Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data},
+	pages={67--82},
+	year={2020}
+}
+
+@article{estocada,
+	title={ESTOCADA: towards scalable polystore systems},
+	author={Alotaibi, Rana and Cautis, Bogdan and Deutsch, A and Latrache, Moustafa and Manolescu, Ioana and Yang, Y},
+	journal={Proceedings of the VLDB Endowment},
+	volume={13},
+	number={12},
+	pages={2949--2952},
+	year={2020},
+	publisher={VLDB Endowment}
+}
+
+@article{oracleViews,
+	title={Automated generation of materialized views in Oracle},
+	author={Ahmed, Rafi and Bello, Randall and Witkowski, Andrew and Kumar, Praveen},
+	journal={Proceedings of the VLDB Endowment},
+	volume={13},
+	number={12},
+	pages={3046--3058},
+	year={2020},
+	publisher={VLDB Endowment}
+}
+
+@article{birds,
+	title={BIRDS: programming view update strategies in datalog},
+	author={Tran, Van-Dang and Kato, Hiroyuki and Hu, Zhenjiang},
+	journal={Proceedings of the VLDB Endowment},
+	volume={13},
+	number={12},
+	pages={2897--2900},
+	year={2020},
+	publisher={VLDB Endowment}
+}
+
+@inproceedings{noria,
+	title={Noria: dynamic, partially-stateful data-flow for high-performance web applications},
+	author={Gjengset, Jon and Schwarzkopf, Malte and Behrens, Jonathan and Ara{\'u}jo, Lara Timb{\'o} and Ek, Martin and Kohler, Eddie and Kaashoek, M Frans and Morris, Robert},
+	booktitle={13th $\{$USENIX$\}$ Symposium on Operating Systems Design and Implementation ($\{$OSDI$\}$ 18)},
+	pages={213--231},
+	year={2018}
+}
+
+%
+
+@inproceedings{lloyd2013stronger,
+	title={Stronger semantics for low-latency geo-replicated storage},
+	author={Lloyd, Wyatt and Freedman, Michael J and Kaminsky, Michael and Andersen, David G},
+	booktitle={10th $\{$USENIX$\}$ Symposium on Networked Systems Design and Implementation ($\{$NSDI$\}$ 13)},
+	pages={313--328},
+	year={2013}
 }
