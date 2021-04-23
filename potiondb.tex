@@ -616,6 +616,11 @@ Each PotionDB replica can be separated in three main components:
 
 \section{Transactions over Partially Replicated Data}
 
+%Garantias
+	% Snapshot isolation
+	% Read commited
+%Modelo de Consistencia?
+	%Modelo de consistencia no acesso às views (garantias do utilizador)
 
 \section{Supporting Views}
 \label{sec:views}
@@ -1408,6 +1413,46 @@ Thus, they are often used in weakly consistent systems, e.g., Redis \cite{redisC
 Some types of CRDTs have been introduced that can help with representing views of data, namely computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform}.
 The former computes some result over data (e.g., a sum), while the later focus on minimizing the information that needs to be replicated to correctly reply to queries (e.g.: a top-k CRDT doesn't need all entries to be replicated).
 In PotionDB every object is a CRDT, and in particular we make usage of both computational and non-uniform CRDTs to support our views.
+
+\andre{The comparisons to other systems are still unorganized, but at least there's already content.}
+
+ChronoCache \cite{chronocache} is a middleware caching layer for geo-replicated databases which focus on combining multiple queries into one request and caching query results.
+While the caching can speed up future requests, complex queries may still need to contact multiple servers and updates can invalidade the cache or else the clients read stale data.
+
+AnalyticDB \cite{analyticdb} focus on optimizing analyctic queries. 
+It separates write and read paths to prevent complex queries from slowing down writes. 
+It also makes usage of indexes to speed up queries.
+However, complex queries still take hundreds of milliseconds to execute and they may slow down other simpler queries.
+They do not make usage of views.
+
+SLOG \cite{slog} provides ACID transactions in a geo-distributed scenario.
+They share one of PotionDB's insights - not all data is relevant everywhere and clients will often access data relevant in their region.
+Thus, SLOG achieves low latency ACID transactions for transactions that can be served by a single datacenter.
+However, unlike PotionDB, queries regarding data partitioned accross multiple datacenters has considerably higher latency.
+We leverage on views of global data to prevent this.
+
+ESTOCADA \cite{estocada} is a system designed to work with polystores and focus on taking advantage of each database's stronger points and make extensive usage of the materialized views provided on each.
+
+%Preciso de rever este melhor (local/remoto?)
+Marviq \cite{marviq} tackles the specific situation of efficiently providing a visualization (e.g., scatterplot) of a large data set.
+While a more specific scenario than the one PotionDB aims for, it showcases similar challenges - large datasets that need to be sumarized and queried efficiently.
+They make usage of materialized views to handle range queries on the datasets.
+
+Magrino et. al. \cite{treaties} propose predictive treaties. 
+The insight is that some computations can be expressed by treaties, and is possible to antecipate a range of how a value might change over time.
+While this can lead to fast query replies and less duplicated data compared to views, since those treaties are not enforced as invariants, it is possible to read incorrect values.
+It may also be unfeasable to predict changes for some data.
+
+Noria \cite{noria} is a streaming data-flow system. 
+It makes usage of views and partial data to provide fast query reply and reasonable memory usage.
+While it features high throughput, it is only able to provide eventual consistency, which is tougher to work with than casual consistency.
+There is also concerns on the performance of queries when a view needs to be rebuilt and data is sharded.
+
+Dynamo \cite{dynamo} and Cassandra \cite{cassandra} both are eventually consistent databases (the latter can provide stronger consistency when needed).
+Both provide indexes to speed up some queries but not materialized views, thus complex queries may need to access large amounts of objects.
+CouchDB \cite{couchDB} provides both indexes and materialized views, however their views can only refer to data in one partition.
+
+%Should prob make a general comparison to MongoDB/Cassandra/Dynamo
 
 %Comparison to specific solutions?
 
