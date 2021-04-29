@@ -1401,10 +1401,11 @@ Weak consistency can help avoid both problems, but lack the useful consistency g
 
 \andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
 
-Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations to apply on each server), and are thus of interest for geo distribution.
-The partitioning of the data must be carefully done by considering where each object may be relevant, as otherwise clients may need to access far away servers and thus experience high latency.
-Many systems provide partial replication \cite{???}.
-However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different datacenters.
+Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations to apply on each server) \cite{spire, optimisticPartial, coda}, and are thus of interest for geo distribution.
+The partitioning of the data must be carefully done by considering where each object may be relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{spire, optimisticPartial, coda}
+However, one common problem with partial replication is that, sometimes, it is necessary to access data sharded among different datacenter \cite{spire}.
+%Many systems provide partial replication \cite{???}.
+%However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different datacenters.
 Without views, this process can be slow, specially when trying to provide a consistent snapshot of the database.
 PotionDB tackles this problem by providing views that summarize partially replicated data and directly answer such queries.
 
@@ -1442,6 +1443,7 @@ Magrino et. al. \cite{treaties} propose predictive treaties.
 The insight is that some computations can be expressed by treaties, and is possible to antecipate a range of how a value might change over time.
 While this can lead to fast query replies and less duplicated data compared to views, since those treaties are not enforced as invariants, it is possible to read incorrect values.
 It may also be unfeasable to predict changes for some data.
+Finally, since a strong consistency scenario is assumed, care is needed to specify treaties in such a way that synchronization is kept to close-by replicas, which may make it difficult or infeasible to specify treaties concerning global data.
 
 Noria \cite{noria} is a streaming data-flow system. 
 It makes usage of views and partial data to provide fast query reply and reasonable memory usage.
