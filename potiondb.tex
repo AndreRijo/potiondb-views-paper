@@ -616,6 +616,72 @@ Each PotionDB replica can be separated in three main components:
 
 \section{Transactions over Partially Replicated Data}
 
+In PotionDB data is partially replicated across the servers.
+Moreover, views may refer to data not present in the local replica.
+In this section we first clarify the guarantees clients have when accessing non-view objects in PotionDB, and afterwards extend it for views. 
+%Thus, in this section we clarify which guarantees a client has when accessing data in PotionDB, including views.
+
+\subsection{Consistency}
+
+By default, PotionDB provides Parallel Snapshot Isolation (PSI) \cite{sovran2011transactional} as its consistency model.
+Transactions can both read and update multiple objects in a single replica.
+With PSI, PotionDB guarantees that all objects are read at the same version and that all modified objects will have the same new version.
+Furthermore, other clients only observe the state of the objects either before the effects of the transaction, or after - that is,
+the new version of the objects can only be read once the transaction has finished commiting and being applied.
+
+PSI allows concurrent operations to happen in different replicas, and such is possible in PotionDB.
+CRDTs ensure the states of remote replicas converge.
+We also ensure causality when considering remote operations - once a client sees the effect of a remote operation, any later read will reflect the effects of said operation.
+
+Due to the isolation required to provide SI, PotionDB also provides the option of doing ``fast reads'' with less guarantees.
+Namely PotionDB provides the option for read commited.
+With this reads can be executed imediatelly and do not need to wait for any ongoing transaction to finish. 
+However, causality between objects is not ensured - a client may read object A in one version and then object B in a previous version.
+Single-object causality is still ensured though - if object A is read in version X, any further read done on object A by that client will be on version X or on a more recent version.
+
+\andre{Does this here need some justification on how this is acceptable for some use cases (and probably refer other DBs that do so? Also if we should refer that only with moderately high update rates are these fast reads needed.}
+
+\subsection{Views}
+
+One key challenge in PotionDB is keeping views synchronized with their base data, even when part of that data is not replicated locally.
+It is also important to provide useful guarantees to the clients accessing the view, in order to facilitate application developing.
+To better explain our guarantees, we define four scenarios, based on the read consistency used and whenever a view's base data is present or not:
+
+\begin{itemize}
+	\item PSI and base data present: a view and its base data are updated in the same transaction.
+	Since all of a transaction's updates are applied at one point in time from the client's view, a view always reflects the latest data and is consistent with the base data.
+	If a client fetches a view and a base data object in the same transaction, it is guaranteed that the same version will be provided for both.
+	\item PSI and base data not present: the view is kept updated as view updates from other replicas are received.
+	It is possible that the base data in a remote replica may be in a more recent version than the view in the local replica.
+	However, it is guaranteed that eventually the local replica will receive all view updates from other replicas with relevant base data.
+	\item Read commited and base data present: it is possible to read different versions for object and view even if done in the same transaction.
+	PSI should be used if it is desired to read both the view and base data consistently.
+	Noteworthy, since single-object causality is ensured, reading just the view will always wield the same version or more recent versions than the prior read's.
+	\item Read commited and base data not present: single-object causality is ensured. 
+	The view will receive updates from other replicas and will, eventually, reflect the latest state.
+\end{itemize}
+
+\subsection{Operations on objects not locally replicated}
+
+In an optimal scenario, clients only need to access data that is present in a nearby server
+Ideally, partial replication is done in such a way that data is distributed according to its relevance in the geographical area where each server is located in.
+This is also the scenario for which PotionDB is optimized.
+We do however recognize the need for queries that may involve global data (namely analytic/statistical queries), hence why we provide materialized views of data not replicated locally.
+
+Nevertheless, in case a client sporadically needs to access an object not served by a view and not locally replicated, the client has two options:
+\begin{enumerate*}[label=(\roman*)]
+	\item \label{remote1}directly contact a replica of the said object; 
+	\item \label{remote2}request the operation on the server the client was already accessing.
+\end{enumerate*}
+
+Option \ref{remote1} is the expected use case and the fastest to execute, as the request can be done concurrently while still operating on the original server.
+Option \ref{remote2} is also provided, however, for ease of use and for when it is intended for the object to be accessed in the context of an already ongoing transaction.
+We note, however, that option \ref{remote2} is slower - internally, what is done is that the server receiving the request redirects it to another server and awaits its reply.
+That is, the transaction will be on hold until the other server replies and the client is, effectively, paying 2 round-trips of latency (between servers + server the client is contacting).
+
+We believe for most use cases, good data locality when doing partial replication, alongside the usage of views, will make needing to access other replicas a very sporadic event.
+We note that data which may be revelant everywhere can still be replicated in every server if desired.
+
 %Garantias
 	% Snapshot isolation
 	% Read commited
