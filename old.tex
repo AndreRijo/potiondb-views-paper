@@ -58,6 +58,106 @@ Nuno Preguiça\\
 
 \maketitle
 
+
+%%%%
+%%%%Test deleted at 13/05/21
+\subsection{Transactions}
+
+\andre{This section quite likely still needs to be heavily worked on, but I don't know how to proceed with it...}
+%Somehow explain that we'll cover casual consistency/PotionDB's consistency guarantees in the transactions subsubsection.
+
+PotionDB offers transactions with casual consistency.
+That is, clients see operations' effects by an order consistent with causality \cite{???}.
+%Probably cite lamport or similar
+Since casual consistency is a form of weak consistency, concurrency conflicts will still occour when operations are applied on different replicas.
+We leverage on CRDTs in order to deal with those.
+
+%We now describe in more detail which guarantees our transactions provide, as well as how we keep views and their base objects in sync.
+Transactions allows to group multiple operations together and have them executed with certain guarantees.
+They facilitate the usage of database systems \cite{???}.
+For example, when registering a sale of a product, it is useful to have the product stock and customer info to be updated simultaneously. %TODO: We might need a better example
+
+Relational databases typically provide ACID (atomicity, strong consistency, isolation, durability) guarantees for their transactions \cite{???}.
+These properties ensure that, respectivelly:
+\begin{enumerate*}[label=(\roman*)]
+	\item either all operations execute successfully or none does;
+	\item the database is left in a consistent state;
+	\item there is no interferance from other transactions;
+	\item the effects of the operations will not be lost even if replicas fail.
+\end{enumerate*}
+Having all of these properties facilitates the development of applications, as it reduces the possible anomalities that may be observed.
+E.g., in the scenario of a cash transfer between two entities, if we forego atomacity, it's possible the cash is withdraw from one account without being deposited in the other due to, e.g., a server crash.
+
+Unfortunately providing ACID in a database requires providing strong consistency \cite{???}
+%TODO: I need to find sources for this
+, which implies reduced fault tolerance and may limit performance.
+In a geo-distributed scenario it also implies a quite higher latency overhead due to the required synchronization between DCs \cite{???}.
+Transactions are still useful even without all ACID guarantees, as is evidenced by multiple weakly consistent databases providing them with different guarantees \cite{???}.
+%TODO: This might need an example
+
+PotionDB supports non-ACID transactions.
+Transactions in PotionDB can span any number of partitions (both internal and external) existent in a replica, but it cannot refer to buckets that aren't replicated locally.
+That is, transactions are local to a replica.
+We support both read-only, write-only and mixed transactions, with all having the same guarantees.
+
+PotionDB's transactions are atomic and provide causal consistency.
+Each transaction runs isolated from other transactions in the same server, but the same objects may be concurrently modified by different transactions in different servers.
+Durability isn't ensured, as replication is asynchronous and operations don't need to be written to disk for a transaction to commit.
+In order to understand in detail the guarantees of PotionDB's transactions, some insight on how they're handled needs to be given.
+
+\andre{We don't exactly guarantee atomicity - if the replica executing the transaction fails while applying updates, the DB will be left in an inconsistent state. Which isn't exactly relevant, since data would be lost in that case anyway... We do guarantee that, if the server doesn't fail, the client either sees the effect of the whole transaction or of none of its operations.}
+
+\andre{Also... how much detail of the transaction execution mechanism should I provide here? Or just talking about the guarantees is enough?}
+
+Each replica maintains a vector clock which summarizes the current DB state.
+Each entry in the vector clock corresponds to the latest commit of each replica that is known locally.
+When a transaction starts, a copy of this vector clock is associated to the transaction.
+The entry correspondent to the local replica is processed differently - for that entry, a unique, monotonically increasing timestamp, is assigned to each transaction, which ensures each transaction will commit with a different vector clock.
+
+\andre{Where (and should I?) do I explain how the version management works? Or should we leave that for a short paper in another conference? Also I'm hiding the 2 phase-commit part, and that commitTS != initialTS.}
+
+Both updates and reads take the transactions' vector clock into account.
+More precisely, reads execute on the state of the object correspondent to the transaction's vector clock (i.e., ignoring all update operations that may have happened afterwards, but considering updates in the same transaction that happened-before).
+The effects of updates are only applied to the latest-version of an object when the transaction is commiting.
+Transactions commit according to the order defined by the vector clocks.
+A transaction is considered commited after all operations have been applied.
+%Updates generate new states which are then marked with the transaction's timestamp, in order for reads to refer to the correct version.
+%A transaction is considered commited only after all operations have been applied. 
+At this moment, if it isn't a read-only transaction, the replica's entry on the local vector clock is updated and the client is notified.
+
+%PotionDB's guarantees in regard to transactions are related with how the vector clock is handled. More precisely:
+We can now leverage on the workings of PotionDB's transactions to detail the exact guarantees they provide.
+
+%E.g., in a read-only transaction, even if some update operation concurrently modifies objects referred by the read transaction, the results returned by reads will all be using the version specified by the transaction. That is, it is as if the update operation happened after the reads.
+
+\paragraph{Atomicity}  A transaction is atomic because the replica's vector clock is only updated after all operations are successfully applied. 
+If at least one fails, all updates are rendered innefective as we return the CRDTs to their previous state.
+Previous reads on that transaction are irrelevant due to the transaction being considered as aborted.
+Reads on other transactions don't see the effects of a transaction until it is commited, thus aborts don't pose a problem to them.
+Other replicas only start applying a transaction after all updates for it are received.
+
+\paragraph{Consistency} As every transaction has a vector clock associated, we can thus totally order all transactions. 
+A transaction is only executed if all transactions with a smaller vector clock have already been executed. 
+We ensure locally generated transactions are executed by the order specified by the monotonicaly increasing local timestamp.
+For concurrent transactions any order is possible and consistent with casual consistency.
+CRDTs ensure concurrent operations don't pose a problem as they're commutative \cite{???}.
+Whenever a CRDT is about to be updated, all of its matching triggers are executed and the resulting updates are included in the same transaction with the same clock.
+%Whenever a CRDT with views associated is updated, the views are also updated in the same transaction with the same clock.
+Thus, PotionDB respects causality when executing transactions and, as such, provides causal consistency.
+
+\paragraph{Isolation} %During the execution of a transaction, reads and updates are all executed on top of the version specified by the transaction's vector clock.
+%Inside each partition there is no concurrency and all of a transaction's operations are executed in a row
+There is no concurrency inside each partition.
+Reads are executed on top of the version specified by the transaction's vector clock. %TODO: Should I refer here that txn updates are considered for the read albeit they don't change the state yet?
+Updates are only applied when commiting and are executed sequentially inside the partition.
+Updates from other transactions are either executed before the first operation of the current transaction, or after the last.
+Thus, the effects of each local transaction can be ordered sequentially, which implies isolation.
+We do not guarantee isolation between transactions executing in different replicas however.
+
+It is important to note that even though we provide atomicity, consistency and isolation guarantees, the latter two are not equivalent to the ones provided in ACID.
+We provide causal consistency (i.e., weak consistency) instead of strong consistency; we don't guarantee isolation between servers (which is required in ACID).
+As evidenced in both academy and industry, while ACID properties are quite useful, they are also quite limiting in terms of fault tolerance and performance \cite{???}.
+
 %%%%%
 %%%%%Text deleted at 23/02/20
 \section{API}
