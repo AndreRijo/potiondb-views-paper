@@ -485,8 +485,8 @@ E.g., in a set, \emph{update(uid, add, ``e'')} adds the element ``e'' to the set
 \subsection{View Definition API}
 \label{subsec:viewAPI}
 
-PotionDB supports materialized views, which can speed up the execution of certain queries by summarizing data spread accross multiple objects.
-The data referred by a view does not need to be all replicated in a single server - such data can be partitionated accross multiple servers.
+PotionDB supports materialized views, which can speed up the execution of certain queries by summarizing data spread across multiple objects.
+The data referred by a view does not need to be all replicated in a single server - such data can be partitionated across multiple servers.
 
 Views can be read the same way as non-view objects, by using the same \emph{get} and \emph{read} interface.
 On the other hand, updates work differently - PotionDB automatically updates views by using user supplied \emph{triggers}.
@@ -561,9 +561,13 @@ In this particular case, any object that simultaneously meets the requirements o
 will trigger an update to the topK whenever an increment is applied.
 The key of the counter object is used for the id of the entry in the topK.
 
-We leave the details on the inner workings of triggers, as well as views, to Section \ref{sec:views}.
+\andre{I added this new paragraph to explain @ custom code}.
 
-\andre{No idea if the phrase above is needed, or if I could had ended the section with the paragraph before}
+More complex queries may require a view which needs multiple steps or intermediate calculations to update.
+For such scenarios, the current implementation of PotionDB allows generic code to be associated to the trigger.
+Ideally, a specific data manipulation language would be used for this purpose (e.g., \cite{oracleTriggers}), but this sits outside of the scope of the paper and is thus left as future work.
+We leave further details on the inner workings of triggers, as well as views, to Section \ref{sec:views}.
+
 
 
 %Apresentar as operações - que tipo de views são suportadas.
@@ -1120,6 +1124,279 @@ This in turn has the downside of, in servers which replicate both the view and s
 
 \fi
 
+\section{Designing views for applications}
+
+\andre{This probably needs a better title}
+
+In order to evaluate PotionDB's performance, as well as better grasp the expressivity of views in PotionDB, we implemented TPC-H's data model, along with the set of possible updates and a subset of the proposed queries.
+In this section we discuss the experience of adapting a SQL-oriented database scenario (TPC-H) to PotionDB, namely focusing on how we designed the views and limitations of our solution.
+
+\subsection{Dataset and partitioning}
+
+TPC-H's \cite{tpch} data set represents an e-commerce scenario, similar to the one described in Section \ref{sec:overview}.
+Tables are used to represent customers, suppliers, products (parts), orders, nations and regions (continents).
+Two extra tables represent associations: ``partsupply'' and ``lineitem'' represent, respectively, a product which one supplier can sell and a product sold in an order.
+
+The dataset is adequate for partial replication.
+We created a bucket for each region, and partitioned each table as follows:
+
+\begin{itemize}
+	\item Customer, Supplier, Nation, Region, Orders, Partsupply: associated to one region bucket. 
+	All but orders and partsupply have a nation or region directly associated to it, which is used to select the bucket.
+	For orders and partsupply, we select, respectively, the customer's region and supplier's region.
+	\item Parts: associated to the bucket ``parts'' which is replicated in every replica.
+	This is due to the fact that multiple suppliers across the globe may supply the same part; customers across the world can also order the same part.
+	\item Lineitem: associated to both the customer's and the supplier's region.
+	The details of an ordered object may be relevant for the customer, as well as the supplier.
+\end{itemize}
+
+We highlight that views are replicated in every server (they have their own bucket).
+Thus, queries that may access data from multiple regions (e.g., the percentage of revenue from sales in which the supplier is not in the same region as the customer) can still be served efficiently.
+We also note that lineitems being associated to two regions is not as problematic as it might look at first glance.
+As each server has one region associated to it (plus another one for fault-tolerance purposes), very few lineitems will be duplicated in the same server.
+Updating and storage costs are still quite lower than if we fully replicated lineitems, as even with duplication, the amount of lineitems in each server is quite less than if fully replicated.
+
+\andre{One detail which I did not mention, as I think it might be confusing at this point - if we have some view that may be triggered by some new/deleted/updated lineitem, we can deterministally choose, e.g., to only generate a view update for the bucket of the supplier's region. That is, duplicated view updates are not possible even with duplicated lineitems.}
+	
+\subsection{Converting tables to objects}
+
+\andre{Note: I'd expect to many others having done this to test key-value DBs. Should I refer any of those? If so, any paper suggestions are welcome :)}
+
+All the tables in the TPC-H scenario have either an unique key (e.g., customer key for customer) or multiple keys that, when combined, are unique (e.g., part key + supplier key for partsupply).
+Thus, we use those as the keys for our objects.
+
+Each entry in a table maps directly to a map CRDT. E.g., each customer has a map representing it, with the object's key being the customer key.
+The fields of a table are also CRDTs - we use whichever data type most closely matches the data in the tables (e.g., registers for strings, counters for numbers, etc.).
+Buckets are associated to each object as described in the previous section.
+
+\subsection{Designing views for queries}
+
+\andre{I don't think this introdutory text is good - I need some help here.}
+
+\andre{I think having a scheme (image) to show the resulting view of a query, as well as how it is accessed, would be useful. I'll work on that later on.}
+
+\andre{I selected to explain the query 18 (Q18). Here's my thoughts behind each query implemented in PotionDB: \\
+- Q3 is not complicated to explain, however the motivation query is too specific (not an interesting ``question'' to answer). \\
+- Q5 is easy to explain, has good motivation, but data is local to a region. \\
+- Q11 is somewhat tough to explain (complicated SQL query). Decent motivation query. Also the views for this don't need updates.\\
+- Q14 is too simple. It has a good motivation query however. \\
+- Q15 is okay to explain, has good motivation query, but it's the only query where TPC-H authors themselves define a view. \\
+- Q18 has a decent motivation query, is okay to explain. Uses topK too.
+}
+
+Given a query, designing the view(s) appropriate to answer said query consists in figuring out how can the type of CRDTs offered by PotionDB be combined to, ideally, reply to the query in a single read operation.
+%The idea is to have the view configured in such a way that, by applying a defined list of steps, we can fetch the reply to the query with just one read operation.
+
+To design views, we define the following guidelines to ease the process:
+
+\begin{itemize}
+	\item Filter the data by using maps, or different views. E.g., if all the variations of a query always ask for the data of a month, use a map with one entry per month, or a view for each month.
+	\item Some SQL keywords have direct equivalents in CRDTs. E.g., avg() corresponds to the average CRDT, sum() to counter, limit() to topK, etc.
+	\item Views can be composed of multiple objects, and ``normal'' objects can be used as views too.
+	For example, a counter can be used as a view to answer a query like ``total number of orders done by a client''.
+	Another example consists in using a map inside of another map to efficiently filter data with multiple parameters, e.g., by nation and year.
+\end{itemize}
+
+To illustrate the process of defining views, consider query 18 (Q18) of TPC-H \cite{tpch}. The SQL query is defined as follows:
+
+\vspace{1em}
+
+``Return the first 100 rows:''
+
+\emph{select}
+
+	\hspace{1.5em} c\_name, c\_custkey, o\_orderkey, o\_orderdate, o\_totalprice, \\sum(l\_quantity)
+	
+\emph{from}
+
+	\hspace{1.5em} customer, orders, lineitem
+
+\emph{where}
+
+	\hspace{1.5em} o\_orderkey in (
+	
+		\hspace{3em} \emph{select}
+		
+			\hspace{4.5em} l\_orderkey
+			
+		\hspace{3em} \emph{from}
+		
+			\hspace{4.5em} lineitem
+			
+		\hspace{3em} \emph{group by}
+		
+			\hspace{4.5em} l\_orderkey having sum(l\_quantity) $>$ \{argQuantity\}
+			
+		\hspace{1.5em}) and c\_custkey = o\_custkey and o\_orderkey = l\_orderkey
+	
+\emph{group by}
+
+	\hspace{1.5em} c\_name, c\_custkey, o\_orderkey, o\_orderdate, o\_totalprice
+
+\emph{order by}
+
+	\hspace{1.5em} o\_totalprice desc, o\_orderdate
+	
+\vspace{1em}
+
+In short, this query tries to access the top 100 customers who have placed a large quantity order, using as a sorting criteria the total value of the order.
+The minimum value for an order to be considered ``large'' is represented by \{argQuantity\} and is a parameter of the query.
+In the where clause, there's an inner query, which in practice collects all orders whose total quantity of ordered items is higher than \{argQuantity\}.
+	
+As referred, the only argument of this query is \{argQuantity\}, which is defined in TPC-H as being an integer in the range [312, 315].
+Since we're only interested in one quantity at a time, and they have a limited range, we can associate each quantity's data to a different view object.
+This has two implications: first, a read of a given quantity only needs to read one of the objects; second: an update may need to update multiple view objects.
+E.g., a new order with 314 ordered items implies updating the view for quantity 312 and 313.
+
+The next step is decide which CRDT(s) each object should use.
+The ``return the first 100 rows'', as well as the order by, suggest using a TopK CRDT to hold the view's data.
+To be more precise, we use a TopK CRDT in which each pair has as ID the l\_orderkey (as suggested by the group by of the internal query) and as value the o\_totalprice.
+In each pair we also append c\_name, c\_custkey and o\_orderdate as extra data.
+This extra data is optional - the intention is that fetching it directly from the TopK is faster than fetching the customer's and order's data alongside the TopK, specially as that could require accessing more than one server.
+This represents a trade-off between extra view data and query execution speed, which should be considered when designing views in PotionDB, similarly to in relational databases.
+
+\andre{I don't really have any specific logic that I use as reference to define the updates... I just think on how to translate an object update into a view update.}
+
+For the context of TPC-H, the dataset is static apart from orders and lineitems.
+Orders (and their respective lineitems) can be added and removed, but each object is immutable.
+Thus, to keep views up to date, we only need to consider the addiction/removal of orders and lineitems.
+
+For the query considered (query 18), the trigger for deletion is rather simple:
+
+\firstblockemph{\hspace{-1.2em}Create Trigger q18Removal}
+
+\middleblockemph{\hspace{-1.2em}On (order*, bucket, MAP)}
+
+\middleblockemph{\hspace{-1.2em}With MapDelete(orderkey)}
+
+\middleblockemph{\hspace{-1.2em}Do (}
+
+\middleblockemph{\hspace{-0.5em}	Update ("q18\_312", "views", TOPK) With remove(orderkey)}
+
+\middleblockemph{\hspace{-0.5em}	Update ("q18\_313", "views", TOPK) With remove(orderkey)}
+
+\middleblockemph{\hspace{-0.5em}	Update ("q18\_314", "views", TOPK) With remove(orderkey)}
+
+\middleblockemph{\hspace{-0.5em}	Update ("q18\_315", "views", TOPK) With remove(orderkey)}
+
+\lastblockemph{\hspace{-1.2em})}
+
+Removing on the four views may seem unecessary, as not all orders have large enough quantities.
+However, by the TopK CRDT definition, if an entry does not exist in the TopK, then a removal is a no-op.
+In other words, if the order was not on the views, then the remove will have no effect and thus does not need to be propagated.
+
+\andre{In relation to what's above, another possible solution would be to add an extra field to orders to know the amount of items ordered and thus know which TopKs to remove from. The current implementation of the clients keeps this information.}
+
+The addition is more complex.
+For a new order, it is necessary to add up the amount of the items in that order, to know if the order should be added to the views.
+As such, it is necessary to define code that, when a new order is added, sums the quantities of the items being added with that order and, if they are above 312, fires the necessary updates.
+The trigger (and a simplified pseudo-code) can be defined as follows:
+
+\firstblockemph{\hspace{-1.5em}Create Trigger q18Add}
+
+\middleblockemph{\hspace{-1.5em}On (order*, bucket, MAP)}
+
+\middleblockemph{\hspace{-1.5em}With MapAdd(orderkey, custkey, orderdate, totalprice, ...)}
+
+
+\middleblockemph{\hspace{-1.5em}Do Code} (
+
+\hspace{2.5em}let sumAmount = 0
+
+\hspace{2.5em}for lineitem in transaction \{
+
+\hspace{3.5em}if (lineitem.orderkey = orderkey) \{
+			
+\hspace{4.5em}sumAmount += lineitem.amount
+		
+\hspace{3.5em}\}
+
+\hspace{2.5em}\}
+
+\hspace{2.5em}//Views are for 312-315. -1 to account for $>$ quantity
+
+\hspace{2.5em}sumAmount = max(sumAmount-1, 315)
+
+\hspace{2.5em}if sumAmount $>$= 312 \{
+
+\hspace{3.5em}let custName = \emph{Get (custkey, bucket, MAP) With MapGetField("c\_name")}
+
+\hspace{3.5em}for i = 312; i $<$= sumAmount; i++ \{
+
+\hspace{4.5em}\emph{Update ("q18\_" + i, "views", TOPK)}
+
+\hspace{4.5em}\emph{With add(orderkey, totalprice, custName, orderdate)}
+
+\hspace{3.5em}\}
+	
+\hspace{2.5em}\}
+
+\lastblockemph{\hspace{-1.5em}})
+
+In short, whenever a new order is defined, the trigger looks into the lineitems defined in the transaction for said order.
+It is important to note that for TPC-H, the items of an order are all defined alongside the order itself, so this search can be implemented by looking at the operations defined before the order, until a non-lineitem operation is found.
+The amounts of the items of the order are summed up, and if the summed amount is at above 312, updates are fired for the respective views.
+
+For other queries the same steps were done: analyse the query, decide on CRDT(s) to implement the view and then define triggers to generate updates to the object view(s).
+
+\andre{Does this needs some concluding note?}
+
+%The simplest (but not necessarely the most efficient) solution is to define two triggers per view, one for the addition and another for the removal.
+%The only difference between triggers is the necessary quantity for the order.
+
+%The trigger for a new order looks as follows:
+
+%Create Trigger q18New312
+%On (order*, bucket, Map)
+%With MapUpdate(orderkey, orderdate, totalprice, (...))
+%Do Update (q18\_312, views, TOPK)
+%With add()
+
+\subsection{Limitations}
+
+The main limitation of PotionDB's views is that they're designed for recurring queries - that is, each view is defined to precisely answer a given query.
+As such, for scenarios in which the set of queries is constantly changing, it might be challenging to define views and triggers in PotionDB to serve those queries efficiently.
+
+Another shortcoming comes to the triggers themselves - for more complex queries, it may be necessary to define custom code for the trigger's body.
+This can raise security and safety concerns.
+We note however, that this is an implementation shortcoming and not a design one - it would be possible to use an existing data manipulation language (e.g., \cite{oracleTriggers}) instead of custom code.
+
+\andre{Any suggestions for further limitations?}
+
+
+\subsection{Discussion of implemented TPC-H queries}
+
+\andre{Note: This should be somewhere else (maybe its own section? Suggestions?), but for now I'll leave it here}
+\andre{TODO: Explain/mention TopSum in relevant sections}
+
+To test PotionDB, only a subset of the TPC-H queries were implemented.
+Thus, we had to choose a subset which represented varios kinds of queries, testing multiple types of CRDTs and scenarios.
+We also considered how interesting the business question associated to each query is when selecting those, however here we focus on their relevance to testing PotionDB:
+
+\andre{I'm not sure I should keep the last phrase above}.
+
+\begin{itemize}
+	\item Query 3: this query is interesting as it tests a multitude of things - it requires presenting data from different kinds of objects (lineitems, orders); updating requires accessing yet another kind of object (customer); tests viability of having a view for each day in a given period; tests implementing order by and limit with TopK CRDT.
+	\item Query 5: this query was choosen to represent queries local to a region, i.e., queries that could be served only with data locally replicated, not requiring global views.
+	This tests the usage of maps to implement group by and counters for sums.
+	\item Query 11: this query also limits the number of results returned but, instead of being e.g. ``limit 100'', it instead only returns results above a certain value, with this value being dependent on each nation's data.
+	This thus requires a different approach to querying a TopK CRDT, and to maintaining both the TopK and the reference value updated.
+	\item Query 14: this query was selected to choose yet another type of CRDT for views (average), as well as different kinds of the same object affecting the view differently.
+	To be precise, lineitems on ``sale'' (tested with a string comparison) affect the view differently from those not on sale.
+	\item Query 15: the main interest behind this query consists in it requiring to update the same entry in a ``top'' object multiple times.
+	Thus, this requires using the TopSum instead of TopK in order to handle both increments and decrements to each entry as orders are added or removed.
+	\item Query 18: this query requires the TopK to maintain extra data in order to query efficiently - data from customers, orders and a sum of lineitems is required.
+	Another point of interest is how the views of this query are expected to have few entries compared other queries, thus it tests a scenario where triggers may be fired often but without having any effect.
+	%The main source of interest for this query, however, is how it is expected to have usually few results to return while having to maintain entries for all orders.
+	%Thus, this tests the efficiency of non-uniform replication in keeping only the necessary data to answer the query replicated in every replica.
+\end{itemize}
+
+As a final note, we highlight that we analyzed all queries of TPC-H.
+While only the aforementioned 6 were implemented, we designed a possible set of views using PotionDB's objects that would be able to reply to each query defined in TPC-H.
+This implies that it is, in theory, possible to support the full set of TPC-H queries in PotionDB, thus reinforcing the expressiveness of PotionDB's object types.
+
+\andre{Should I mention that maybe the triggers would need to be more expressive to support updating all of those views? Then again we're already allowing custom code on them...}
+
 \section{Evaluation}
 
 In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
@@ -1335,7 +1612,7 @@ With a single key used by all clients, no concurrency is possible when an update
 
 The observed performance is worse than in a read-only scenario, 
 which is specially noticeable in scenarios with multiple operations per transaction.
-IThis is even more noticeable in the case with only one key, as the vast majority of transactions will include updates and thus the different clients end up having their transactions executed sequentially.
+This is even more noticeable in the case with only one key, as the vast majority of transactions will include updates and thus the different clients end up having their transactions executed sequentially.
 Having multiple keys eases this, as only partitions which get updated need to be locked, thus some concurrency is still possible.
 
 \andre{This subsection VERY LIKELY needs to be rewritten/better thought of. Maybe even choose different data to show...}
@@ -1457,7 +1734,7 @@ They do not make usage of views.
 SLOG \cite{slog} provides ACID transactions in a geo-distributed scenario.
 They share one of PotionDB's insights - not all data is relevant everywhere and clients will often access data relevant in their region.
 Thus, SLOG achieves low latency ACID transactions for transactions that can be served by a single datacenter.
-However, unlike PotionDB, queries regarding data partitioned accross multiple datacenters has considerably higher latency.
+However, unlike PotionDB, queries regarding data partitioned across multiple datacenters has considerably higher latency.
 We leverage on views of global data to prevent this.
 
 ESTOCADA \cite{estocada} is a system designed to work with polystores and focus on taking advantage of each database's stronger points and make extensive usage of the materialized views provided on each.
