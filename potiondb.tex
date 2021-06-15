@@ -30,6 +30,9 @@
 \newcommand{\firstblockemph}[1]{\vspace{\emphvspace}\hspace{2em}\emph{#1}}
 \newcommand{\middleblockemph}[1]{\hspace{2em}\emph{#1}}
 \newcommand{\lastblockemph}[1]{\hspace{2em}\emph{#1}\vspace{\emphvspace}}
+\newcommand{\emphfunction}[2]{\emph{#1}($#2$)}
+
+\newtheorem{theorem}{Theorem}
 
 \vldbTitle{}
 \vldbAuthors{}
@@ -628,6 +631,80 @@ Each PotionDB replica can be separated in three main components:
 
 \section{Transactions over Partially Replicated Data}
 
+In PotionDB objects are partially replicated across the servers.
+Furthermore, views can refer to data not present in the local replica.
+Both factors can make it difficult to reason about the consistency guarantees of PotionDB.
+
+Thus in this section we define precisely the consistency model provided by PotionDB.
+We also define formally what a view object is in PotionDB.
+
+%artigo com valter 2018, secção 2
+%Definir matematicamente a consistência e as views
+%- Ver a base de dados como sendo um conjunto de objectos e um conjunto de views, sendo que as views são uma função dos objecto(s)
+%- Definir como estão as views num dado snapshot
+%- Ou seja, a consistência de ler... e manter up-to-date.
+
+\subsection{Views}
+
+\andre{This has some overlap with Section \ref{subsec:databasemodel}}
+
+We define a PotionDB database as a set of objects partially replicated across multiple servers.
+Updates and reads can be applied on an object.
+A transaction is a list of updates and/or reads for one or more objects.
+Each object has a bucket associated, with all objects in a bucket being replicated in the same subset of replicas. \emphfunction{B}{o} returns the bucket of an object \emph{o}.
+
+We consider a view to be any object for which it is possible to describe its state as being a funcion of object(s).
+Assuming that \emphfunction{S}{o} returns the state of the object \emph{o}, we can say that \emphfunction{S}{v} = \emphfunction{F}{o_1, o_2, ..., o_n}, where $v$ is a view, $o_1, o_2, o_n$ the objects which $v$ is based on, and \emph{F} the function that converts those object's state into the view's state.
+
+Our views are updated in the same transaction as the objects they refer to.
+%That is, $\forall v : \exists u_o \in T \land S(v)=F(o, ...) : \exists u_v \in T$
+That is, $\forall v: \exists u_o \in T \land S(v)=F(o, ...) : \exists u_v \in T$, where $u_o$ and $u_v$ represent updates for, respectively, object $o$ and view $v$ in transaction $T$.
+Non-formally, we assume there is some mechanism that provides updates for all views which refer to some object being updated in a given transaction, applying those view updates in the same transaction.
+%We discuss the implications of partial replication on updating views in Section \ref{subsec:partialReplicationViews}.
+
+\subsection{Consistency}
+
+PotionDB supports both Parallel Snapshot Isolation (PSI) \cite{sovran2011transactional} and Read Commited (RC) as its consistency models.
+We now explain precisely which guarantees PotionDB provides under those two models.
+
+To start with, we will consider only one server and the Snapshot Isolation (SI) model. 
+SI allows each transaction to access a consistent view (snapshot) of the database.
+More precisely, a snapshot can be defined as the sequence of transactions that happened before said snapshot.
+Assuming $SN_i$ represents the initial empty state of the database, a $T$ represents a transaction, we can define a snapshot $SN_n$ as the result of $T_m(T_{m-1}(...(T_1(SN_i))))$, where $T_1$ ... $T_m$ represent the list of transactions that happened-before $SN_n$.
+
+All transactions issued in a replica can be serialized.
+That is, given any local transactions $T_1$ and $T_2$, either $T_1 \prec T_2$ or $T_2 \prec T_1$.
+Updates in a transaction are executed according to issued order.
+Furthermore, for any two local transactions $T_1$ and $T_2$, if  $T_1 \prec T_2$, then $\forall u_n \in T_1 \land \forall u_m \in T_2 : u_n \prec u_m$.
+
+It was previously stated that updates for a given object and all the views that refer to it happen in the same transaction.
+Given said statement, along with our snapshot definition, we can state the following theorem:
+
+\begin{theorem}
+\label{theorem:viewobj}
+	Given any object $o$ present in snapshot $SN_n$, the state of all views which refer to object $o$ matches the respective function $F$ that describes a view's state based on the object $o$.
+\end{theorem}
+
+Informally, Theorem \ref{theorem:viewobj} states that for any given object $o$ in snapshot $S_n$, all views that refer to it are consistent and thus include the effects of all operations applied to $o$ until snapshot $S_n$.
+
+\andre{Anything else I need to define for snapshot isolation?}
+
+Parallel Snapshot Isolation (PSI) is an extension of SI.
+PSI allows for transactions executing in different servers to have different commit orders - that is, transactions can be concurrent when happening in different servers.
+The implication of this is that transactions originated from different servers may have a different execution order from server to server.
+Two transactions $T_1$ and $T_2$ are concurrent if $T_1 \not\prec  T_2 \land T_2 \not\prec  T_1$.
+
+\andre{I don't know how to define mathematically PSI. Basically what I want to say mathematically is that a serialization is correct if the order with which the transactions are applied respects the happens-before relationship of transactions.}
+
+A serialization of transactions under PSI is considered valid if the order of execution of the transactions respects the happens-before relationship. That is, for any $T_1 \prec T_2$, $T_1$ must be serialized before $T_2$.
+For concurrent transactions, any order which does not break the happens-before relationship with other transactions is valid.
+
+\andre{Section \ref{subsec:partialReplicationViews} describes the implications of partial replication in keeping views up-to-date. Do I need to refer that section here?}
+
+\if 0	
+
+\section{Transactions over Partially Replicated Data}
+
 \andre{The formal definition of PotionDB is already in section 3...}
 
 In PotionDB objects are partially replicated across the servers.
@@ -716,6 +793,8 @@ However, under RC, it is possible for different versions to be accessed in the s
 	%\item Read commited and base data not present: single-object causality is ensured. 
 	%The view will receive updates from other replicas and will, eventually, reflect the latest state.
 %\end{itemize}
+
+\fi
 
 \subsection{Operations on objects not locally replicated}
 \label{subsec:operationsNonLocal}
