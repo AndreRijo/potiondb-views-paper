@@ -646,39 +646,39 @@ We also define formally what a view object is in PotionDB.
 
 \subsection{Views}
 
-\andre{This has some overlap with Section \ref{subsec:databasemodel}}
-
 We define a PotionDB database as a set of objects partially replicated across multiple servers.
 Updates and reads can be applied on an object.
 A transaction is a list of updates and/or reads for one or more objects.
-Each object has a bucket associated, with all objects in a bucket being replicated in the same subset of replicas. \emphfunction{B}{o} returns the bucket of an object \emph{o}.
+Each object has a bucket associated, with all objects in a bucket being replicated in the same subset of replicas. %\emphfunction{B}{o} returns the bucket of an object \emph{o}.
 
-We consider a view to be any object for which it is possible to describe its state as being a funcion of object(s).
-Assuming that \emphfunction{S}{o} returns the state of the object \emph{o}, we can say that \emphfunction{S}{v} = \emphfunction{F}{o_1, o_2, ..., o_n}, where $v$ is a view, $o_1, o_2, o_n$ the objects which $v$ is based on, and \emph{F} the function that converts those object's state into the view's state.
+We consider a view to be any object for which it is possible to describe its state as being a function of object(s).
+Assuming that \emphfunction{S}{o} returns the state of the object \emph{o}, we can say that \emphfunction{S}{v} = \emphfunction{F}{o_1, o_2, ..., o_n}, where $v$ is a view, $o_1, o_2, ..., o_n$ the objects which $v$ is based on, and \emph{F} the function that converts those object's state into the view's state.
 
 Our views are updated in the same transaction as the objects they refer to.
 %That is, $\forall v : \exists u_o \in T \land S(v)=F(o, ...) : \exists u_v \in T$
 That is, $\forall v: \exists u_o \in T \land S(v)=F(o, ...) : \exists u_v \in T$, where $u_o$ and $u_v$ represent updates for, respectively, object $o$ and view $v$ in transaction $T$.
-Non-formally, we assume there is some mechanism that provides updates for all views which refer to some object being updated in a given transaction, applying those view updates in the same transaction.
+Non-formally, we assume there is some mechanism that provides updates for all views which refer to some object being updated in a given transaction. %applying those view updates in the same transaction.
 %We discuss the implications of partial replication on updating views in Section \ref{subsec:partialReplicationViews}.
 
 \subsection{Consistency}
 
 PotionDB supports both Parallel Snapshot Isolation (PSI) \cite{sovran2011transactional} and Read Commited (RC) as its consistency models.
-We now explain precisely which guarantees PotionDB provides under those two models.
+We now explain precisely which guarantees PotionDB provides under each model.
 
-To start with, we will consider only one server and the Snapshot Isolation (SI) model. 
+\subsubsection{Parallel Snapshot Isolation}
+
+To start with, consider only one server and the Snapshot Isolation (SI) model. 
 SI allows each transaction to access a consistent view (snapshot) of the database.
 More precisely, a snapshot can be defined as the sequence of transactions that happened before said snapshot.
 Assuming $SN_i$ represents the initial empty state of the database, a $T$ represents a transaction, we can define a snapshot $SN_n$ as the result of $T_m(T_{m-1}(...(T_1(SN_i))))$, where $T_1$ ... $T_m$ represent the list of transactions that happened-before $SN_n$.
 
 All transactions issued in a replica can be serialized.
 That is, given any local transactions $T_1$ and $T_2$, either $T_1 \prec T_2$ or $T_2 \prec T_1$.
-Updates in a transaction are executed according to issued order.
+When a transaction commits, its updates are executed according to the issued order.
 Furthermore, for any two local transactions $T_1$ and $T_2$, if  $T_1 \prec T_2$, then $\forall u_n \in T_1 \land \forall u_m \in T_2 : u_n \prec u_m$.
 
 It was previously stated that updates for a given object and all the views that refer to it happen in the same transaction.
-Given said statement, along with our snapshot definition, we can state the following theorem:
+Given said statement, along with our snapshot definition, the following theorem can be defined:
 
 \begin{theorem}
 \label{theorem:viewobj}
@@ -689,10 +689,10 @@ Informally, Theorem \ref{theorem:viewobj} states that for any given object $o$ i
 
 \andre{Anything else I need to define for snapshot isolation?}
 
-Parallel Snapshot Isolation (PSI) is an extension of SI.
-PSI allows for transactions executing in different servers to have different commit orders - that is, transactions can be concurrent when happening in different servers.
-The implication of this is that transactions originated from different servers may have a different execution order from server to server.
-Two transactions $T_1$ and $T_2$ are concurrent if $T_1 \not\prec  T_2 \land T_2 \not\prec  T_1$.
+Consider now multiple servers, as well as the model Parallel Snapshot Isolation (PSI).
+PSI is an extension of SI, allowing for transactions executing in different servers to have different commit orders - that is, transactions can be concurrent if they commit in different servers.
+This implies that transactions originated from different servers may have a different execution order from server to server.
+Two transactions $T_1$ and $T_2$ are considered concurrent if $T_1 \not\prec  T_2 \land T_2 \not\prec  T_1$.
 
 \andre{I don't know how to define mathematically PSI. Basically what I want to say mathematically is that a serialization is correct if the order with which the transactions are applied respects the happens-before relationship of transactions.}
 
@@ -700,6 +700,42 @@ A serialization of transactions under PSI is considered valid if the order of ex
 For concurrent transactions, any order which does not break the happens-before relationship with other transactions is valid.
 
 \andre{Section \ref{subsec:partialReplicationViews} describes the implications of partial replication in keeping views up-to-date. Do I need to refer that section here?}
+
+\subsubsection{Read Commited}
+
+Read Commited (RC) is a consistency model which guarantees that only states resulting from commited transactions can be read.
+This model is ``weaker'' (less guarantees) compared to PSI.
+However, PSI has considerable overhead on reads in PotionDB, for scenarios with a high update rate, due to the provisioning of the snapshots.
+Thus, we provide the option to use RC for when high read throughput is a must under a high update rate scenario.
+
+For now, consider a single object in the database.
+Under RC, PotionDB ensures that consecutive reads of the object read either the same state or a more recent state.
+That is, for two reads of object $o$, $R_1(o)$ and $R_2(o)$, if $R_1(o) \prec R_2(o)$, then the state returned by $R_2(o)$ is either more recent or the same as in $R_1(o)$.
+Also, no reads of ongoing (uncommited) transactions can ever be read.
+In other words, under RC, single-object causality is still ensured.
+
+Consider now multiple objects in the database.
+Under RC, PotionDB does not guarantee that if two objects are read simultaneously, the returned states will be in the same snapshot.
+Thus, under RC it is possible to read an object and a view associated to it and observe unconsistent states (e.g., the view may not reflect the last update visible on the object).
+In other words, under RC cross-object causality is not guaranteed - PSI must be used to have this property.
+
+To be precise, the following is possible under RC:
+$\forall R_1(o_1), R_2(o_2) : R_1(o_1) \in T \land R_2(o_2) \in T \land o_1 \not= o_2 :$ the states returned by $R_1(o_1)$ and $R_2(o_2)$ may be from different snapshots.
+
+\andre{Do I need/should I do the correspondent property to the one above in the PSI section?}
+
+
+
+%
+%To be precise, the form of RC provided by PotionDB can be described as follows.
+%Only states resulting from commited transactions can be read.
+%Furthermore, once a version A is read from an object, any future read will return either version A or a more recent version.
+%However, reads to different objects in the same transaction can read different versions.
+%As such, single-object causality is ensured but cross-object causality is not.
+%
+%The main advantage of RC is the ability to still provide a high read throughput even under scenarios with a high update ratio.
+%However, when cross-object causality is desired (e.g., when reading an object referred by a view), PSI should be used.
+
 
 \if 0	
 
