@@ -1484,20 +1484,21 @@ We note however, that this is an implementation shortcoming and not a design one
 
 
 \subsection{Discussion of implemented TPC-H queries}
+\label{subsec:implementedQueries}
 
 \andre{Note: This should be somewhere else (maybe its own section? Suggestions?), but for now I'll leave it here}
 \andre{TODO: Explain/mention TopSum in relevant sections}
 
 To test PotionDB, only a subset of the TPC-H queries were implemented.
-Thus, we had to choose a subset which represented varios kinds of queries, testing multiple types of CRDTs and scenarios.
-We also considered how interesting the business question associated to each query is when selecting those, however here we focus on their relevance to testing PotionDB:
+Thus, we had to choose a subset which represented different kinds of queries, spanning multiple types of CRDTs and scenarios.
+We also considered how interesting the business question associated to each query is when selecting those, however here we focus on their relevance in testing PotionDB:
 
 \andre{I'm not sure I should keep the last phrase above}.
 
 \begin{itemize}
 	\item Query 3: this query is interesting as it tests a multitude of things - it requires presenting data from different kinds of objects (lineitems, orders); updating requires accessing yet another kind of object (customer); tests viability of having a view for each day in a given period; tests implementing order by and limit with TopK CRDT.
 	\item Query 5: this query was choosen to represent queries local to a region, i.e., queries that could be served only with data locally replicated, not requiring global views.
-	This tests the usage of maps to implement group by and counters for sums.
+	Also tests the usage of maps to implement group by and counters for sums.
 	\item Query 11: this query also limits the number of results returned but, instead of being e.g. ``limit 100'', it instead only returns results above a certain value, with this value being dependent on each nation's data.
 	This thus requires a different approach to querying a TopK CRDT, and to maintaining both the TopK and the reference value updated.
 	\item Query 14: this query was selected to choose yet another type of CRDT for views (average), as well as different kinds of the same object affecting the view differently.
@@ -1518,28 +1519,74 @@ This implies that it is, in theory, possible to support the full set of TPC-H qu
 
 \section{Evaluation}
 
+\andre{I added more text to this intro to explain the differences between the versions of PotionDB, but the text is much longer now. Old one is commented.}
+
 In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
-Namely, we try to assess the advantage of all replicas having views spanning data partitioned across multiple replicas, instead of each replica having an incomplete view with only its local data (local PotionDB).
-E.g., if we partition customer's data based on the continent of the customer's country, the local view of a server in Europe would only concern the data of european customers, while a global view would include customers from all over the globe.
-We also compare PotionDB with a solution that has one server dedicated to host all indexes (single index PotionDB).
+Namely, we try to assess the advantage of having, in each server, views that span data partitioned across multiple replicas.
+We compare PotionDB with a solution in which each server's view only reflects data replicated locally (local view PotionDB). In this solution, some queries may need to query multiple servers to aggregate all the necessary view data.
+We also compare PotionDB with a solution in which one server hosts all the views, but those views are, similarly to PotionDB, of data partitioned across multiple replicas (single view PotionDB).
+To exemplify the differences, consider a view concerning orders from all over the globe:
+\begin{itemize}
+	\item PotionDB: all servers replicate the view, and the view is complete, i.e., takes in consideration all orders, no matter where they are partitioned.
+	\item Local view PotionDB: each server contains the view, but the view only concerns data replicated locally. E.g: an european server only replicates data or orders made in europe.
+	In this example, if a query requires data from multiple continents, multiple servers have to be contacted to answer the query.
+	\item Single view PotionDB: only one server contains the view, but the view is complete.
+	This can lead to great pressure in the server with the view when updating objects related to the view and when querying views, as well as worse latency to faraway clients.	
+\end{itemize}
+
+%In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
+%Namely, we try to assess the advantage of all replicas having views spanning data partitioned across multiple replicas, instead of each replica having an incomplete view with only its local data (local PotionDB).
+%E.g., if we partition customer's data based on the continent of the customer's country, the local view of a server in Europe would only concern the data of european customers, while a global view would include customers from all over the globe.
+%We also compare PotionDB with a solution that has one server dedicated to host all indexes (single index PotionDB).
 
 \subsection{Settings}
 
 \subsubsection{Common settings}
+\label{subsubsec:commonSettings}
 
-For our tests, we use a dataset based on TPC-H's dataset \cite{tpch}.
-More precisely, while we keep all the tables and use data generated by the dbgen tool \cite{tpch}, we focus only on a subset of the queries and, for each table, we only keep the columns necessary for such queries.
-We also use the following settings in common across all of our tests:
+In our tests a datased based on TPC-H's datased \cite{tpch} is used.
+More precisely, while we keep all the tables and use data generated by the dbgen tool \cite{tpch}, we focus only on a subset of the queries and, for each table, we only keep the columns necessary to answer such queries.
+The subset of queries used is described in Section \ref{subsec:implementedQueries}.
+
+
+In general, our test environment is set up with the following configurations:
+%We also use the following settings in common across all of our tests:
+
+\andre{Proper reference to the Grid project (on the website they list how to refer to them)}
 
 \begin{itemize}
-	\item Five PotionDB instances, each one executing in its own node.
-	Each node has a AMD EPYC 7281 CPU with 96GB of RAM, with PotionDB only being able to use 8 cores of the CPU (this helps ensure the bottleneck is not on the client side); \andre{Should I keep this?}
-	\item Each PotionDB instance replicates the data of a continent, e.g., a server replicates all data concerning Europe while another keeps the data of Asia. Data that isn't location based such as products is replicated in all servers, as are indexes.
-	\item Servers are interconnected by a LAN with 10 Gbps speed;
-	\item Clients execute on nodes with 2x Intel Xeon E5-2620 v2 CPU and 64GB of RAM, being on the same LAN as the servers but with a reduced network speed of 1Gbps;
-	\item Each client selects one server to execute queries upon, only contacting other servers if all the data required to reply to a query isn't present in the selected server. \andre{Should I refer that, in practice, this only happens in the local views scenario?} By default, the queries executed are 3, 5, 11, 14, 15 and 18 of the TPC-H specification \cite{tpch};
-	\item Unless otherwise specified, each request only executes one query or updates one sale (including all related indexes).
+	\item Five PotionDB instances, each one executing in its own node. We also use another five nodes to execute the clients that will access PotionDB;
+	\item Each PotionDB instance replicates the data concerning one continent (i.e., one replicates all data relevant for Europe; another replicates for Asia, etc.)
+	Data that is not location based, like products, are replicated in all servers.
+	\item The replication of views works as follows:
+	\begin{enumerate*}[label=(\roman*)]
+		\item PotionDB - all servers replicate all views, and the views contain data regarding all continents;
+		\item Local view PotionDB - each server's views only concerns data regarding its own continent;
+		\item Single view PotionDB - only one server replicates views, but said views contain data regarding all continents.
+	\end{enumerate*}
+	\item All nodes contain 2x Intel Xeon Gold 6130 with 192 GB of RAM. All nodes are interconnected by a 10Gbps LAN.
+	\item Each client selects one server to execute queries upon, and only contacts said server. In the case of local view and single view PotionDBs, if a server cannot satisfy a query with its data, that server contacts other servers in order to reply to the query.
+	\item Unless otherwise specified, each request is a transaction which contains one instance of each query - this implies that, for local view PotionDB, transactions have more operations, as some queries need data from multiple regions.
+	\item In some scenarios, we impose latency between the servers, in order to simulate how PotionDB would perform when distributed accross the globe.
+	We use as reference the latency between AWS instances, as measured in \cite{AWSLatency} (\andre{Add a date of access?}).
+	The following regions were selected: EU (Paris), US (N.Virginia), Canada (Central), Asia Pacific (Tokyo), Middle East (Bahrain). The highest latency measured is between Canada and Middle East at 204ms as of the date of measure.
+	\andre{Note: a possible critic here is that we don't have one server per continent, which is the scenario we always describe in the paper}.
+	\andre{Second note: I rechecked the website - the latency between those two servers has improved a lot!!! Nowadays it is around 161ms. If I put a timeframe of 1 year it still shows 204ms, which suggests improvements in the connection. I probably need to reconsider the latencies?}
+	 
+	
+	
 \end{itemize}
+
+%Old settings for FCT's cluster
+%\begin{itemize}
+%	\item Five PotionDB instances, each one executing in its own node.
+%	Each node has a AMD EPYC 7281 CPU with 96GB of RAM, with PotionDB only being able to use 8 cores of the CPU (this helps ensure the bottleneck is not on the client side); \andre{Should I keep this?}
+%	\item Each PotionDB instance replicates the data of a continent, e.g., a server replicates all data concerning Europe while another keeps the data of Asia. Data that is not location based such as products is replicated in all servers, as are indexes.
+%	\item Servers are interconnected by a LAN with 10 Gbps speed;
+%	\item Clients execute on nodes with 2x Intel Xeon E5-2620 v2 CPU and 64GB of RAM, being on the same LAN as the servers but with a reduced network speed of 1Gbps;
+%	\item Each client selects one server to execute queries upon, only contacting other servers if all the data required to reply to a query isn't present in the selected server. \andre{Should I refer that, in practice, this only happens in the local views scenario?} By default, the queries executed are 3, 5, 11, 14, 15 and 18 of the TPC-H specification \cite{tpch};
+%	\item Unless otherwise specified, each request only executes one query or updates one sale (including all related indexes).
+%\end{itemize}
 
 All our experiments execute as follows.
 First, all servers are started, with each one estabilishing a connection with all others.
@@ -1550,9 +1597,10 @@ Afterwards, a special client is started to load the initial database state into 
 %In some other tests, all clients can do both queries and updates, with a varying percentage.
 Finally, after all data has been loaded into the servers, multiple clients are started to execute queries and, possibly, updates, with the query/update rate depending on the test.
 
-In our experiments we use as metrics the amount of operations per second (ops/s) achieved by all clients aggregated, as well as the average latency of each client request.
+In our experiments we use as metrics the amount of queries per second (query/s) achieved by all clients aggregated, as well as the average latency of each client transaction.
+In tests with both updates and queries, we instead use operations per second (ops/s).
 To determine how much each test can scale, we vary the number of clients.
-As the number of clients increases, so does the latency of each request and, until the servers saturate, the throughput of the servers.
+As the number of clients increases, so does the latency of each transaction and, until the servers saturate, the throughput of the servers.
 
 \subsubsection{Scenarios}
 
@@ -1567,61 +1615,96 @@ With these experiments, we try to answer the following:
 %	\item How well does each CRDT type scale in PotionDB, namelly when its size grows?
 %\end{itemize}
 \begin{enumerate}
-	\item \label{enum:question1} What is the practical benefict of having views of data replicated across different servers, compared to having only views of local data (local PotionDB) or a single index server (single PotionDB)?
+	\item \label{enum:question1} What is the practical benefict of having views of data replicated across different servers, compared to having only views of local data (local PotionDB) or a single view server (single PotionDB)?
 	\item \label{enum:question2}What is the effect on PotionDB's throughput of executing updates, namely as the write/read ratio increases?
-	\item \label{enum:question3}How much can PotionDB scale if we group operations?
-	\item \label{enum:question4}\andre{TODO: benchmarks}
+	\item \label{enum:question3} \andre{Note: Before there used to be a section for how PotionDB scales by grouping operations. Now that doesn't seem to have much effect (about same throughput, but with less clients). But maybe this could help in the scenario with latency added. Should I still do this?}
+	\item\label{enum:question4}\andre{Should I do some single CRDT/server benchmarks (i.e., not TPC-H)?}
+	\item\label{enum:question5}\andre{Any other question/evaluation?}
 \end{enumerate}
 
 \subsection{Results}
 
 \subsubsection{Locality of data}
 
-\andre{I wonder if it's worth mentioning that the number of clients server in single/local versions is much lower compared to normal.}
+\andre{Is it worth to mention how much the number of clients vary by test?}
 
-To evaluate the benefits of having indexes replicated in every replica (\ref{enum:question1}), we compare PotionDB with the local and single versions, namely in terms of queries per second.
+To evaluate the benefits of having views replicated in every replica, we compare PotionDB with the local view and single view versions, namely in terms of queries per second.
+Mainly, we try to assess how much each configuration can scale, to better grasp the benefict of having global views in every server.
 
 \begin{figure}
 	\centering
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{global_local_single_cut}
+		\includegraphics[width=.95\linewidth]{clientScale_cut}
 		\caption{All queries}
 		\label{fig:global_local_single}
 	\end{subfigure}%
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{individual_query_cut}
+		\includegraphics[width=.95\linewidth]{Q3vsQ5_cut}
 		\caption{Single query type}
 		\label{fig:q3q5}
 	\end{subfigure}
-	\caption{Query-only performance of PotionDB and its local and single index versions. On the left all queries are executed, while on right it is only Q3 or Q5.}
+	\caption{Query-only performance of PotionDB and its local and single view versions. On the left all queries are executed, while on right it is only Q3 or Q5.}
 	\label{fig:query_only}
 \end{figure}
 
 Figure \ref{fig:query_only} shows the results of experiments for the three versions of PotionDB, in terms of query/s versus latency.
 Figure \ref{fig:global_local_single} includes all queries in the execution, while \ref{fig:q3q5} only includes a single type of query at a time.
 
-As expected, on both cases the performance of the local and single versions is worse than normal PotionDB.
-Focusing on figure \ref{fig:global_local_single}, it is noticeable that local version performance is about 7 times lower than normal.
-This happens because most queries require data from all regions, thus requiring local clients to contact all servers and wait for them all to reply.
-This leads to both more load on each server as well as more time waiting on the client side.
-The single scenario performance is roughly 1/5 of normal's.
-This can be explained as all queries only need to consult the indexes, which due to those being all in one server, implies that the load is all directed to one server instead of being split across five.
+When factoring in all the queries (Figure \ref{fig:global_local_single}), as expected both local and single view PotionDB perform worse than normal PotionDB.
+The single version's max throughput is about 1/5th of PotionDB's.
+This occours due to the fact that queries are server entirely by views, which are all in a single server - thus, in a query-only scenario, one server gets all the load, instead of it being distributed by 5 servers.
+The local version seems to have about 1/6th of PotionDB's performance, which is because some of the queries require data from all regions, which implies that in local mode, such queries need to consult the views in every server.
+\andre{Note: the section describing redirected operations needs to be reviewed for sure.}
+Due to the redirection of requests (see Section \ref{subsec:operationsNonLocal}) that occours due to not all data required being in the server contacted by a client, this implies an extra round-trip for some requests, which further slows down performance.
+Thus for a transaction to complete, it is necessary to wait for all the servers to process the redirected requests.
 
-Figure \ref{fig:q3q5} shows that the lower throughput of the local version is due to the locality of the data - Q3 requires data from all servers and has about 1/12 of the performance of normal PotionDB, while Q5 only requires data from one region (thus one server) and has about 2/3 of the performance.
-This smaller drop can be explained due to local clients not being sticky - as the query parameters are selected at random, local clients are forced to constantly query different servers, while each normal client can query always the same server.
+In Figure \ref{fig:q3q5} the focus is on two particular queries. Query 3 (Q3) requires data from all over the globe, while Query 5 (Q5) can be answered with data from a single region.
+Thus, Q5 fits well both normal and local versions of PotionDB.
+In fact, Q5 performance in local and normal modes is very similar - both can reach a max throughput of around 4 million queries/s.
+This occours as clients query data concerning the region of the server they're connected to, thus there is no need to contact other servers even in the local version.
+As for the single version, Q5's performance is about 1/5th of the other two.
+\andre{Note: I'm not sure I should say "locality of the data" here. Basically what I mean is that for queries which require a global view is where PotionDB shines.}
+On the other hand, Q3 is a perfect example of how locality of the data affects performance.
+This query requires data from all servers, thus in the local version every server needs to be contacted. The extra pressure on the servers (as all servers are required to answer all queries), as well as the extra round-trip, alongside bigger transfers of data, lead to a decreased performance of about 1/13th compared to PotionDB.
+The single version has, as expected, about 1/5th of normal PotionDB's performance.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{clientScale_tc_cut}
+	\caption{PotionDB performance executing all queries with latency. Both axes have a log(10) scale.}
+	\label{fig:global_local_single_tc}
+\end{figure}
+
+In the previous tests the latency of the clients to all servers is very low, as all servers and clients are connected in a LAN.
+Figure \ref{fig:global_local_single_tc} shows the result of adding latency between servers (clients still retain low latency to represent being close to their server of choice).
+Normal PotionDB is "unnafected" in terms of throughput as clients only contact their nearby server - since no latency is added between client-server, no effect is noticeable.
+In a scenario with updates however, an effect would be noticeable "under the hood" - replication would take longer to happen due to the imposed latency, thus a given client would take longer to be able to see the effects of updates executed on servers other than the one said client is connected to.
+This would not affect query throughput, just the freshness of data.
+For single PotionDB, a higher latency is noticeable compared to Figure \ref{fig:global_local_single}.
+This happens as most clients will have high latency (the ones not connected to the server with the views) and do few operations, while the remaining ones will be operating directly on the view server.
+The ones operating directly will be responsible for the majority of the load in the server with views.
+As such, as long as more clients are used compared to Figure \ref{fig:global_local_single}, a similar max throughput is still achieved.
+Finally, on the local PotionDB, is where the effects of latency are most noticeable - here, to answer some queries, all servers will be contacted. Since all transactions consist in one of each type of query, this implies all transactions will take, at least, as long as a round trip between the two most faraway servers takes.
+Here, the observed latency is about 210ms.
+Compared to Figure \ref{fig:global_local_single}, the max throughput is much lower. This is due to the much higher amount of clients needed to sature the servers: aproximately 3000 clients instead of 160.
+The much higher amount of connections to each server, as well as the much more frequent "swap" of the processor cores between each client justify this lower throughput.
 
 \subsubsection{PotionDB scaling - queries VS updates}
 
 We now evaluate the impact on PotionDB's throughput of executing updates alongside queries, with multiple read/write ratios (\ref{enum:question2}).
-In this scenario, whenever a client wants to execute an operation, it picks at random whenever a query or an update is executed.
-It is worth noting that an update affects both base data and all associated indexes.
-Also note that while index updates are executed in every replica, we only count them once (i.e., if one update is executed 5 times, it still only counts as 1 operation).
+In this scenario, when a client wants to execute an operation, it picks at random whenever a query or an update is executed.
+
+In TPC-H, an update is defined as the replacement of an old order with a new one.
+As such, our granularity of update is the addition and removal of an order, with the associated items and necessary updates do the views.
+Finally, it is worth noting that even though some updates will execute in multiple replicas (e.g.: view updates), only one execution is counted in our graphs.
+%It is worth noting that an update affects both base data and all associated indexes.
+%Also note that while index updates are executed in every replica, we only count them once (i.e., if one update is executed 5 times, it still only counts as 1 operation).
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{update_rates_cut}
+	\includegraphics[width=.95\linewidth]{updRate_global_cut}
 	\caption{PotionDB performance with varying update rate.}
 	\label{fig:update_rates}
 \end{figure}
@@ -1629,22 +1712,22 @@ Also note that while index updates are executed in every replica, we only count 
 	\centering
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{update_rates_query_cut}
+		\includegraphics[width=.95\linewidth]{updRate_queryLatency_cut}
 		\caption{Query-latency}
 		\label{fig:update_rates_query}
 	\end{subfigure}%
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{update_rates_update_cut}
+		\includegraphics[width=.95\linewidth]{updRate_updateLatency_cut}
 		\caption{Update-latency}
 		\label{fig:update_rates_update}
 	\end{subfigure}
-	\caption{PotionDB performance with varying update rate, with query and update latencies split. Note that updates are done in groups due to having to update both base data and indexes.}
+	\caption{PotionDB performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, their associated items and associated indexes.}
 	\label{fig:update_rates_split}
 \end{figure}
 
 Figure \ref{fig:update_rates} shows the results of executing updates alongside queries, with varying odds of choosing an update.
-For low update rates (1\% and 10\%), the decrease in performance can be considered reasonable (aproximately 2,5\% and 14\%).
+For low update rates (1\% and 10\%), the decrease in performance can be considered reasonable (aproximately 4\% and 16\%).
 For higher rates, two observations can be made:
 \begin{enumerate*}[label=(\roman*)]
 	\item the servers saturate earlier, in some cases even decreasing throughput as the number of clients rises;
@@ -1655,15 +1738,57 @@ The referred observations can be explained if we consider the following.
 With PotionDB's internal partitioning, queries on different objects can be executed concurrently, thus query-only scenarios scale easily. 
 However, updates in a transaction must lock the partitions they're involved and do a 2-phase commit, in order to ensure the states evolve sequentially in a replica even when concurrent transactions are issued.
 As such, if the update rate is high, clients executing queries or updates may often have to wait for a transaction with updates to finish executing before executing their own operations.
-\andre{I might have to reffer in an early section with more detail how we do updates in our experiment, namely that our granularity is at order-level and that indexes, orders and items are updated in the same txn.}.
 
-Figure \ref{fig:update_rates_split} shows the same experiment as figure \ref{fig:update_rates}, but showcases the latencies of queries and updates splitted, instead of together.
-It is noticeable that updates have quite higher latencies and scale much less, which is due to both 2-phase commit and grouping of operations (as updates need to be reflected on both base data and indexes).
+Figure \ref{fig:update_rates_split} shows the same experiment as Figure \ref{fig:update_rates}, but showcases the latencies of queries and updates splitted, instead of together.
+It is noticeable that updates, even for low values, have higher latency than updates - this is mostly due to the fact that update transactions have more operations than queries.
+The abrupt spike observed at the end, in the update latency graph, happens as many clients are doing updates and thus, many 2-phase commits are issued, which have to wait for each other to finish.
 
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{updRate_localvsglobal_cut}
+	\caption{Normal and Local PotionDB performance with varying update rate.}
+	\label{fig:update_rates_normal_vs_local}
+\end{figure}
 
+\andre{Note: I'm not sure on the explanation below. Basically, in local mode, more update ops are done per transaction, thus actually less orders are updated in the same period of time. However, since views are local, there's less replication work. Not much redirection is done as 50\% of the orders are fully local, and most others have few regions.}
+
+\andre{IMPORTANT: I need to refer somewhere that we adapted TPC-H's data to have locality. Where should I do that? This actually beneficts more the "local PotionDB" than the normal one.}
+
+Figure \ref{fig:update_rates_normal_vs_local} showcases the performance of both normal PotionDB and local PotionDB with varying update rates.
+As expected, local PotionDB performs worse than normal PotionDB, however as the percentage of updates increases in local PotionDB, so does the throughput.
+This happens as updates are not as hindered by the views being split per region as queries.
+Aproximately half of the orders are local to a region, and most others refer few regions, thus not many view updates need to be redirected to other servers.
+Besides, since each view only contains local data, updates to a view do not need to be replicated to every other server, reducing the load on the servers due to replication.
+These factors added up allow local PotionDB to even increase the performance when updates are added, and end up with a similar throughput to normal PotionDB when only updates are executed.
+
+\andre{Maybe a graph of local VS normal PotionDB with updates of all views and only queries of Q5? That query has high performance in both modes - may be interesting to see how it scales with updates (I wonder if local PotionDB has higher throughput than normal in that scenario?)}
+ 
+We now consider a scenario with latency added between servers, as described in Section \ref{subsubsec:commonSettings}.
+Recall that on normal PotionDB, as discussed previously, throughput isn't affected as clients only interact with the server they are close to, even when doing updates (they would, however, take longer to see the effects of updates done on views that were executed in other servers, due to the added latency on replication).
+
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{updRate_tc_cut}
+	\caption{PotionDB performance with varying update rate.}
+	\label{fig:update_rates_tc}
+\end{figure}
+
+Thus, we focus on local PotionDB, which is shown on Figure \ref{fig:update_rates_tc}.
+We can easily observe that as the percentage of updates rise, the maximum throughput also rises.
+At a first glance this may seem confusing, however the following two points justify this behavior:
+\begin{itemize}
+	\item Updates have lower latency than queries, as each update transaction only needs to contact a subset of servers, unlike query transactions which need to contact all. Thus, they can often avoid the connection with highest latency.
+	\item Updates have more operations per transaction than queries, which means more operations done per round trip.
+\end{itemize}
+
+\andre{Should I mention that a lot less clients are needed to sature the server, the higher the update rate is? (mainly on scenarios without latency)}
 \andre{Probably some concluding note that reffers that for PotionDB's intented usages it is likely that updates are much less frequent than queries, or maybe even that updates could maybe be delayed?}
 
+\andre{Text from here on is old text}
+
 \subsubsection{Batching}
+
+\andre{Old text - batching does not really have any noticeable improvement when testing on Grid in normal settings. It would surely help with tests that have latency added though.}
 
 On the previous scenarios, each client only requested one query at a time, even through updates were executed in groups (whenever one update to a base object is usued, all associated indexes are updated in the same transaction).
 With this we've noticed that, with a low number of clients, an update-only scenario actually has better throughput than a query-only scenario.
@@ -1693,6 +1818,8 @@ Increasing the number of queries/txn also leads to PotionDB saturating with less
 %We can see that with batching PotionDB reaches its peak performance with a lower number of clients (high query/s with low latency), and is able to provide higher throughput with lower latency - up to 1.2M ops/s with batching compared to 0.36M ops/s without batching.
 
 \subsubsection{CRDT Benchmark}
+
+\andre{Outdated. If this is still necessary, we need to define precisely what we want to showcase here.}
 
 \andre{I didn't know what to title this}
 
