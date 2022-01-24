@@ -1711,17 +1711,17 @@ Finally, it is worth noting that even though some updates will execute in multip
 	\centering
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{updRate_queryLatency_cut}
+		\includegraphics[width=.97\linewidth]{updRate_queryLatency_cut}
 		\caption{Query-latency}
 		\label{fig:update_rates_query}
 	\end{subfigure}%
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{updRate_updateLatency_cut}
+		\includegraphics[width=.97\linewidth]{updRate_updateLatency_cut}
 		\caption{Update-latency}
 		\label{fig:update_rates_update}
 	\end{subfigure}
-	\caption{PotionDB performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, their associated items and associated indexes.}
+	\caption{PotionDB performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, associated items and indexes, thus having more operations than one query-only transaction.}
 	\label{fig:update_rates_split}
 \end{figure}
 
@@ -1745,7 +1745,7 @@ The abrupt spike observed at the end, in the update latency graph, happens as ma
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{updRate_localvsglobal_cut}
-	\caption{Normal and Local PotionDB performance with varying update rate.}
+	\caption{Normal(P\_) and Local (L\_) PotionDB performance with varying update rate.}
 	\label{fig:update_rates_normal_vs_local}
 \end{figure}
 
