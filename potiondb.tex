@@ -69,9 +69,11 @@ Nuno Preguiça\\
 \andre{Please review this}
 
 Many existing web services of global scale have strict latency, availability and fault tolerance requirements.
-To handle this, some services distribute their datacenters across the globe, with users accessing the closest datacenter.
-As the number of servers increases, so does the replication cost, thus partial replication may be desirable.
-However, some queries may require global data not replicated in every server (e.g. in an e-commerce system, the list of best seller products across the globe).
+To address these requirements, these services are often deployed in data centers distributed 
+across the globe, with users accessing the closest datacenter.
+As the number of servers increases, so does the replication cost, which makes partial replication an attractive approach.
+However, some queries may require data not replicated in every server (e.g. in an e-commerce system, the list 
+of best seller products across the globe).
 
 In this paper, we present PotionDB, a novel geo-distributed key-value store which provides partial replication.
 We present a replication scheme which allows data to be partially replicated, yet still answer queries relative to global data efficiently.
@@ -233,7 +235,7 @@ Data items are replicated in only a subset of the locations, for providing high 
 By not replicating data in all data centers, PotionDB allows to minimize the replication cost (when
 compared to solutions featuring full replication).
 
-Returning to our examples, an online store might want to maintain the top selling products or top selling products
+Returning to our example, an online store might want to maintain the top selling products or top selling products
 for buyers that bought some product (for recommendations).
 An online game might want to maintain a leaderboard. 
 A news site might maintain a list of topics with more likes across all regional sites.
@@ -244,8 +246,8 @@ Furthermore, it is common that only the top elements need to be maintained -- e.
 is only interested in the top N products sold.
 
 To address this functionality, PotionDB supports the definition of materialized views that 
-are the result of a computation over all data in the database. As data is updated, the materialized 
-views are updated in the same transaction. 
+are the result of an aggregation over all data in the database. As data is updated, the materialized 
+views are also updated (in the same transaction). 
 
 \subsection{Consistency}
 
