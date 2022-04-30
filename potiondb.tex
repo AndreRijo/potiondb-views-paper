@@ -1533,7 +1533,7 @@ To exemplify the differences, consider a view concerning orders from all over th
 	\item Local view PotionDB: each server contains the view, but the view only concerns data replicated locally. E.g: an european server only replicates data or orders made in europe.
 	In this example, if a query requires data from multiple continents, multiple servers have to be contacted to answer the query.
 	\item Single view PotionDB: only one server contains the view, but the view is complete.
-	This can lead to great pressure in the server with the view when updating objects related to the view and when querying views, as well as worse latency to faraway clients.	
+	This can lead to great pressure in the server with the view when updating objects related to the view and when querying views, as well as worse latency for faraway clients.	
 \end{itemize}
 
 %In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
@@ -1620,7 +1620,7 @@ With these experiments, we try to answer the following:
 	\item \label{enum:question1} What is the practical benefict of having views of data replicated across different servers, compared to having only views of local data (local PotionDB) or a single view server (single PotionDB)?
 	\item \label{enum:question2}What is the effect on PotionDB's throughput of executing updates, namely as the write/read ratio increases?
 	\item \label{enum:question3} \andre{Note: Before there used to be a section for how PotionDB scales by grouping operations. Now that doesn't seem to have much effect (about same throughput, but with less clients). But maybe this could help in the scenario with latency added. Should I still do this?}
-	\item\label{enum:question4}\andre{Should I do some single CRDT/server benchmarks (i.e., not TPC-H)?}
+	\item\label{enum:question4}How does each kind of CRDT scale in PotionDB as we vary the number of clients, the number of replicas and other CRDT-specific settings (e.g., number of elements in the top in Top-K CRDT)?
 	\item\label{enum:question5}\andre{Any other question/evaluation?}
 \end{enumerate}
 
@@ -1786,7 +1786,111 @@ At a first glance this may seem confusing, however the following two points just
 \andre{Should I mention that a lot less clients are needed to sature the server, the higher the update rate is? (mainly on scenarios without latency)}
 \andre{Probably some concluding note that reffers that for PotionDB's intented usages it is likely that updates are much less frequent than queries, or maybe even that updates could maybe be delayed?}
 
-\andre{Text from here on is old text}
+\subsubsection{CRDT Benchmarks}
+
+\andre{Note: On the graphs here I forgot to put "Latency per transaction (ms)" instead of just "Latency (ms)"... will fix that when we do a final version of those graphs}
+
+We now focus on evaluating the performance of the CRDTs used to build the views of TPC-H.
+Namely, we test the TopK, TopSum, Counter and Average CRDTs.
+\andre{TODO: Maybe I should test embedded maps too? Since they are used to ``hold'' multiple CRDTs in Q5, acting as a group by.}
+
+In this scenario, we drop the TPC-H dataset.
+Instead, we prepare each CRDT with some random initial data.
+In each test, 20 CRDTs are created/manipulated by the clients (the same number of CRDTs that are used to build the views for Query 15, discussed in Section \ref{subsec:implementedQueries}).
+Then, each client does query and/or update operations on one of the CRDTs.
+The number of operations per transaction is the same as in the TPC-H scenario (\andre{Do I need to define this in the TPC-H scenario?}).
+
+
+%TOPK test max throughputs: 11.3M, 10.3M, 3.1M, 0.37M
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{TopKTopSize0upd_cut}
+	\caption{TopK query performance with a varying top size. Both axis are on a logarithmic scale.}
+	\label{fig:TopkSize0upd}
+\end{figure}
+
+Figure \ref{fig:TopkSize0upd} contains the results of executing Top-K queries with different values for K.
+The throughput difference between Top-1 and Top-10 is small (10\%). This happens as on both the amount of data transfered is small compared to the communication overhead (latency + metadata transfered), as well as PotionDB handling a high amount of clients.
+As the size of the Top-K is increased, the performance of the queries quickly drops as the amount of data transfered starts to become more relevant.
+From Top-10 to Top-100, throughput decreases by 70\%, from Top-100 to Top-1000 by 88\%.
+We expect that after 1000, increasing linearly the number of elements on top will decrease the throughput by the same factor.
+\andre{Should I mention throughput numbers? The max of each is 11.3M, 10.3M, 3.1M, 0.37M ops/s.}
+\andre{Is it relevant to mention the number of entries in the TopK? (10000, same as in Q15) If so, how/where do I mention that?}
+
+\begin{figure}
+	\centering
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{TopKTopSize25upd_cut}
+		\caption{TopK with 25\% updates}
+		\label{fig:TopkSize25upd}
+	\end{subfigure}%
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{TopKTopSize100upd_cut}
+		\caption{TopK with 100\% updates}
+		\label{fig:TopkSize100upd}
+	\end{subfigure}
+	\caption{TopK operations (query + update) performance with varying top size. Both axis are on a logarithmic scale.}
+	\label{fig:TopkSize25_100upd}
+\end{figure}
+
+
+Figure \ref{fig:TopkSize25_100upd} contains the same test as before but with, respectively, 25\% and 100\% updates.
+The differences in performance here are different compared to a scenario of query-only.
+This happens as on updates, the amount of data transfered is similar for all scenarios. 
+However, as expected, as the size of the Top increases, adding or removing elements to the top gets more expensive.
+\andre{Not sure if/how I explain this. I believe the reason why it becomes more expensive is because of when the TopK needs to search for the ``new minimum'' of the top - since the elements ``not in top'' are stored as a set, sometimes that entire set needs to be searched upon to find a new minimum.}
+
+%\andre{Note: Interestingly, the TopSum graphs for 100\% updates are quite different from TopK. TopSum scores 5M ops/s on all top sizes for 100\% updates (to be precise: 5.4M, 5.4M, 5.3M, 5.1M Top1, Top10, Top100, Top1000); while TopK scores below 2M ops/s for Top1000. I haven't searched yet why it is like that.}
+
+%Graph with bars, showing the "max" performance of TopK and TopSum in some different scenarios (different top sizes and update rates). Maybe stack TopK and TopSum, and use as groups the same Top size?
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{TopKVSTopSum_cut}
+	\caption{TopK and TopSum performances for different top sizes and update rates.}
+	\label{fig:TopkVSTopsum}
+\end{figure}
+
+Figure \ref{fig:TopkVSTopsum} shows how the TopSum compares to the TopK CRDT in similar scenarios.
+When only executing queries, the performance is very similar, however for high update rates, TopSum handles updates better than TopK.
+\andre{TODO: I have to check why this is happening... some guesses: 1- TopSum doesn't have removes but rather incs/subs, so less elements being removed/created from each set (but still, some should when moved between top and not-top) ; 2 - topK has tombstones, topSum does not (but should be okay as it is only 1 timestamp per element) ; 3 - TopSum uses pointers to structures for the elements while TopK uses structures ; 4 - some other reason? Like different behaviour? I don't know. Maybe I need to test with a Map or Set CRDT. But even so it is odd...}
+
+\begin{figure}
+	\centering
+	\begin{subfigure}{.33\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{CounterAvgTopK0upd_v2_cut}
+		\caption{0\% update rate}
+		\label{fig:CounterAvgTopK0upd}
+	\end{subfigure}%
+	\begin{subfigure}{.33\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{CounterAvgTopK25upd_v2_cut}
+		\caption{25\% update rate}
+		\label{fig:CounterAvgTopK25upd}
+	\end{subfigure}%
+	\begin{subfigure}{.33\linewidth}
+	\centering
+	\includegraphics[width=.97\linewidth]{CounterAvgTopK100upd_v2_cut}
+	\caption{100\% update rate}
+	\label{fig:CounterAvgTopK100upd}
+	\end{subfigure}
+	\caption{Counter, Average and TopK CRDTs performance for different numbers of replicas and update rates.}
+	\label{fig:CounterAvgTopK}
+\end{figure}
+
+Figure \ref{fig:CounterAvgTopK} shows the max throughput of Counter, Average, and TopK (top of one) CRDTs.
+In these tests we try to assess how the performance of CRDTs scales with the number of replicas.
+When executing queries-only, the performance scales aproximately linearly with the number of servers for the three CRDTs, with the three CRDTs having similar throughput.
+For instance, Average CRDT goes from 11.1M ops/s with 5 servers to 2.35M ops/s with 1 server (78.8\% decrease).
+This happens as any server can be queried without needing to synchronize with other servers.
+With updates, the max throughput is lower and it scales down less linearly.
+For example, Average CRDT with 25\% update rate goes from 3.46M ops/s with 5 servers to 2.87M ops/s with 4 servers (82.3\% decrease) and to 1.11M ops/s with 1 server (25.3\% decrease from 5 servers).
+A similar percentage drop is observed 100\% updates.
+This happens as with updates, they have to be propagated to the other replicas and executed in every replica.
+However, PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed efficiently.
+\andre{No idea why topK has a bit more performance with 25\% updates. I'm not sure why update-only has better throughput than query+update, but I can think of two possible reasons: a) updates make queries wait; b) updates reply quicker as a reply is sent as soon as the partitions confirm they will commit (and not after the commit is executed), unlike queries which must wait for the result to be ready.}
 
 \subsubsection{Batching}
 
@@ -1806,7 +1910,7 @@ Thus, we now evaluate the effect observable on PotionDB's throughput if multiple
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{ops_per_txn_few_cut}
-	\caption{PotionDB performance when batching queries. %Note that latency is in logarithmic scale.}
+	\caption{[OLD] PotionDB performance when batching queries. %Note that latency is in logarithmic scale.}
 	}
 	\label{fig:ops_per_txn}
 \end{figure}
@@ -1819,51 +1923,54 @@ However, the beneficts for throughput are visible - comparing 1 query/txn with 8
 Increasing the number of queries/txn also leads to PotionDB saturating with less clients, as more time is spent on processing queries instead of waiting/switching clients, thus making better usage of machine resources.
 %We can see that with batching PotionDB reaches its peak performance with a lower number of clients (high query/s with low latency), and is able to provide higher throughput with lower latency - up to 1.2M ops/s with batching compared to 0.36M ops/s without batching.
 
-\subsubsection{CRDT Benchmark}
+%Graphs:
+%TopK with 5 servers in which we vary the number of elements on top;
+%Maybe some "bar" graph for updRate + servers? The idea is, each bar = number of servers. Then, in each bar, there are the multiple update rates. Scale may be an issue, as the max amount of ops/s is 11M, and we can go under 1M in some scenarios.
 
-\andre{Outdated. If this is still necessary, we need to define precisely what we want to showcase here.}
 
-\andre{I didn't know what to title this}
-
-We now evaluate how a single PotionDB server scales outside of the TPC-H scenario.
-Namely we do a few benchmarks to determine the raw throughput of PotionDB when executing random operations, instead of specific queries or updates.
-
-\begin{figure}
-		\centering
-	\begin{subfigure}{.535\linewidth}
-		\centering
-		\includegraphics[width=.95\linewidth]{bench_read_cut}
-		\caption{Read-only}
-		\label{fig:bench_read}
-	\end{subfigure}%
-	\begin{subfigure}{.465\linewidth}
-		\centering
-		\includegraphics[width=.95\linewidth]{bench_update_cut}
-		\caption{10\% update rate}
-		\label{fig:bench_upd}
-	\end{subfigure}
-	\caption{Single server performance when executing random operations on set CRDTs. 1 key corresponds to a single CRDT shared between all clients, while multi key corresponds to multi CRDTs per client. 1/multi op refer to single or multi operation transactions.}
-	\label{fig:bench}
-\end{figure}
-
-Figure \ref{fig:bench} contains results on the execution of benchmarks on set CRDTs.
-Namely, figure \ref{fig:bench_read} concerns a read-only scenario, while \ref{fig:bench_upd} has a 10\% update rate.
-
-Focusing on figure \ref{fig:bench_read}, it can be observed that increasing the number of operations per transaction greatly increases the throughput (up to 7x more in the tested scenario).
-Increasing the number of CRDTs only seems to have a considerable effect when there's multiple operations in a transaction.
-This may be due to the fact that a lookup operation in a set CRDT executes so quickly that most of the overhead may be in communication between threads or on converting data to the wire, thus not taking much benefict from the CRDTs being split across different partitions.
-
-Considering figure \ref{fig:bench_upd}, considerably lower latencies can be observed when using multiple keys with only 1 operation per transaction.
-Based on other tests we done, we can affirm that this difference is bigger the higher the rate of updates are.
-This is due to the fact that updates must lock a partition, thus if different keys are used, and each client only manipulates one key at a time, some reads may be executed in parallel with updates, as long as it is for different partitions.
-With a single key used by all clients, no concurrency is possible when an update is being executed.
-
-The observed performance is worse than in a read-only scenario, 
-which is specially noticeable in scenarios with multiple operations per transaction.
-This is even more noticeable in the case with only one key, as the vast majority of transactions will include updates and thus the different clients end up having their transactions executed sequentially.
-Having multiple keys eases this, as only partitions which get updated need to be locked, thus some concurrency is still possible.
-
-\andre{This subsection VERY LIKELY needs to be rewritten/better thought of. Maybe even choose different data to show...}
+%\andre{Outdated. If this is still necessary, we need to define precisely what we want to showcase here.}
+%
+%\andre{I didn't know what to title this}
+%
+%We now evaluate how a single PotionDB server scales outside of the TPC-H scenario.
+%Namely we do a few benchmarks to determine the raw throughput of PotionDB when executing random operations, instead of specific queries or updates.
+%
+%\begin{figure}
+%		\centering
+%	\begin{subfigure}{.535\linewidth}
+%		\centering
+%		\includegraphics[width=.95\linewidth]{bench_read_cut}
+%		\caption{Read-only}
+%		\label{fig:bench_read}
+%	\end{subfigure}%
+%	\begin{subfigure}{.465\linewidth}
+%		\centering
+%		\includegraphics[width=.95\linewidth]{bench_update_cut}
+%		\caption{10\% update rate}
+%		\label{fig:bench_upd}
+%	\end{subfigure}
+%	\caption{Single server performance when executing random operations on set CRDTs. 1 key corresponds to a single CRDT shared between all clients, while multi key corresponds to multi CRDTs per client. 1/multi op refer to single or multi operation transactions.}
+%	\label{fig:bench}
+%\end{figure}
+%
+%Figure \ref{fig:bench} contains results on the execution of benchmarks on set CRDTs.
+%Namely, figure \ref{fig:bench_read} concerns a read-only scenario, while \ref{fig:bench_upd} has a 10\% update rate.
+%
+%Focusing on figure \ref{fig:bench_read}, it can be observed that increasing the number of operations per transaction greatly increases the throughput (up to 7x more in the tested scenario).
+%Increasing the number of CRDTs only seems to have a considerable effect when there's multiple operations in a transaction.
+%This may be due to the fact that a lookup operation in a set CRDT executes so quickly that most of the overhead may be in communication between threads or on converting data to the wire, thus not taking much benefict from the CRDTs being split across different partitions.
+%
+%Considering figure \ref{fig:bench_upd}, considerably lower latencies can be observed when using multiple keys with only 1 operation per transaction.
+%Based on other tests we done, we can affirm that this difference is bigger the higher the rate of updates are.
+%This is due to the fact that updates must lock a partition, thus if different keys are used, and each client only manipulates one key at a time, some reads may be executed in parallel with updates, as long as it is for different partitions.
+%With a single key used by all clients, no concurrency is possible when an update is being executed.
+%
+%The observed performance is worse than in a read-only scenario, 
+%which is specially noticeable in scenarios with multiple operations per transaction.
+%This is even more noticeable in the case with only one key, as the vast majority of transactions will include updates and thus the different clients end up having their transactions executed sequentially.
+%Having multiple keys eases this, as only partitions which get updated need to be locked, thus some concurrency is still possible.
+%
+%\andre{This subsection VERY LIKELY needs to be rewritten/better thought of. Maybe even choose different data to show...}
 
 %\subsection{Old Results}
 %
