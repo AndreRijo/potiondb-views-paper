@@ -370,7 +370,7 @@ Applications access the database by issuing transactions. A transaction starts w
 and contains a sequence of read and update operations 
 
 is a sequence of operations,
-strating with \teg
+strating with %\teg
 
 
 
@@ -419,12 +419,14 @@ e.g., $Ops(S_n) = \{o_1,\ldots,o_n\}$.
 The state of a replica results from applying both local and remote
 operations, in the order received.
 
-\textls[-25]{We say that an operation $o_a$
+%\textls[-25]{
+We say that an operation $o_a$
 %that executed initially in the database snapshot $S_a$
 happened-before operation $o_b$ executed initially in  database snapshot $S_b$,
 $o_a \! \prec o_b$ iff \mbox{$o_a \in Ops(S_b)$}.
 Operations $o_a$ and $o_b$ are concurrent, $o_a \! \parallel \! o_b$ iff
-$o_a \!\not \prec o_b \! \wedge \! o_b \!\not \prec \! o_a$ \cite{happensbefore}.}
+$o_a \!\not \prec o_b \! \wedge \! o_b \!\not \prec \! o_a$ \cite{happensbefore}.
+%}
 
 For an execution of a given set of operations $O$, the happens-before relation defines
 a partial order among operations, \mbox{$\mathcal{O} = (O,\prec)$}.
