@@ -88,7 +88,7 @@ In this paper, we present PotionDB, a novel geo-distributed key-value store whic
 We present a replication scheme which allows data to be partially replicated, yet still answer queries relative to global data efficiently.
 We leverage on existing partial and non-uniform replication algorithms to provide materialized views of data that may be split across multiple servers.
 With these views, a client can obtain global information by querying a single server.
-Our evaluation shows that queries concerning global data can be completed in less than one millisecond, while maintaining high throughput despite the extra updates required to keep views up-to-date. 
+Our evaluation shows that queries concerning global data can be completed in less than one millisecond while maintaining high throughput, despite the extra updates required to keep views up-to-date. 
 
 \end{abstract}
 
@@ -96,7 +96,7 @@ Our evaluation shows that queries concerning global data can be completed in les
 
 %	\item Num. DC a aumentar
 
-The increasing reliance on web service in many domains of activity, from e-commerce to business applications
+The increasing reliance on web services in many domains of activity, from e-commerce to business applications
 and entertainment, leads to stringent requirements regarding latency, availability and fault tolerance \cite{Schurman2009latency,gomez}.
 To address these requirements, cloud platforms have been adding new data centers at different geographic 
 locations. By allowing users to access a service by contacting the closest data center, a global service can
@@ -175,7 +175,7 @@ types to more complex structures that could support a view with multiple columns
 We present the design and implementation of PotionDB, a geo-replicated key-value store with support  
 for partial replication and materialized views. 
 PotionDB provides weak consistency, for improved latency and availability, and support for highly
-available transactions \cite{hat}.  
+available transactions \cite{cure}.  
 To our knowledge, our work is the first to address the problem of maintaining materialized views
 in such setting.  
 
@@ -394,7 +394,7 @@ here the values of the database used to compute
 
 Typically 
 
-The database additional contains a set of derived objects, or views, $Views$, where each 
+The database additionally contains a set of derived objects, or views, $Views$, where each 
 
  
 
@@ -483,7 +483,7 @@ The customers can be partitioned based on their country's continent by taking th
 
 \begin{enumerate}
 	\item Define one bucket per continent;
-	\item Configure the servers so that each replica replicates the bucket of its continent + another one for fault tolerance purposes;
+	\item Configure the servers so that each replica replicates the bucket of its continent (+ possibly others for fault tolerance);
 	\item When adding a customer to the database, specify the bucket correspondent to the customer's continent.
 \end{enumerate}
 
@@ -1115,7 +1115,7 @@ In PotionDB, the usage of CRDTs ensures the states of different replicas will ev
 \subsubsection{Read Commited}
 
 Read Commited (RC) is a consistency model which guarantees that only states resulting from commited transactions can be read.
-This model is ``weaker'' (less guarantees) compared to PSI.
+This model is ``weaker'' (less guarantees) when compared to PSI.
 However, PSI has considerable overhead on reads in PotionDB, for scenarios with a high update rate, due to the provisioning of the snapshots.
 Thus, we provide the option to use RC for when high read throughput is a must under a high update rate scenario.
 
@@ -1375,7 +1375,7 @@ Due to how replication works (see Section \ref{subsec:replication}), this also e
 We note that this requirement is not a limitation - in fact, given the expected use case of PotionDB, it would already be desired for views to be replicated everywhere in most cases.
 Even so, the exact requirement to keep views up-to-date is ligther:
 more precisely, it is required for a view to be replicated in every server in which there may be objects relevant to the view.
-This lighter requirement might be useful for cases in which the view doesn't concern data from the whole globe but instead, e.g., from one given country.T
+This lighter requirement might be useful for cases in which the view doesn't concern data from the whole globe but instead, e.g., from one given country.
 
 %16/03/21:
 %Para a secção "Supporting Views":
@@ -1959,7 +1959,7 @@ To test PotionDB, only a subset of the TPC-H queries were implemented.
 Thus, we had to choose a subset which represented different kinds of queries, spanning multiple types of CRDTs and scenarios.
 We also considered how interesting the business question associated to each query is when selecting those, however here we focus on their relevance in testing PotionDB:
 
-\andre{I'm not sure I should keep the last phrase above}.
+\andre{I'm not sure I should keep the last phrase above.}
 
 \begin{itemize}
 	\item Query 3: this query is interesting as it tests a multitude of things - it requires presenting data from different kinds of objects (lineitems, orders); updating requires accessing yet another kind of object (customer); tests viability of having a view for each day in a given period; tests implementing order by and limit with TopK CRDT.
@@ -1979,7 +1979,7 @@ We also considered how interesting the business question associated to each quer
 
 As a final note, we highlight that we analyzed all queries of TPC-H.
 While only the aforementioned 6 were implemented, we designed a possible set of views using PotionDB's objects that would be able to reply to each query defined in TPC-H.
-This implies that it is, in theory, possible to support the full set of TPC-H queries in PotionDB, thus reinforcing the expressiveness of PotionDB's object types.
+Thus it is possible to support the full set of TPC-H queries in PotionDB, thus reinforcing the expressiveness of PotionDB's object types.
 
 \andre{Should I mention that maybe the triggers would need to be more expressive to support updating all of those views? Then again we're already allowing custom code on them...}
 
@@ -2010,7 +2010,7 @@ To exemplify the differences, consider a view concerning orders from all over th
 \subsubsection{Common settings}
 \label{subsubsec:commonSettings}
 
-In our tests a datased based on TPC-H's datased \cite{tpch} is used.
+In our tests a dataset based on TPC-H's dataset \cite{tpch} is used.
 More precisely, while we keep all the tables and use data generated by the dbgen tool \cite{tpch}, we focus only on a subset of the queries and, for each table, we only keep the columns necessary to answer such queries.
 The subset of queries used is described in Section \ref{subsec:implementedQueries}.
 
@@ -2034,7 +2034,7 @@ In general, our test environment is set up with the following configurations:
 	\item Each client selects one server to execute queries upon, and only contacts said server. In the case of local view and single view PotionDBs, if a server cannot satisfy a query with its data, that server contacts other servers in order to reply to the query.
 	\item Unless otherwise specified, each request is a transaction which contains one instance of each query - this implies that, for local view PotionDB, transactions have more operations, as some queries need data from multiple regions.
 	\item In some scenarios, we impose latency between the servers, in order to simulate how PotionDB would perform when distributed accross the globe.
-	We use as reference the latency between AWS instances, as measured in \cite{AWSLatency} (\andre{Add a date of access?}).
+	We use as reference the latency between AWS instances, as measured in \cite{AWSLatency} \andre{(Add a date of access?)}.
 	The following regions were selected: EU (Paris), US (N.Virginia), Canada (Central), Asia Pacific (Tokyo), Middle East (Bahrain). The highest latency measured is between Canada and Middle East at 204ms as of the date of measure.
 	\andre{Note: a possible critic here is that we don't have one server per continent, which is the scenario we always describe in the paper}.
 	\andre{Second note: I rechecked the website - the latency between those two servers has improved a lot!!! Nowadays it is around 161ms. If I put a timeframe of 1 year it still shows 204ms, which suggests improvements in the connection. I probably need to reconsider the latencies?}
@@ -2061,7 +2061,7 @@ Afterwards, a special client is started to load the initial database state into 
 %In some tests, a client responsible for updating the dataset (i.e., insert new elements and remove old ones) is also started along with the query clients.
 %We call this last client of update client.
 %In some other tests, all clients can do both queries and updates, with a varying percentage.
-Finally, after all data has been loaded into the servers, multiple clients are started to execute queries and, possibly, updates, with the query/update rate depending on the test.
+Finally, after all data has been loaded into the servers, multiple clients per client node are started to execute queries and, possibly, updates, with the query/update rate depending on the test.
 
 In our experiments we use as metrics the amount of queries per second (query/s) achieved by all clients aggregated, as well as the average latency of each client transaction.
 In tests with both updates and queries, we instead use operations per second (ops/s).
@@ -2120,7 +2120,7 @@ Figure \ref{fig:global_local_single} includes all queries in the execution, whil
 
 When factoring in all the queries (Figure \ref{fig:global_local_single}), as expected both local and single view PotionDB perform worse than normal PotionDB.
 The single version's max throughput is about 1/5th of PotionDB's.
-This occours due to the fact that queries are server entirely by views, which are all in a single server - thus, in a query-only scenario, one server gets all the load, instead of it being distributed by 5 servers.
+This occours due to the fact that queries are served entirely by views, which are all in a single server - thus, in a query-only scenario, one server gets all the load, instead of it being distributed by 5 servers.
 The local version seems to have about 1/6th of PotionDB's performance, which is because some of the queries require data from all regions, which implies that in local mode, such queries need to consult the views in every server.
 \andre{Note: the section describing redirected operations needs to be reviewed for sure.}
 Due to the redirection of requests (see Section \ref{subsec:operationsNonLocal}) that occours due to not all data required being in the server contacted by a client, this implies an extra round-trip for some requests, which further slows down performance.
@@ -2206,7 +2206,7 @@ However, updates in a transaction must lock the partitions they're involved and 
 As such, if the update rate is high, clients executing queries or updates may often have to wait for a transaction with updates to finish executing before executing their own operations.
 
 Figure \ref{fig:update_rates_split} shows the same experiment as Figure \ref{fig:update_rates}, but showcases the latencies of queries and updates splitted, instead of together.
-It is noticeable that updates, even for low values, have higher latency than updates - this is mostly due to the fact that update transactions have more operations than queries.
+It is noticeable that updates, even for low values, have higher latency than queries - this is mostly due to the fact that update transactions have more operations than queries.
 The abrupt spike observed at the end, in the update latency graph, happens as many clients are doing updates and thus, many 2-phase commits are issued, which have to wait for each other to finish.
 
 \begin{figure}
@@ -2350,10 +2350,10 @@ When executing queries-only, the performance scales aproximately linearly with t
 For instance, Average CRDT goes from 11.1M ops/s with 5 servers to 2.35M ops/s with 1 server (78.8\% decrease).
 This happens as any server can be queried without needing to synchronize with other servers.
 With updates, the max throughput is lower and it scales down less linearly.
-For example, Average CRDT with 25\% update rate goes from 3.46M ops/s with 5 servers to 2.87M ops/s with 4 servers (82.3\% decrease) and to 1.11M ops/s with 1 server (25.3\% decrease from 5 servers).
-A similar percentage drop is observed 100\% updates.
+For example, Average CRDT with 25\% update rate goes from 3.46M ops/s with 5 servers to 2.87M ops/s with 4 servers (17.1\% decrease) and to 1.11M ops/s with 1 server (67.9\% decrease from 5 servers).
+A similar percentage drop is observed with 100\% updates.
 This happens as with updates, they have to be propagated to the other replicas and executed in every replica.
-However, PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed efficiently.
+However, PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed more efficiently.
 \andre{No idea why topK has a bit more performance with 25\% updates. I'm not sure why update-only has better throughput than query+update, but I can think of two possible reasons: a) updates make queries wait; b) updates reply quicker as a reply is sent as soon as the partitions confirm they will commit (and not after the commit is executed), unlike queries which must wait for the result to be ready.}
 
 \subsubsection{Batching}
@@ -2525,9 +2525,9 @@ Weak consistency can help avoid both problems, but lack the useful consistency g
 
 \andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
 
-Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations to apply on each server) \cite{spire, optimisticPartial, coda}, and are thus of interest for geo distribution.
-The partitioning of the data must be carefully done by considering where each object may be relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{spire, optimisticPartial, coda}
-However, one common problem with partial replication is that, sometimes, it is necessary to access data sharded among different datacenter \cite{spire}.
+Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations being applied on each server) \cite{spire, optimisticPartial, coda}, and are thus of interest for geo distribution.
+The partitioning of the data must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{spire, optimisticPartial, coda}
+However, one common problem with partial replication is that, sometimes, it is necessary to access data sharded among different datacenters \cite{spire}.
 %Many systems provide partial replication \cite{???}.
 %However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different datacenters.
 Without views, this process can be slow, specially when trying to provide a consistent snapshot of the database.
