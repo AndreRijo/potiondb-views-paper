@@ -179,6 +179,14 @@ year={2017}
 	organization={IEEE}
 }
 
+@inproceedings{gentlerain,
+	title={Gentlerain: Cheap and scalable causal consistency with physical clocks},
+	author={Du, Jiaqing and Iorgulescu, C{\u{a}}lin and Roy, Amitabha and Zwaenepoel, Willy},
+	booktitle={Proceedings of the ACM Symposium on Cloud Computing},
+	pages={1--13},
+	year={2014}
+}
+
 %Strong Consistency
 
 @article{megastore,
@@ -308,6 +316,15 @@ year={2017}
 	year = {2020}
 }
 
+
+@inproceedings{eiger,
+	title={Stronger semantics for low-latency geo-replicated storage},
+	author={Lloyd, Wyatt and Freedman, Michael J and Kaminsky, Michael and Andersen, David G},
+	booktitle={10th $\{$USENIX$\}$ Symposium on Networked Systems Design and Implementation ($\{$NSDI$\}$ 13)},
+	pages={313--328},
+	year={2013}
+}
+
 %Index
 
 @article{lee2020asymmetric,
@@ -424,15 +441,14 @@ year={2017}
 	year={2018}
 }
 
-%
-
-@inproceedings{lloyd2013stronger,
-	title={Stronger semantics for low-latency geo-replicated storage},
-	author={Lloyd, Wyatt and Freedman, Michael J and Kaminsky, Michael and Andersen, David G},
-	booktitle={10th $\{$USENIX$\}$ Symposium on Networked Systems Design and Implementation ($\{$NSDI$\}$ 13)},
-	pages={313--328},
-	year={2013}
+@article{dbtoaster,
+	title={Dbtoaster: Higher-order delta processing for dynamic, frequently fresh views},
+	author={Ahmad, Yanif and Kennedy, Oliver and Koch, Christoph and Nikolic, Milos},
+	journal={arXiv preprint arXiv:1207.0137},
+	year={2012}
 }
+
+%
 
 @inproceedings{treaties,
 	title={Efficient, consistent distributed computation with predictive treaties},
@@ -472,9 +488,25 @@ year={2017}
 	publisher={ACM New York, NY, USA}
 }
 
+@inproceedings{saturn,
+	title={Saturn: A distributed metadata service for causal consistency},
+	author={Bravo, Manuel and Rodrigues, Lu{\'\i}s and Van Roy, Peter},
+	booktitle={Proceedings of the Twelfth European Conference on Computer Systems},
+	pages={111--126},
+	year={2017}
+}
+
+%Partitioning (similar idea of single-thread to PotionDB)
+@incollection{h-store,
+	title={The end of an architectural era: It's time for a complete rewrite},
+	author={Stonebraker, Michael and Madden, Samuel and Abadi, Daniel J and Harizopoulos, Stavros and Hachem, Nabil and Helland, Pat},
+	booktitle={Making Databases Work: the Pragmatic Wisdom of Michael Stonebraker},
+	pages={463--489},
+	year={2018}
+}
 
 %PSI
-@inproceedings{sovran2011transactional,
+@inproceedings{walter,
 	title={Transactional storage for geo-replicated systems},
 	author={Sovran, Yair and Power, Russell and Aguilera, Marcos K and Li, Jinyang},
 	booktitle={Proceedings of the Twenty-Third ACM Symposium on Operating Systems Principles},
@@ -482,11 +514,32 @@ year={2017}
 	year={2011}
 }
 
+%Automatic views
+@article{ahmed2020automated,
+	title={Automated generation of materialized views in oracle},
+	author={Ahmed, Rafi and Bello, Randall and Witkowski, Andrew and Kumar, Praveen},
+	journal={Proceedings of the VLDB Endowment},
+	volume={13},
+	number={12},
+	pages={3046--3058},
+	year={2020},
+	publisher={VLDB Endowment}
+}
+
 @misc{oracleTriggers,
 	author = {Oracle Corporation},
 	title = {Database Triggers},
 	howpublished = {~\url{https://docs.oracle.com/cd/A57673_01/DOC/server/doc/SCN73/ch15.htm}},
 	year = {1996}
+}
+
+%SQL
+@inproceedings{sequel,
+	title={SEQUEL: A structured English query language},
+	author={Chamberlin, Donald D and Boyce, Raymond F},
+	booktitle={Proceedings of the 1974 ACM SIGFIDET (now SIGMOD) workshop on Data description, access and control},
+	pages={249--264},
+	year={1974}
 }
 
 @misc{AWSLatency,
