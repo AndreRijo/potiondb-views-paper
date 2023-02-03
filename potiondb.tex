@@ -11,6 +11,33 @@
 
 \usepackage{booktabs} %added for tables (Andre)
 
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+\lstset{language=SQL,
+  basicstyle={\small\ttfamily},
+  deletekeywords={key}, %not working
+  belowskip=3mm,
+  breakatwhitespace=true,
+  breaklines=true,
+  classoffset=0,
+  columns=flexible,
+  commentstyle=\color{dkgreen},
+  framexleftmargin=0.25em,
+  frameshape={}{}{}{},
+  %frameshape={}{yy}{}{}, %To remove to vertical lines on left, set `frameshape={}{}{}{}`
+  keywordstyle=\color{blue},
+  numbers=none, %If you want line numbers, set `numbers=left`
+  numberstyle=\tiny\color{gray},
+  showstringspaces=false,
+  stringstyle=\color{mauve},
+  tabsize=3,
+  xleftmargin =0em
+}
+
+\newcommand{\qcr}[1]{{\fontfamily{qcr}\selectfont #1}}
+\newcommand{\code}[1]{\textsf{\small{#1}}}
+
 
 \usepackage{balance}  % for  \balance command ON LAST PAGE  (only there!)
 
@@ -21,11 +48,11 @@
 \setlength{\pltopsep}{0.3em}
 \setlength{\plitemsep}{0.1em}
 
-\newcommand{\grumbler}[2]{{\color{red}{\bf #1:} #2}}
-\renewcommand{\grumbler}[2]{}
-\newcommand{\andre}[1]{\grumbler{andre}{#1}}
-\newcommand{\nuno}[1]{\grumbler{nuno}{#1}}
-\newcommand{\carla}[1]{\grumbler{carla}{#1}}
+%\newcommand{\grumbler}[2]{{\color{red}{\bf #1:} #2}}
+%\renewcommand{\grumbler}[2]{}
+%\newcommand{\andre}[1]{\grumbler{andre}{#1}}
+%\newcommand{\nuno}[1]{\grumbler{nuno}{#1}}
+%\newcommand{\carla}[1]{\grumbler{carla}{#1}}
 
 \newcommand{\outline}[1]{}
 %\newcommand{\outline}[1]{\grumbler{outline}{#1}}
@@ -56,6 +83,28 @@
 \vldbYear{2020}
 \vldbDOI{https://doi.org/TBD}
 
+\definecolor{red}{RGB}{200,0,0}
+\definecolor{green}{RGB}{0,200,0}
+\definecolor{blue}{RGB}{0,0,200}
+\usepackage{ifthen}
+\newboolean{showcomments}
+\setboolean{showcomments}{true} %
+\ifthenelse{\boolean{showcomments}}
+{\newcommand{\nbnote}[3]{
+  %
+  \fcolorbox{gray}{yellow}{\bfseries\sffamily\scriptsize#1}
+  {\color{#2} \sffamily\small$\blacktriangleright$\textit{#3}$\blacktriangleleft$}
+%
+  %
+  }
+}
+{\newcommand{\nbnote}[3]{}
+ \newcommand{\version}{}
+}
+\newcommand{\andre}[1]{\nbnote{Andre}{blue}{#1}}
+\newcommand{\carla}[1]{\nbnote{Carla}{green}{#1}}
+\newcommand{\nuno}[1]{\nbnote{Nuno}{red}{#1}}
+
 
 \begin{document}
 
@@ -82,16 +131,15 @@ Nuno Preguiça\\
 \begin{abstract}
 \andre{Please review this}
 
-Many existing web services of global scale have strict latency, availability and fault tolerance requirements.
-To address these requirements, these services are often deployed in data centers distributed 
-across the globe, with users accessing the closest datacenter.
+Many existing web services at a global scale have strict latency, availability, and fault tolerance requirements.
+To address these requirements,  services are often deployed in data centers distributed 
+across the globe, with users accessing the closest data center.
 As the number of servers increases, so does the replication cost, which makes partial replication an attractive approach.
-However, some queries may require data not replicated in every server (e.g. in an e-commerce system, the list 
-of best seller products across the globe).
+However, some queries may require data not replicated in every server (e.g. in an e-commerce system, the best-selling products across the globe).
 
-In this paper, we present PotionDB, a novel geo-distributed key-value store which provides partial replication.
-We present a replication scheme which allows data to be partially replicated, yet still answer queries relative to global data efficiently.
-We leverage on existing partial and non-uniform replication algorithms to provide materialized views of data that may be split across multiple servers.
+In this paper, we present PotionDB, a novel geo-distributed key-value store that provides partial replication.
+We present a replication scheme that allows data to be partially replicated, yet still, answer queries relative to global data efficiently.
+We leverage existing partial and non-uniform replication algorithms to provide materialized views of data that may be split across multiple servers.
 With these views, a client can obtain global information by querying a single server.
 Our evaluation shows that queries concerning global data can be completed in less than one millisecond while maintaining high throughput, despite the extra updates required to keep views up-to-date. 
 
@@ -103,7 +151,8 @@ Our evaluation shows that queries concerning global data can be completed in les
 %	\item Num. DC a aumentar
 
 The increasing reliance on web services in many domains of activity, from e-commerce to business applications
-and entertainment, leads to stringent requirements regarding latency, availability and fault tolerance \cite{Schurman2009latency,gomez}.
+and entertainment, leads to stringent requirements regarding latency, availability,
+and fault tolerance \cite{Schurman2009latency,gomez}.
 To address these requirements, cloud platforms have been adding new data centers at different geographic 
 locations. By allowing users to access a service by contacting the closest data center, a global service can
 provide low latency to users spread across the globe. The increasing number of data centers also contributes
@@ -172,7 +221,8 @@ relevant materialized views. To achieve this, we designed a replication mechanis
 to the base data and views are made visible atomically in each replica.
 
 Second, it is necessary to efficiently support views with limits, used for example to support \emph{top-k} 
-queries. To achieve this, we build on the concept of non-uniform replication \cite{Cabrita17Nonuniform}, in which the state
+queries. \carla{Later on top-k is defined as topK.}
+To achieve this, we build on the concept of non-uniform replication \cite{Cabrita17Nonuniform}, in which the state
 of different replicas may be different, given that the observable state is (eventually) the same.
 This allows each replica to propagate only the updates that might be relevant to the observable 
 state. Providing support for views required us to extend non-uniform replication from simple data 
@@ -187,10 +237,10 @@ in such setting.
 
 \andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
-We have evaluated our system using micro-benchmarks and TPC-H queries \cite{tpch}.
+We  evaluated our system using micro-benchmarks and \mbox{TPC-H} queries \cite{tpch}.
 The results show that our algorithms for maintaining materialized views impose 
-low overhead when executing and asynchronously replicating transactions, particularly
-for views with limits.
+low overhead when executing asynchronously replicating transactions, particularly
+for views with limits. 
 \nuno{deviamos ter uns micro-benchmarks que comparassem o overhead com limites e sem limites}
 Additionally, the results show that executing queries by relying on the materialized views is much more 
 efficient than using alternative mechanisms.  
@@ -229,7 +279,7 @@ The remainder of the paper is organized as follows. Section ...
 \section{System Overview}
 \label{sec:overview}
 
-In this section we provide an overview of the functionality of PotionDB, focusing on its support for 
+This section  provides an overview of the functionality of PotionDB, focusing on its support for 
 repetitive queries based on views.
 
 PotionDB is designed for supporting global services deployed at multiple data centers. In these settings,
@@ -247,8 +297,8 @@ Additionally, as data is tied to some geographic location, one can expect that t
 occurs on that location. 
 To address this, PotionDB servers will run at multiple geographic locations.
 Data items are replicated in only a subset of the locations, for providing high availability and fault tolerance.
-By not replicating data in all data centers, PotionDB allows to minimize the replication cost (when
-compared to solutions featuring full replication).
+By not replicating data in all data centers, PotionDB allows to minimize the replication cost, when
+compared to solutions featuring full replication.
 
 Returning to our example, an online store might want to maintain the top selling products or top selling products
 for buyers that bought some product (for recommendations).
@@ -275,29 +325,34 @@ views are also updated (in the same transaction).
 \label{subsec:datamodel}
 
 PotionDB is a distributed key-value database.
-We identify two types of values: base objects, $Objs$, and derived objects, $Views$.
-We define the set of objects of a database, $DB$, as $DB$ = $Objs \cup Views$.
+We identify two types of values: base objects, $\mathit{Objs}$, and derived objects, $\mathit{Views}$.
+We define the set of objects of a database, $\mathit{DB}$, as $\mathit{DB}$ = $\mathit{Objs} \cup \mathit{Views}$.
 Informally, we classify as an object ($o$) any value that is either a base object ($b$) or view ($v$).
 We distinguish between base objects and views whenever necessary for clarity.
 
-The value of a view is defined as a function of the values of other object(s), i.e., $\forall v \in Views, v = fun_v(D_v)$, where \emph($D_v$) is the set of objects (potencially both base objects and other views) used to compute $v$.
-We assume the computation is non-recursive, i.e., the value of a view is never based on its own value or, formally, $\forall v \in Views, v \notin D_v$.
+The value of a view is defined as a function of the values of other object(s), i.e., 
+$\forall\, v \in \mathit{Views}, v = \mathit{fun}_v(D_v)$, 
+where \emph($D_v$) is the set of objects (potentially both base objects and other views) used to compute $v$.
+We assume the computation is non-recursive, i.e., the value of a view is never based on its own value or, formally, 
+$\forall\, v \in \mathit{Views}, v \notin D_v$.
 
-All objects are uniquely identified by the triple (key, bucket, type).
-For presentation purposes, we assume the triple is a property of the object and we define $id = (key, bucket, type)$.
-Whenever needed, we represent the aforementioned properties for a given object $o$ as $o^{id}$, $o^{key}$, $o^{bucket}$, $o^{type}$.
+Objects are uniquely identified by the triple $\mathit{(key, bucket, type)}$.
+For presentation purposes, we assume the triple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
+Whenever needed, we represent the aforementioned properties for a given object $o$ as
+$o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
 
 \subsection{Interface}
 \label{subsec:interface}
 
-\begin{table}[]
+\begin{table}[t]
+\center
 	\begin{tabular}{ll} 
 		\toprule
-		get(txId, id) $\rightarrow$ value                  & begin(clk) $\rightarrow$ txId            \\
-		read(txId, id, op) $\rightarrow$ value             & commit(txId) $\rightarrow$ clk           \\
-		update(txId, id, op) $\rightarrow$ ok           & rollback(txId) $\rightarrow$ ok                           \\
-		& \\
-		readTx(clk, reads...) $\rightarrow$ clk, values... & updateTx(clk, updates) $\rightarrow$ clk \\
+		\code{get(txId, id) $\rightarrow$ value}                  & \code{begin(clk) $\rightarrow$ txId}            \\
+		\code{read(txId, id, op) $\rightarrow$ value}             & \code{commit(txId) $\rightarrow$ clk}          \\
+		\code{update(txId, id, op) $\rightarrow$ ok}          & \code{rollback(txId) $\rightarrow$ ok}                        \\[4pt]
+		\multicolumn{2}{l}{\code{readTx(clk, read$^+$) $\rightarrow$ clk, value$^+$}} \\
+		\multicolumn{2}{l}{\code{updateTx(clk, update$^+$) $\rightarrow$ clk}} \\
 		\bottomrule
 	\end{tabular}
 	\vspace{1em}
@@ -309,24 +364,35 @@ PotionDB offers a transactional interface.
 Thus, applications access the database by executing transactions.
 Users can start transactions, execute reads and updates in the context of a given transaction and then either commit or abort the transaction.
 PotionDB provides the following API for its applications, also summarized in Table \ref{table:PotionDB_API}:
-
+\carla{We need to think about the notation and define macros. I was trying the font \textsf{sf} for the "code" but it does play well with the functions $o^{\mathit{id}}$.}
 \begin{compactitem}
-	\item begin(clk) $\rightarrow$ txId: starts a transaction and returns an identifier ($txId$) to represent it. The $txId$ is then used to associate reads and updates to this transaction. $Clk$ is used to ensure applications see a casually evolving state of the database. We detail this further in Section \ref{sec:transactions};
-	\item get(txId, id) $\rightarrow$ value: returns the full state of object $o^{id}$ in the context of transaction $txId$. E.g., if $o^{id}$ is a set, then all its elements are returned;
-	\item read(txId, id, op) $\rightarrow$ value: executes a read operation $op$ on object $o^{id}$ in the context of transaction $txId$, returning the result of the operation. E.g., if $o^{id}$ is a set, we could execute a $lookup(a)$ operation to check if the element $a$ is part of the set;
-	\item update(txId, id, op) $\rightarrow$ ok: associates an update of object $o^{id}$ to the transaction $txId$. $Op$ represents the operation to be applied to modify the object's state. Updates are only executed when a commit is issued. If $o^{id}$ does not exist, it is created during the commit;
-	\item commit(txId) $\rightarrow$ clk: commits the transaction $txId$, applying all updates associated to it. The clock generated by commit is returned for use in later transactions;
-	\item abort(txId) $\rightarrow$ ok: cancels the transaction $txId$, discarding all updates associated to the transaction;
-	\item readTx(clk, reads...) $\rightarrow$ clk, values...: executes a read-only transaction with one or more reads;
-	\item updateTx(clk, updates...) $\rightarrow$ clk: executes a write-only transaction with one or more updates.
+	\item \code{begin(clk) $\rightarrow$ txId}: starts a transaction and returns an identifier (\code{txId}) to represent it. 
+	The \code{txId} is then used to associate reads and updates to this transaction. 
+	The \code{clk} is used to ensure applications see a casually evolving state of the database. We detail this further in Section~\ref{sec:transactions};
+	
+	\item  \code{get(txId, id) $\rightarrow$ value}: returns the full state of object $o^{\mathit{id}}$ in the context of transaction \code{txId}. 
+	E.g., if $o^{\mathit{id}}$ is a set, then all its elements are returned; \carla{why not "if $o^{\mathit{type}}$ is a set"}
+	
+	\item \code{read(txId, id, op) $\rightarrow$ value}: executes a read operation \code{op} on object $o^{\mathit{id}}$ in the context of transaction \code{txId}, 
+	returning the result of the operation. E.g., if $o^{id}$ is a set, we could execute a $\mathit{lookup}(a)$ operation to check if the element $a$ is part of the set;
+	\item \code{update(txId, id, op) $\rightarrow$ ok}: associates an update of object $o^{id}$ to the transaction \code{txId}.
+	\textsf{op} represents the operation to be applied to modify the object's state.
+	 Updates are only executed when a commit is issued. If $o^{\mathit{id}}$ does not exist, it is created during the commit;
+	\item \code{commit(txId) $\rightarrow$ clk}: commits the transaction \code{txId}, applying all updates associated to it. 
+	The clock generated by commit is returned for use in later transactions;
+	\item \code{abort(txId) $\rightarrow$ ok}: cancels the transaction \code{txId}, discarding all updates associated to the transaction;
+	\item \code{readTx(clk, read$^+$) $\rightarrow$ clk, value$^+$}: executes a read-only transaction with one or more reads; \carla{Is the read a sequence of read operations?}
+	\item \code{updateTx(clk, update$^+$) $\rightarrow$ clk}: executes a write-only transaction with one or more updates.
 \end{compactitem}
 
-We provide ``static'' read-only (readTx) and write-only (updateTx) transactions, as well as dynamic transactions (begin, commit, abort) where both reads and writes can be mixed.
+We provide ``static'' read-only (\code{readTx}) and write-only (\code{updateTx}) transactions, 
+as well as dynamic transactions (\code{begin}, \code{commit}, \code{abort}) where both reads and writes can be mixed.
 The former are adequate for situations in which the set of operations is already known a priori, and thus the whole transaction can be issued to the database in one round trip.
-The latter provides more flexibility for the application developer, as it allows for data to be read and then an action to be taken based on the result of said reads, all in the context of the same transaction.
-For example, in a social network scenario, user A may want to do a publication only if user B is offline, so that user B cannot find out that user A is active.
-For this, a dynamic transaction is needed, as we only want the publication to succeed if the user B is offline.
-Without dynamic transactions, we could first read user B as offline, then user B comes online and only afterwards the publication is done.
+The latter provides more flexibility for the application developer, as it allows for data to be read and then an action to be taken based on the result of said reads, 
+all in the context of the same transaction.
+For example, in a social network scenario, user $A$ may want to do a publication only if user $B$ is offline, so that user $B$ cannot find out that user $A$ is active.
+For this, a dynamic transaction is needed, as we only want the publication to succeed if the user $B$ is offline.
+Without dynamic transactions, we could first read user $B$ as offline, then user $B$ comes online and only afterwards the publication is done.
 
 \subsection{CRDTs}
 \label{subsec:CRDTs}
@@ -334,29 +400,30 @@ Without dynamic transactions, we could first read user B as offline, then user B
 %Should I mention the CRDTs we implement are the op-based ones? I will mention that in Replication.
 
 PotionDB's objects and views are implemented as CRDTs \cite{crdt}.
-CRDTs (Conflict-free Replicated Data Types) are designed to be used in distributed systems, ensuring the states of the replicas converge despite the occourence of concurrent updates.
-Many CRDTs have been proposed, allowing for a rich library of objects such as counters, registers, sets, maps, topK (leaderboard), etc.
-CRDTs support operations to directly manipulate the object's state, e.g., increments on counters, instead of direct assigments.
+CRDTs (Conflict-free Replicated Data Types) are designed to be used in distributed systems, ensuring the states of the replicas converge despite the occurence of concurrent updates.
+Many CRDTs have been proposed, allowing for a rich library of objects such as counters, registers, sets, maps, topK (leaderboard). \carla{maybe topK needs to be further explained}
+CRDTs support operations to directly manipulate the object's state, e.g., increments on counters, instead of direct assignements.
 Thus, application developers can pick the CRDTs corresponding to the data types appropriate for their application(s), without having to worry how to handle concurrency conflicts.
 Furthermore, many flavours of each data type are available which implement different policies to solve conflicts, allowing CRDTs to adapt further to each application's needs.
 CRDTs, together with our transactional causal consistency support and provisioning of snapshots, ease the life of application developers, as they will encounter less anomalies compared to other weak consistency solutions.
-This avoids the need for ad-hoc mechanisms that are error-prone to compensate anomalies \cite{???}.
+This avoids the need for ad-hoc mechanisms that are error-prone to compensate anomalies \cite{???}.\carla{check refs 17, 18, 22, 23 on the paper Composition in State-based
+Replicated Data Types}
 
 In PotionDB we support the following datatypes: counters, registers, sets, maps, topK, average and max/min.
 Our CRDTs support multiple operations and reads which ease their usage. 
-E.g., in a map, both single and group additions/removals can be executed, and one can read the whole map, check if a certain key exists or get the value of a key, etc.
+E.g., in a map, both single and group additions/removals can be executed, and one can read the whole map, check if a certain key exists or get the value of a key.
 We further extended some CRDTs designs to make them more expressive.
-E.g., our topK supports both additions and removals, as well as extra fields necessary to answer queries; we also provide a variant of topK (topSum) which supports incrementing or decrementing an existing entry.
-Our maps are composable, i.e., the value of a map can be any other CRDT, which further enhances the expressivety of PotionDB.
+E.g., our topK supports both additions and removals, as well as extra fields necessary to answer queries; we also provide topSum, a variant of topK, which supports incrementing or decrementing an existing entry.
+Our maps are composable, i.e., the value of a map can be any other CRDT, which further enhances the expressiveness of PotionDB.
 %Does the composability need some example to justify it?
 
-These extensions and multi-operations, as well as the variety of datatypes, makes CRDT implementation in PotionDB cumbersome, as it is necessary to ensure the states converge despite the execution of operations concurrently, as well as respect the sequential semantics of the object.
+These extensions and multi-operations, as well as the variety of datatypes, makes CRDT implementation in PotionDB cumbersome, as it is necessary to ensure the states converge despite the execution of concurrent operations, as well the sequential semantics of the object is respected. \carla{Is the sequential semantics of CRDTs something well-known?}
 It is also necessary to support efficient replication of each CRDT's updates.
 We also had to support version management for each CRDT in order to provide our casually consistent snapshots.
 However, our efforts allow us to efficiently support complex OLAP queries. %Should I refer again it eases application developer's lifes?
-For instance, we implemented the TPC-H's \cite{tpch} dataset, update operations and six of their queries, including defining efficient, maintaneable views for each query.
-We also analysed the remaining queries and sketched solutions for implementing all remaining queries using PotionDB's objects and views, which demonstrates PotionDB's expressivety. %Maybe I should say datatypes instead of "objects and views"?
-We leave details on our TPC-H implementation for Section \ref{sec:}.
+For instance, we implemented the TPC-H's \cite{tpch} dataset, update operations, and six of their queries, including defining efficient, maintainable views for each query.
+We also analysed the remaining queries and sketched solutions for implementing all remaining queries using PotionDB's objects and views, which demonstrates PotionDB's expressiveness. %Maybe I should say datatypes instead of "objects and views"?
+We leave details on our TPC-H implementation for Section \ref{sec:views_for_apps}.
 %Do I need to refer here that I explain NuCRDTs (or non-uniform replication) in another section?
 %Should I explain here in detail our extensions to TopK and TopSum? May be a bit difficult to explain the later here without explaining non-uniform replication.
 
@@ -375,19 +442,20 @@ Defining materialized views by directly composing PotionDB's datatypes, while po
 This is further aggravated by the need to keep views updated, which would imply the application developer having to write code for both updating the base objects and views.
 To avoid this, we specify a language inspired in SQL \cite{sequel} to specify materialized views.
 From this specification, PotionDB can automatically infeer the required objects to support the view, as well as automatically generate the necessary view updates' whenever a relevant base object is inserted, updated or deleted.
-We detail this inferring in Section \ref{subsec:generated_view}.
-Note that the API to read a view's state is the same as the one previously described to read other objects.
+We detail this automated process in Section \ref{subsec:generated_view}.
+Note that the API to read a view's state is the same as the one previously described to read other objects. \carla{Is is table 1. If so, add a link}
 %Updating or reading a view is done with the same interface used for other objects, as described in Section \ref{subsec:CRDTs}.
 %Details on how we keep a view up-to-date and consistent with the objects it builds upon is left for Sections \ref{subsec:viewsTransaction} and \ref{subsec:repl_views}.
 %As such in this section we focus on how can a view be specified, namely how to make it depend on the state of other objects.
 
-\begin{table}[]
+\begin{table}[t]
 	\setlength\tabcolsep{3.5pt}
 	\small
 	\begin{minipage}{0.5\textwidth}
 		\centering
 		\begin{tabular}{llllll}
 			\multicolumn{6}{c}{\textbf{Sales}} \vspace{0.4em} \\%\hline
+					\hline
 			\multicolumn{1}{|l|}{ID} & \multicolumn{1}{l|}{ProdName} & \multicolumn{1}{l|}{Customer} & \multicolumn{1}{l|}{Price} & \multicolumn{1}{l|}{Cost} & \multicolumn{1}{l|}{SaleDate} \\ \hline
 			\multicolumn{1}{|l|}{1}  & \multicolumn{1}{l|}{Laptop}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{1200}       & \multicolumn{1}{l|}{500} & \multicolumn{1}{l|}{28/01/23} \\
 			\multicolumn{1}{|l|}{2}  & \multicolumn{1}{l|}{Phone}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{350}       & \multicolumn{1}{l|}{100} & \multicolumn{1}{l|}{07/02/23} \\
@@ -398,7 +466,7 @@ Note that the API to read a view's state is the same as the one previously descr
 			\multicolumn{1}{|l|}{7}  & \multicolumn{1}{l|}{Disk}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{100}       & \multicolumn{1}{l|}{20} & \multicolumn{1}{l|}{16/02/23} \\ \hline
 		\end{tabular}
 		\vspace{1em}
-		\captionof{table}{Sales "table"}
+		\captionof{table}{\textit{Sales} table.}
 		\label{table:sales}
 	\end{minipage}
 \end{table}
@@ -408,89 +476,99 @@ Note that the API to read a view's state is the same as the one previously descr
 	\begin{minipage}{0.19\textwidth}
 		\small
 		\begin{tabular}{lll}
-			\multicolumn{3}{c}{\textbf{TopSales}} \vspace{0.4em}                                                                \\
+			\multicolumn{3}{c}{\textbf{TopSales}} \vspace{0.4em}        \\
+			\hline                                               
 			\multicolumn{1}{|l|}{Customer}   & \multicolumn{1}{l|}{Profit} & \multicolumn{1}{l|}{NSales} \\ \hline
 			\multicolumn{1}{|l|}{Alice} & \multicolumn{1}{l|}{950}     & \multicolumn{1}{l|}{2}        \\
 			\multicolumn{1}{|l|}{Bob}  & \multicolumn{1}{l|}{580}      & \multicolumn{1}{l|}{3}        \\
 			\multicolumn{1}{|l|}{Charlie}   & \multicolumn{1}{l|}{80}      & \multicolumn{1}{l|}{1}        \\ \hline
 		\end{tabular}
 		\vspace{1em}
-		\captionof{table}{TopSales materialized view. This view builds upon Sales objects.}
+		\captionof{table}{\textit{TopSales} materialized view. This view builds upon \textit{Sales} objects.}
 		\label{table:topSales}
 	\end{minipage} \hfill
-	\begin{minipage}{0.26\textwidth}
-		CREATE view ($key, bucket$) \\
-		SELECT attribute1, ..., attributeN \\
-		FROM container \\
-		WHERE condition(s) \\
-		(optionally: ORDER BY, LIMIT) \\
+	\begin{minipage}{0.27\textwidth}
+	\begin{lstlisting}[language=SQL]
+CREATE VIEW (key, bucket) AS
+SELECT attribute1, ..., attributeN
+FROM container
+WHERE condition(s) 
+[ORDER BY ... ]
+[LIMIT ...]
+		\end{lstlisting}
 		\captionof{figure}{Specification of views in PotionDB}
 		\label{fig:viewSQL}
 	\end{minipage}
 \end{figure}
 
-\begin{figure}
-	CREATE view (\emph{TopSales, views}) AS \\
-	SELECT ProdName sum(Price - Cost) AS SumProfit\\
-	\hphantom{SELECT }count(sales.ID) AS NumSales \\
-	FROM sales \\
-	WHERE SaleDate.Month = 2 and SaleDate.Year = 2023\\
-	ORDER BY SumProfit DESC, NumSales DESC \\
-	LIMIT 10 \\
-	\caption{Specification of the view \emph{TopSales}}
+\begin{figure}[t]
+\begin{lstlisting}[language=SQL]
+CREATE VIEW (TopSales, views) AS 
+SELECT ProdName sum(Price - Cost) AS SumProfit
+	      count(sales.ID) AS NumSales 
+FROM sales 
+WHERE SaleDate.Month == 2 and SaleDate.Year == 2023
+ORDER BY SumProfit DESC, NumSales DESC 
+LIMIT 10
+\end{lstlisting}
+	\caption{Specification of the view \emph{TopSales}.}
 	\label{fig:topSalesSQL}
 \end{figure}
 
 Figure \ref{fig:viewSQL} showcases the aforementioned language.
-\emph{Create} defines the key and bucket of the view.
+Clause \qcr{CREATE}  defines the key and bucket of the view.
 The type is automatically inferred from the specification.
-\emph{From} defines which objects to use to build the view, and \emph{Select} chooses which attributes of the objects should be used for the view.
-The attributes for the view can potencially be aggregates (e.g., sum) of the objects' attributes.
-\emph{Where} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain properties of the object (e.g., only include European customers in the view).
-\emph{Order by} sorts the rows of the view given one or more properties of the view.
-\emph{Limit} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a max number of elements to be considered as being in the top.
+Clause \qcr{FROM} defines which objects to use to build the view, and \qcr{SELECT} chooses which attributes of the objects should be used for the view.
+The attributes for the view can potentially be aggregates (e.g., \qcr{sum}) of the objects' attributes.
+Clause \qcr{WHERE} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain properties of the object (e.g., only include European customers in the view).
+Clause \qcr{ORDER BY} sorts the rows of the view given one or more properties of the view.
+Lastly, \qcr{LIMIT} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a maximum number of elements to be considered as being in the top.
 
-Any parameter of the intended query should be indicated between []. %Should I give an example of what this is? By parameter I mean, e.g., queries that have many variants - e.g., asking the same query for different days of the week. The day of the week is a parameter of the query.
-For conditions in \emph{where}, $>$, $<$, $=$, $!=$ are supported, as well as some operations with strings (e.g., startsWith). %Should we mention in theory we could support directly comparing dates?
-A simple "if then else" is also supported inside aggregates, to further boost their expressivety.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
+Any parameter of the intended query should be indicated between square brackets. \carla{Yes, an example is needed.}
+%Should I give an example of what this is? By parameter I mean, e.g., queries that have many variants - e.g., asking the same query for different days of the week. The day of the week is a parameter of the query.
+For conditions in \qcr{WHERE}, usual comparison operators are supported, as well as  operations over strings (e.g., \qcr{startsWith}). %Should we mention in theory we could support directly comparing dates?
+Simple conditional expressions are also supported inside aggregates, to further boost the language expressiveness.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
 
 %Now explain from.
 In PotionDB we have objects instead of tables.
 Thus, to provide a ``table-like'' vision, we assume the objects can be organized in containers - e.g., we could define that all objects representing customers are in a \emph{customers} container.
-The \emph{From} clause then refers to one (and only one) of those containers. %Should I mention our restriction of only one container in some other way?
+The \qcr{FROM}  clause then refers to one (and only one) of those containers. %Should I mention our restriction of only one container in some other way?
 This abstraction allows for a view to easily refer to objects as if they were organized in tables, as well as consider objects that have not yet been created.
-Objects in the same container can still be in different buckets - e.g., we could have one bucket for each country and have customers split across buckets depending on their home country.
+Objects in the same container can still be in different buckets, e.g., we could have one bucket for each country and have customers split across buckets depending on their home country.
 Thus, views can refer to objects that are not replicated in the local server.
 We assume an object's container is non-mutable. %Do I need to refer anything further about containers (e.g. that they have no implications on implementation?)
+\carla{Buckets where not introduced yet.}
 
 %Note: Is the explanation below necessary? I believe it is not. Probably would be enough to say that table contains an example of a materialized view.
 %The explanation is a bit difficult since none of this maps to actually anything in the implementation...
-Figure \ref{fig:topSalesSQL} shows a specification of a view which answers the following query: "Who were the top 10 most profitable customers on February? And how many products did those buy?"
-Example data of the base objects and of the view can be seen, respectively, in Tables \ref{table:sales} and \ref{table:topSales}.
+Figure~\ref{fig:topSalesSQL} shows a specification of a view which answers the following query: \emph{``Who were the top 10 most profitable customers on February? And how many products did those buy?"}
+Example data of the base objects and of the view can be seen, respectively, in Tables~\ref{table:sales} and \ref{table:topSales}.
 Such a query can be useful to identify customers to which to direct special promotions, in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
 %Such a query can be useful to identify products that may need to be restocked, see if promotions/advertisement were effective, etc.
 %This view is implemented with a topSum CRDT, taking data from all products and sales, as specified in \emph{From}.
-\emph{From} specifies that all objects belonging to the container \emph{sales} should be considered.
-\emph{Select} lists which attributes should be part of the view.
-Aggregation functions are suported: in this case, \emph{sum} and \emph{count} are used.
-We also support \emph{max}, \emph{min} and \emph{avg}.
-\emph{Where} allows for only sales done on the month of February to be considered.
-Meanwhile, \emph{Order By} defines how to sort the rows, using NumSales as a tie-breaker, while \emph{Limit} specifies how many elements are considered to be "in the top".
-More complex queries are also possible - namely, our specification language allows specifying efficient views for most of TPC-H's queries. %TODO: Maybe be more precise? Out of 23 queries, I have confirmed we can support 20 with our language - only Q13, Q16 and Q21 are not supported. And those 3 can still be supported in PotionDB by defining the views manually
+The \qcr{FROM} specifies that all objects belonging to the container \emph{Sales} should be considered, while \qcr{SELECT}  lists which attributes should be part of the view.
+Several aggregation functions are supported: in this case, \qcr{sum} and \qcr{count} are used.
+We also support \qcr{max}, \qcr{min} and \qcr{avg}.
+The \qcr{WHERE} clause allows for only sales done on the month of February to be considered.
+Meanwhile, \qcr{ORDER BY} defines how to sort the rows, using attribute \qcr{NumSales} as a tie-breaker, while \qcr{LIMIT} specifies how many elements are considered to be ``in the top".
+More complex queries are also possible, namely, our specification language allows specifying efficient views for most of TPC-H's queries. 
+\carla{I agree with the comment, be more precise.}
+%TODO: Maybe be more precise? Out of 23 queries, I have confirmed we can support 20 with our language - only Q13, Q16 and Q21 are not supported. And those 3 can still be supported in PotionDB by defining the views manually
 
 %Should I mention what do we support in the where clause? E.g., where supports AND, OR, >=, <=, ==. We also support comparing with some variable (e.g., YEAR >= 1993 and YEAR <= 1997 and shipdate.year = YEAR). May be a few more things
 
 %I think the extension below is not hard to do - it is just a very restricted form of join, as it must be a 1:1 match. But helps in many cases. What I still need to think about, is how to include that in the specification language in a way that it is clear.
 %Implementing is not too complicated as it should be a simple GET of the primary key.
-\emph{Extensions.} We extend the specification language as follows.
-On the \emph{From} clause, multiple containers are supported, as long as each object in the first container of the clause matches with, at most, one object from each of the other containers.
+\emph{\textbf{Extensions.}} 
+We extend the specification language as follows.
+On the \qcr{FROM}  clause, multiple containers are supported, as long as each object in the first container of the clause matches with, at most, one object from each of the other containers.
 This allows for views to fetch data that may be in other objects that is relevant for the view.
 E.g., in the TopSales, we could fetch the customer's nation from the customer's container.
 
 We also provide an alternative interface for views which gives the application developer more control over the created views.
 The application developer can specify a trigger (i.e., code) that is run on the database to generate updates for views.
 Each trigger is associated to a container and an event (new, update or delete object) and can generate updates for one or more views.
-Each time the respective event regarding objects of said container occours, the trigger's code is executed.
+Each time the respective event regarding objects of said container occurs, the trigger's code is executed.
 Any updates generated by the trigger are appended to the current transaction.
 The trigger can, if needed, read the local objects and see all updates in the transaction. %Idea: can define a trigger on a "new order" but that trigger accesses the new items being added in the same transaction.
 This mechanism allows to specify some views not possible with our view API, further extending the possibilities of views in PotionDB.
