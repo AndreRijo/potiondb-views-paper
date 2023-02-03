@@ -84,7 +84,7 @@ Nuno Preguiça\\
 
 Many existing web services of global scale have strict latency, availability and fault tolerance requirements.
 To address these requirements, these services are often deployed in data centers distributed 
-across the globe, with users accessing the closest datacenter.
+across the globe, with users accessing the closest data center.
 As the number of servers increases, so does the replication cost, which makes partial replication an attractive approach.
 However, some queries may require data not replicated in every server (e.g. in an e-commerce system, the list 
 of best seller products across the globe).
@@ -93,7 +93,7 @@ In this paper, we present PotionDB, a novel geo-distributed key-value store whic
 We present a replication scheme which allows data to be partially replicated, yet still answer queries relative to global data efficiently.
 We leverage on existing partial and non-uniform replication algorithms to provide materialized views of data that may be split across multiple servers.
 With these views, a client can obtain global information by querying a single server.
-Our evaluation shows that queries concerning global data can be completed in less than one millisecond while maintaining high throughput, despite the extra updates required to keep views up-to-date. 
+Our evaluation shows that queries concerning global data can be completed in less than one millisecond while maintaining high throughput, despite the extra operations required to keep views up-to-date. 
 
 \end{abstract}
 
@@ -137,9 +137,9 @@ Second, increasing the number of data centers makes the replication process more
 as each update needs to be propagated to all other data centers.
 
 For addressing these problems, partial replication is an attractive approach, with each data center
-replicating only a subset of the data. A number of works have been addressing the challenges of 
-partial replication, for example by proposing algorithms to manage partially replicated data \cite{more,saturn,c3}
-and to decide which data is replicated in which replica \cite{}.
+replicating only a subset of the data.
+A number of works have been addressing the challenges of 
+partial replication, for example by proposing algorithms to manage partially replicated data \cite{spanner,saturn,sipre, practi} and to decide which data is replicated in which replica \cite{slog, sipre}.
 
 In this paper we address the problem of querying data in a weakly consistent partially geo-replicated database, 
 focusing on recurrent queries for which the application could use a (materialized) view.
@@ -148,7 +148,7 @@ In this case, the data pertaining users of a given location does not need to be 
 (but only in a few for fault tolerance). The same applies to other information, such as data on orders and 
 warehouses.
 Other data, such as information on products would be replicated in the regions where the product
-is available.  
+is available for sale.  
 Under this data placement, obtaining the list of best seller products is challenging, as it requires
 accessing data that is located at multiple data centers.
 
@@ -156,10 +156,8 @@ Several possible solutions exist for this problem.
 First, it is possible to have a data center that replicates all data, and forward these queries to such data center.
 Doing this imposes a latency penalty and requires a data center to host all data and execute all queries of this type. %Andre: also refer that this data center would be the bottleneck of the system?
 Second, it is possible to execute the query by accessing multiple locations, by using, for example, 
-a distributed processing system with support for geo-partitioned data %\cite{Kloudas:2015:POD:2850578.2850582,more}.
-\cite{kloudas2015pixida,more}.
-This approach requires running an additional external service and poses challenges for the consistency of the results
-returned and the data observed by users.
+a distributed processing system with support for geo-partitioned data \cite{kloudas2015pixida,jetstream}.
+This approach requires running an additional external service and poses challenges for the consistency of the results returned and the data observed by users.
 %, mostly when adopting weak consistency models (a local update that should
 %be reflected in the result of the query may not be returned, as the update might have not been read by the 
 %external service that accessed a different replica).
@@ -168,7 +166,7 @@ We propose a different approach: to maintain materialized views, as commonly ava
 Implementing such feature efficiently in a partially geo-replicated database requires 
 addressing two main challenges. 
 First, it is necessary to guarantee consistency between the base data available in a replica and the 
-relevant materialized views. To achieve this, we designed a replication mechanism where updates 
+relevant materialized views. To achieve this, we designed both a transaction execution and a replication mechanism where updates 
 to the base data and views are made visible atomically in each replica.
 
 Second, it is necessary to efficiently support views with limits, used for example to support \emph{top-k} 
@@ -181,9 +179,10 @@ types to more complex structures that could support a view with multiple columns
 We present the design and implementation of PotionDB, a geo-replicated key-value store with support  
 for partial replication and materialized views. 
 PotionDB provides weak consistency, for improved latency and availability, and support for highly
-available transactions \cite{cure}.  
-To our knowledge, our work is the first to address the problem of maintaining materialized views
-in such setting.  
+available transactions \cite{cure}.
+Our views are kept up-to-date automatically without requiring any extra coding or update logic from the application programmer.
+%Maybe mention about how the view is kept up-to-date even without any of the base data present in the replica?  
+To our knowledge, our work is the first to address the problem of maintaining materialized views in such setting.  
 
 \andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
@@ -192,39 +191,46 @@ The results show that our algorithms for maintaining materialized views impose
 low overhead when executing and asynchronously replicating transactions, particularly
 for views with limits.
 \nuno{deviamos ter uns micro-benchmarks que comparassem o overhead com limites e sem limites}
-Additionally, the results show that executing queries by relying on the materialized views is much more 
+%Additionally, the results show that executing queries by relying on the materialized views is much more 
 efficient than using alternative mechanisms.  
 Furthermore, our algorithms for maintaining materialized views in a decentralized way perform better 
 that alternative approaches where the view is computed in a single data center, while being
-able to  keep consistency between the base and view data in every replica.
+able to keep consistency between the base and view data in every replica.
 
 In this paper we make the following contributions:
 %\begin{enumerate*}[(label=\roman*)]
-\begin{itemize}
+\begin{compactitem}
 	\item the design of a geo-replicated key-value store  with support for partial replication
 	and views over partially replicated data; 
 	\item replication algorithms for efficiently maintaining consistent materialized views over 
 	partially replicated data;
+	\item a language inspired in SQL for view specification in key-value stores, with view maintenance code automatically inferred from the specification;
 	 \item an implementation and evaluation of the proposed approach with micro-benchmarks
 	 and TPC-H.
-\end{itemize}
+\end{compactitem}
 
-The remainder of the paper is organized as follows. Section ...
+The remainder of the paper is organized as follows.
+Section \ref{sec:overview} presents the system model, as well as PotionDB's architecture and API.
+Section \ref{sec:consistency} describes PotionDB's consistency guarantees.
+Section \ref{sec:transactions} describes PotionDB's transactional protocol, while Section \ref{sec:replication} describes PotionDB's replication protocol as well as data partitioning.
+Section \ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates the view and its automatic updating.
+In Section \ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section \ref{sec:related_work} presents related work and Section \ref{sec:conclusion} concludes.
 
-\outline{topicos
 
-\begin{itemize}
-	\item Num. DC a aumentar
-	\item Replicar totalmente tem problemas
-	\item Replicação parcial
-	\item Queries sobre dados replicados parcialmente
-	\begin{itemize}
-		\item Standard solution?
-	\end{itemize}
-	\item Views materializadas replicadas totalmente
-	\item Contribuições
-\end{itemize}
-}
+%\outline{topicos
+%
+%\begin{itemize}
+%	\item Num. DC a aumentar
+%	\item Replicar totalmente tem problemas
+%	\item Replicação parcial
+%	\item Queries sobre dados replicados parcialmente
+%	\begin{itemize}
+%		\item Standard solution?
+%	\end{itemize}
+%	\item Views materializadas replicadas totalmente
+%	\item Contribuições
+%\end{itemize}
+%}
 
 \section{System Overview}
 \label{sec:overview}
@@ -238,7 +244,8 @@ As a running example, we will consider a large e-commerce company with online st
 and clients spread across the world. 
 The information system includes data of millions of products, with some products available only at some locations.
 The system also includes information about customers and their purchases, with clients being associated with a given 
-online store. 
+online store.
+Furthermore, the system maintains information about the stock of products and their supply chains, with suppliers varying by location.
 We note that similar patterns occurs in multiple other systems: online games, where players are partitioned depending
 on their locations; social networks and news sites, where users connect to a regional site.
 
@@ -248,7 +255,7 @@ occurs on that location.
 To address this, PotionDB servers will run at multiple geographic locations.
 Data items are replicated in only a subset of the locations, for providing high availability and fault tolerance.
 By not replicating data in all data centers, PotionDB allows to minimize the replication cost (when
-compared to solutions featuring full replication).
+compared to solutions featuring full replication), saving on both storage, processing and networking costs.
 
 Returning to our example, an online store might want to maintain the top selling products or top selling products
 for buyers that bought some product (for recommendations).
@@ -291,16 +298,17 @@ Whenever needed, we represent the aforementioned properties for a given object $
 \label{subsec:interface}
 
 \begin{table}[]
+	\setlength\tabcolsep{4pt}
 	\begin{tabular}{ll} 
 		\toprule
-		get(txId, id) $\rightarrow$ value                  & begin(clk) $\rightarrow$ txId            \\
-		read(txId, id, op) $\rightarrow$ value             & commit(txId) $\rightarrow$ clk           \\
-		update(txId, id, op) $\rightarrow$ ok           & rollback(txId) $\rightarrow$ ok                           \\
+		\hspace*{-0.35em}get(txId, id) $\rightarrow$ value                  & begin(clk) $\rightarrow$ txId            \\
+		\hspace*{-0.35em}read(txId, id, op) $\rightarrow$ value             & commit(txId) $\rightarrow$ clk           \\
+		\hspace*{-0.35em}update(txId, id, op) $\rightarrow$ ok           & rollback(txId) $\rightarrow$ ok                           \\
 		& \\
-		readTx(clk, reads...) $\rightarrow$ clk, values... & updateTx(clk, updates) $\rightarrow$ clk \\
+		\hspace*{-0.35em}readTx(clk, read(s)) $\rightarrow$ clk, value(s) & updateTx(clk, update(s)) $\rightarrow$ clk \\
 		\bottomrule
 	\end{tabular}
-	\vspace{1em}
+	\vspace{0.8em}
 	\caption{PotionDB's API.}
 	\label{table:PotionDB_API}
 \end{table}
@@ -308,17 +316,18 @@ Whenever needed, we represent the aforementioned properties for a given object $
 PotionDB offers a transactional interface.
 Thus, applications access the database by executing transactions.
 Users can start transactions, execute reads and updates in the context of a given transaction and then either commit or abort the transaction.
-PotionDB provides the following API for its applications, also summarized in Table \ref{table:PotionDB_API}:
+PotionDB provides the following API, also summarized in Table \ref{table:PotionDB_API}:
 
 \begin{compactitem}
-	\item begin(clk) $\rightarrow$ txId: starts a transaction and returns an identifier ($txId$) to represent it. The $txId$ is then used to associate reads and updates to this transaction. $Clk$ is used to ensure applications see a casually evolving state of the database. We detail this further in Section \ref{sec:transactions};
-	\item get(txId, id) $\rightarrow$ value: returns the full state of object $o^{id}$ in the context of transaction $txId$. E.g., if $o^{id}$ is a set, then all its elements are returned;
-	\item read(txId, id, op) $\rightarrow$ value: executes a read operation $op$ on object $o^{id}$ in the context of transaction $txId$, returning the result of the operation. E.g., if $o^{id}$ is a set, we could execute a $lookup(a)$ operation to check if the element $a$ is part of the set;
-	\item update(txId, id, op) $\rightarrow$ ok: associates an update of object $o^{id}$ to the transaction $txId$. $Op$ represents the operation to be applied to modify the object's state. Updates are only executed when a commit is issued. If $o^{id}$ does not exist, it is created during the commit;
-	\item commit(txId) $\rightarrow$ clk: commits the transaction $txId$, applying all updates associated to it. The clock generated by commit is returned for use in later transactions;
-	\item abort(txId) $\rightarrow$ ok: cancels the transaction $txId$, discarding all updates associated to the transaction;
-	\item readTx(clk, reads...) $\rightarrow$ clk, values...: executes a read-only transaction with one or more reads;
-	\item updateTx(clk, updates...) $\rightarrow$ clk: executes a write-only transaction with one or more updates.
+	\item begin(clk) $\rightarrow$ txId: starts a transaction and returns an identifier ($txId$) representing it. $TxId$ is used to associate reads and updates to this transaction, while $clk$ ensures applications see a casually evolving state of the database. We detail this further in Section \ref{sec:transactions};
+	\item get(txId, id) $\rightarrow$ value: returns the full state of object $o^{id}$ in the context of transaction $txId$. E.g., if $o^{id}$ is a set, then all of its elements are returned;
+	\item read(txId, id, op) $\rightarrow$ value: executes a read operation $op$ on object $o^{id}$ in the context of transaction $txId$, returning the result of $op$. E.g., if $o^{id}$ is a set, $lookup(a)$ checks if element $a$ is in the set;
+	\item update(txId, id, op) $\rightarrow$ ok: associates an update of object $o^{id}$ to transaction $txId$. $Op$ represents the operation to be applied to modify $o^{id}$'s state. Updates are executed upon commit. If $o^{id}$ does not exist, it is created on commit;
+	\item commit(txId) $\rightarrow$ clk: commits transaction $txId$, applying all associated updates.
+	The clock generated by commit is returned for use in later transactions;
+	\item abort(txId) $\rightarrow$ ok: cancels transaction $txId$, discarding all associated updates;
+	\item readTx(clk, read(s)) $\rightarrow$ clk, values...: executes a read-only transaction with one or more reads;
+	\item updateTx(clk, update(s)) $\rightarrow$ clk: executes a write-only transaction with one or more updates.
 \end{compactitem}
 
 We provide ``static'' read-only (readTx) and write-only (updateTx) transactions, as well as dynamic transactions (begin, commit, abort) where both reads and writes can be mixed.
@@ -326,7 +335,49 @@ The former are adequate for situations in which the set of operations is already
 The latter provides more flexibility for the application developer, as it allows for data to be read and then an action to be taken based on the result of said reads, all in the context of the same transaction.
 For example, in a social network scenario, user A may want to do a publication only if user B is offline, so that user B cannot find out that user A is active.
 For this, a dynamic transaction is needed, as we only want the publication to succeed if the user B is offline.
-Without dynamic transactions, we could first read user B as offline, then user B comes online and only afterwards the publication is done.
+Without dynamic transactions, we could first read user B as offline, then user B comes online and only afterwards the publication is done, which would lead to incorrect results.
+
+\subsection{Architecture}
+\label{subsec:architecture}
+
+%Maybe I don't need to always refer "more details in Section x, y, z if I provide an overview in the Introduction?"
+%TODO: Maybe make a scheme where we spread the servers accross the globe? That would look nicer. I think it is OK if only one of the "servers" shows its internal structure.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=.95\linewidth]{potiondb_architecture}
+	\caption{PotionDB Architecture}
+	\label{fig:arch}
+\end{figure}
+
+We designed PotionDB with geo-replication in mind.
+Thus, we assume PotionDB instances are spread across the globe (Figure \ref{fig:arch}).
+Each instance only replicates a subset of the whole datastore's data.
+The system administrator has control over where each object is replicated.
+This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
+Objects without locality on their access pattern can be replicated everywhere if desired.
+We detail this more in Section \ref{sec:replication}.
+
+%I think details on how transactions work and guarantees do not belong here. So this is OK (but still needs to be explained somewhere).
+Clients communicate with the nearest PotionDB instance to ensure low latency.
+A client's transactions are locally executed in the PotionDB's instance the client is connected to.
+Updates are propagated asynchronously to other replicas.
+If a client's transaction accesses objects not locally replicated, other instances with said objects are contacted and involved in the transaction.
+We note this should be an exceptional case, not the norm.
+We leave further details for Section \ref{subsec:operationsNonLocal}.
+
+The internal architecture of PotionDB is inspired by Cure and is split into three main components:
+
+%Not sure if I'll need these abbreviations later. Consider removing if unused.
+\begin{compactitem}
+	\item TransactionManager (TM). This component is responsible for receiving and replying to client's requests.
+	It coordinates transactions, implementing a transactional protocol (described in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
+	\item Materializer: This component stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
+	Garbage collection keeps the amount of metadata in check.
+	\item Replication: This component ensures that commited transactions are replicated asynchronously to other PotionDB instances.
+	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
+	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
+\end{compactitem}
 
 \subsection{CRDTs}
 \label{subsec:CRDTs}
@@ -334,29 +385,31 @@ Without dynamic transactions, we could first read user B as offline, then user B
 %Should I mention the CRDTs we implement are the op-based ones? I will mention that in Replication.
 
 PotionDB's objects and views are implemented as CRDTs \cite{crdt}.
-CRDTs (Conflict-free Replicated Data Types) are designed to be used in distributed systems, ensuring the states of the replicas converge despite the occourence of concurrent updates.
-Many CRDTs have been proposed, allowing for a rich library of objects such as counters, registers, sets, maps, topK (leaderboard), etc.
-CRDTs support operations to directly manipulate the object's state, e.g., increments on counters, instead of direct assigments.
-Thus, application developers can pick the CRDTs corresponding to the data types appropriate for their application(s), without having to worry how to handle concurrency conflicts.
-Furthermore, many flavours of each data type are available which implement different policies to solve conflicts, allowing CRDTs to adapt further to each application's needs.
-CRDTs, together with our transactional causal consistency support and provisioning of snapshots, ease the life of application developers, as they will encounter less anomalies compared to other weak consistency solutions.
-This avoids the need for ad-hoc mechanisms that are error-prone to compensate anomalies \cite{???}.
+CRDTs, Conflict-free Replicated Data Types, are a group of data structures which ensure concurrent updates do not conflict and that the state of all replicas eventually converges, assuming all updates are eventually delivered.
+Many kinds of CRDTs have been proposed in the literature, forming a rich library of object types, e.g., counter, register, flag, set, map and topK (leaderboard). 
+Instead of direct assignments, CRDTs support rich operations to directly modify an object’s existing state, e.g., an increment on a counter.
+Thus, application developers can pick the CRDTs corresponding to the data types appropriate for their application(s), without having to worry on how to handle concurrency conflicts.
+CRDTs, together with our transactional causal consistency support and provisioning of snapshots (Section \ref{sec:consistency}), ease the life of application developers, as they will encounter less anomalies compared to other weak consistency solutions.
+This avoids the need for ad-hoc mechanisms that are error-prone to compensate anomalies \cite{crdt, cure}.
 
-In PotionDB we support the following datatypes: counters, registers, sets, maps, topK, average and max/min.
+In PotionDB we support the following data types: counters, registers, sets, maps, topK, average and max/min.
 Our CRDTs support multiple operations and reads which ease their usage. 
-E.g., in a map, both single and group additions/removals can be executed, and one can read the whole map, check if a certain key exists or get the value of a key, etc.
+E.g., in a map, both single and group additions/removals can be executed; for reads, the whole map can be read, directly check if a certain key exists, get the value of a key, etc.
 We further extended some CRDTs designs to make them more expressive.
 E.g., our topK supports both additions and removals, as well as extra fields necessary to answer queries; we also provide a variant of topK (topSum) which supports incrementing or decrementing an existing entry.
 Our maps are composable, i.e., the value of a map can be any other CRDT, which further enhances the expressivety of PotionDB.
 %Does the composability need some example to justify it?
 
-These extensions and multi-operations, as well as the variety of datatypes, makes CRDT implementation in PotionDB cumbersome, as it is necessary to ensure the states converge despite the execution of operations concurrently, as well as respect the sequential semantics of the object.
+These extensions and multi-operations, as well as the variety of data types, makes CRDT's implementation in PotionDB cumbersome, as it is necessary to ensure the states converge despite the execution of operations concurrently, as well as respect the sequential semantics of the object.
 It is also necessary to support efficient replication of each CRDT's updates.
 We also had to support version management for each CRDT in order to provide our casually consistent snapshots.
 However, our efforts allow us to efficiently support complex OLAP queries. %Should I refer again it eases application developer's lifes?
-For instance, we implemented the TPC-H's \cite{tpch} dataset, update operations and six of their queries, including defining efficient, maintaneable views for each query.
-We also analysed the remaining queries and sketched solutions for implementing all remaining queries using PotionDB's objects and views, which demonstrates PotionDB's expressivety. %Maybe I should say datatypes instead of "objects and views"?
-We leave details on our TPC-H implementation for Section \ref{sec:}.
+For instance, we fully implemented TPC-H's dataset and update operations in PotionDB.
+Furthermore, using PotionDB's view API, we have defined efficient, automatically maintained views for each query in TPC-H.
+Said views utilize many of PotionDB's data types, which showcases the expressiveness of PotionDB's API and data types.
+%For instance, we implemented the TPC-H's \cite{tpch} dataset, update operations and six of their queries, including defining efficient, maintainable views for each query.
+%We also analysed the remaining queries and sketched solutions for implementing all remaining queries using PotionDB's objects and views, which demonstrates PotionDB's expressivety. %Maybe I should say data types instead of "objects and views"?
+We leave details on our TPC-H implementation for Section \ref{sec:views_for_apps}.
 %Do I need to refer here that I explain NuCRDTs (or non-uniform replication) in another section?
 %Should I explain here in detail our extensions to TopK and TopSum? May be a bit difficult to explain the later here without explaining non-uniform replication.
 
@@ -367,16 +420,19 @@ We leave details on our TPC-H implementation for Section \ref{sec:}.
 \label{subsec:viewAPI}
 %TODO: In other sections I may have to update where it says things like "how views are updated is agnostic to our solution" and similar. This is present likely in transactions and replications' sections. Since now we do provide a way to take care of update generation automatically.
 
-PotionDB's materialized views can speed up the execution of certain queries by summarizing data spread across multiple objects.
-Data referred by our views may be partitioned across multiple servers, without a single server containing all the information required for the view.
-This allows to make usage of data locality to save on replication costs while still providing summaries or views of global data.
+PotionDB's materialized views can speed up the execution of queries by aggregating and  summarizing data partitioned across multiple servers, without a single server containing all the information required for the view.
+With a simple read on a view, complex OLAP queries over global data can be quickly served, while still making full usage of data locality to save on replication costs.
 
-Defining materialized views by directly composing PotionDB's datatypes, while possible, can at times be difficult and cumbersome.
-This is further aggravated by the need to keep views updated, which would imply the application developer having to write code for both updating the base objects and views.
-To avoid this, we specify a language inspired in SQL \cite{sequel} to specify materialized views.
-From this specification, PotionDB can automatically infeer the required objects to support the view, as well as automatically generate the necessary view updates' whenever a relevant base object is inserted, updated or deleted.
+Defining materialized views by directly composing PotionDB's data types, while possible, can be quite complex and cumbersome.
+This is further aggravated by the need to keep views updated, which would require the application developer to write code for updating both the base objects and views.
+
+To ease the deployment of views, we define and provide a specification language inspired in SQL \cite{sequel}.
+By utilizing this language, the programmer can define views with ease, as PotionDB automatically infers the objects needed to support the view, as well as generate the required view updates whenever a relevant base object is inserted, updated or deleted. 
+%To avoid this, we specify a language inspired in SQL \cite{sequel} to specify materialized views.
+%From this specification, PotionDB can automatically infer the required objects to support the view, as well as automatically generate the necessary view updates' whenever a relevant base object is inserted, updated or deleted.
 We detail this inferring in Section \ref{subsec:generated_view}.
-Note that the API to read a view's state is the same as the one previously described to read other objects.
+Generated views are read in the same way as any other object.
+%Note that the API to read a view's state is the same as the one previously described to read other objects.
 %Updating or reading a view is done with the same interface used for other objects, as described in Section \ref{subsec:CRDTs}.
 %Details on how we keep a view up-to-date and consistent with the objects it builds upon is left for Sections \ref{subsec:viewsTransaction} and \ref{subsec:repl_views}.
 %As such in this section we focus on how can a view be specified, namely how to make it depend on the state of other objects.
@@ -415,7 +471,7 @@ Note that the API to read a view's state is the same as the one previously descr
 			\multicolumn{1}{|l|}{Charlie}   & \multicolumn{1}{l|}{80}      & \multicolumn{1}{l|}{1}        \\ \hline
 		\end{tabular}
 		\vspace{1em}
-		\captionof{table}{TopSales materialized view. This view builds upon Sales objects.}
+		\captionof{table}{TopSales materialized view for February. This view builds upon Sales objects.}
 		\label{table:topSales}
 	\end{minipage} \hfill
 	\begin{minipage}{0.26\textwidth}
@@ -434,7 +490,7 @@ Note that the API to read a view's state is the same as the one previously descr
 	SELECT ProdName sum(Price - Cost) AS SumProfit\\
 	\hphantom{SELECT }count(sales.ID) AS NumSales \\
 	FROM sales \\
-	WHERE SaleDate.Month = 2 and SaleDate.Year = 2023\\
+	WHERE SaleDate.Month = [MONTH] and SaleDate.Year = 2023\\
 	ORDER BY SumProfit DESC, NumSales DESC \\
 	LIMIT 10 \\
 	\caption{Specification of the view \emph{TopSales}}
@@ -445,46 +501,46 @@ Figure \ref{fig:viewSQL} showcases the aforementioned language.
 \emph{Create} defines the key and bucket of the view.
 The type is automatically inferred from the specification.
 \emph{From} defines which objects to use to build the view, and \emph{Select} chooses which attributes of the objects should be used for the view.
-The attributes for the view can potencially be aggregates (e.g., sum) of the objects' attributes.
-\emph{Where} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain properties of the object (e.g., only include European customers in the view).
-\emph{Order by} sorts the rows of the view given one or more properties of the view.
+The attributes for the view can potentially be one of the following aggregating functions of objects' attributes: \emph{sum}, \emph{count}, \emph{max}, \emph{min}, \emph{avg}.
+\emph{Where} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain attributes of the object (e.g., only include European customers in the view).
+\emph{Order by} sorts the rows of the view given one or more attributes of the view.
 \emph{Limit} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a max number of elements to be considered as being in the top.
 
 Any parameter of the intended query should be indicated between []. %Should I give an example of what this is? By parameter I mean, e.g., queries that have many variants - e.g., asking the same query for different days of the week. The day of the week is a parameter of the query.
-For conditions in \emph{where}, $>$, $<$, $=$, $!=$ are supported, as well as some operations with strings (e.g., startsWith). %Should we mention in theory we could support directly comparing dates?
-A simple "if then else" is also supported inside aggregates, to further boost their expressivety.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
+For conditions in \emph{where}, $>$, $<$, $=$, $\neq$ are supported, as well as some operations with strings (e.g., startsWith). %Should we mention in theory we could support directly comparing dates?
+A basic "if then else" is also supported inside aggregates, to further boost their expressivity.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
 
 %Now explain from.
 In PotionDB we have objects instead of tables.
 Thus, to provide a ``table-like'' vision, we assume the objects can be organized in containers - e.g., we could define that all objects representing customers are in a \emph{customers} container.
-The \emph{From} clause then refers to one (and only one) of those containers. %Should I mention our restriction of only one container in some other way?
+The \emph{From} clause then refers to one (and only one) container. %\footnote{PotionDB actually supports more than one container in \emph{From}, as long as each object from the first container matches exactly one object of each of the remaining containers. We discuss this further in Section \ref{subsec:limitations}.}. 
 This abstraction allows for a view to easily refer to objects as if they were organized in tables, as well as consider objects that have not yet been created.
-Objects in the same container can still be in different buckets - e.g., we could have one bucket for each country and have customers split across buckets depending on their home country.
+Objects in the same container can still be in different buckets - e.g., have a bucket for each country and have each customer associated to its home country's bucket.
 Thus, views can refer to objects that are not replicated in the local server.
 We assume an object's container is non-mutable. %Do I need to refer anything further about containers (e.g. that they have no implications on implementation?)
 
 %Note: Is the explanation below necessary? I believe it is not. Probably would be enough to say that table contains an example of a materialized view.
 %The explanation is a bit difficult since none of this maps to actually anything in the implementation...
-Figure \ref{fig:topSalesSQL} shows a specification of a view which answers the following query: "Who were the top 10 most profitable customers on February? And how many products did those buy?"
-Example data of the base objects and of the view can be seen, respectively, in Tables \ref{table:sales} and \ref{table:topSales}.
-Such a query can be useful to identify customers to which to direct special promotions, in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
+Figure \ref{fig:topSalesSQL} shows the specification of a view which answers the following query: "Who were the top 10 most profitable customers on any given month of 2023? And, for each of the top clients of said month, how many products did each client buy?"
+Example data of the base objects and view can be seen, respectively, in Tables \ref{table:sales} and \ref{table:topSales}.
+Such a query can be useful to identify customers to which to direct special promotions in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
 %Such a query can be useful to identify products that may need to be restocked, see if promotions/advertisement were effective, etc.
 %This view is implemented with a topSum CRDT, taking data from all products and sales, as specified in \emph{From}.
-\emph{From} specifies that all objects belonging to the container \emph{sales} should be considered.
+
+The \emph{From} clause specifies that all objects belonging to the container \emph{sales} should be considered.
 \emph{Select} lists which attributes should be part of the view.
-Aggregation functions are suported: in this case, \emph{sum} and \emph{count} are used.
-We also support \emph{max}, \emph{min} and \emph{avg}.
-\emph{Where} allows for only sales done on the month of February to be considered.
+\emph{Where} ensures only sales done on 2023 are considered, with the parameter [MONTH] ensuring the results are separated per month.
+Thus, the user can query the view to obtain the top sales for any desired month of 2023.
 Meanwhile, \emph{Order By} defines how to sort the rows, using NumSales as a tie-breaker, while \emph{Limit} specifies how many elements are considered to be "in the top".
 More complex queries are also possible - namely, our specification language allows specifying efficient views for most of TPC-H's queries. %TODO: Maybe be more precise? Out of 23 queries, I have confirmed we can support 20 with our language - only Q13, Q16 and Q21 are not supported. And those 3 can still be supported in PotionDB by defining the views manually
 
-%Should I mention what do we support in the where clause? E.g., where supports AND, OR, >=, <=, ==. We also support comparing with some variable (e.g., YEAR >= 1993 and YEAR <= 1997 and shipdate.year = YEAR). May be a few more things
+%Should I mention what do we support in the where clause? E.g., where supports AND, OR, , <=, ==. We also support comparing with some variable (e.g., YEAR >= 1993 and YEAR <= 1997 and shipdate.year = YEAR). May be a few more things
 
 %I think the extension below is not hard to do - it is just a very restricted form of join, as it must be a 1:1 match. But helps in many cases. What I still need to think about, is how to include that in the specification language in a way that it is clear.
 %Implementing is not too complicated as it should be a simple GET of the primary key.
 \emph{Extensions.} We extend the specification language as follows.
-On the \emph{From} clause, multiple containers are supported, as long as each object in the first container of the clause matches with, at most, one object from each of the other containers.
-This allows for views to fetch data that may be in other objects that is relevant for the view.
+On the \emph{From} clause, multiple containers are supported, as long as each object from the first container matches, through condition(s) defined in \emph{Where}, exactly one object of each of the other containers.
+This allows for views to fetch data that may be in other objects that are relevant for the view.
 E.g., in the TopSales, we could fetch the customer's nation from the customer's container.
 
 We also provide an alternative interface for views which gives the application developer more control over the created views.
@@ -895,7 +951,7 @@ We leave further details on the inner workings of triggers, as well as views, to
 
 %\textbf{need better examples}.
 %For instance, an asian customer is more likely to consult the stock of stores in his country rather than in an european country.
-%Thus, it makes sense that both asian customers' and asian stores' data to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
+%Thus, it makes sense that both asian customers' and asian stores' data to be replicated mainly in asian data centers (plus possibility a subset of others for fault tolerance purposes).
 %That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on such factor.
 
 
@@ -922,7 +978,7 @@ Also consider that there are millions of both current and past customers and, am
 Fully replicating the whole dataset would have proibitive costs.
 It is also unecessary, as both the relevance of the data and likehood of being accessed from are dependent on the location.
 For instance, an asian customer is more likely to consult the stock of stores in his country rather than in an european country.
-Thus, it makes sence that both asian customers' and asian stores' data to be replicated mainly in asian datacenters (plus possibility a subset of others for fault tolerance purposes).
+Thus, it makes sence that both asian customers' and asian stores' data to be replicated mainly in asian data centers (plus possibility a subset of others for fault tolerance purposes).
 That is, the servers for which data will be replicated can be choosen based on the geographic location, as its relevance depends on such factor.
 
 To keep the example simple, we will only consider three types of objects: customers, products and sales.
@@ -961,12 +1017,12 @@ The simplified scheme of each object can be found on Figure \ref{fig:objects}.
 
 Customers represent clients that at some point in time have bought at least one product from one of the stores.
 Products represents items that may be (or have been) for sale.
-Sales represents the aquisition of one or more units of a product by a client, where custID and productID refer to, respectivelly, the customer's and product's id field.
+Sales represents the aquisition of one or more units of a product by a client, where custID and productID refer to, respectively, the customer's and product's id field.
 
 For the purpose of this example, we'll consider the following replication scheme for each type of object:
 \begin{itemize}
 	\item \emph{Customer:} replicated in the data centers present in the continent correspondent to his country (plus a few other data centers for fault-tolerance purposes);
-	\item \emph{Products:} replicated in all datacenters;
+	\item \emph{Products:} replicated in all data centers;
 	\item \emph{Sales:} replicated in the same data centers as of the customer who bought the product. 
 \end{itemize}
 
@@ -979,7 +1035,7 @@ The following is an example of a query requiring a global view of the database:
 
 \lineemph{Get the top 100 customers who have spent the most across all stores. For each customer, the name, age, country and total value spent must be returned.}
 
-Without views and by using just the three kinds of objects in Figure \ref{fig:objects}, executing this query would require communication with multiple datacenters across the world, as both sales and customers' data is partitioned.
+Without views and by using just the three kinds of objects in Figure \ref{fig:objects}, executing this query would require communication with multiple data centers across the world, as both sales and customers' data is partitioned.
 Since there are millions of customers and sales records, this would imply downloading large amounts of data and also spending a considerable amount of CPU time for data joining.
 After the joins are complete, it is still needed to calculate the total value spent for each customer and sort descendingly based on the total value spent by each customer.
 Only after this whole process is complete can the query be answered correctly.
@@ -987,10 +1043,9 @@ Due to the sheer amount of data involved, this query would have unnaceptable per
 
 Defining the right view(s) avoids having to do for each query the process referred above.
 For the example query above, a view that keeps, for each customer, his name, age, country and total value, ordered by total value, can answer efficiently the query with a single get operation.
-With this we no longer need to contact multiple datacenters and execute millions of gets and result processing.
+With this we no longer need to contact multiple data centers and execute millions of gets and result processing.
 
 On Section \ref{sec:views} we address multiple difficulties related to supporting and keeping views updated, as well as our solutions for such difficulties in PotionDB.
-
 
 \fi
 \fi
@@ -1015,7 +1070,7 @@ We now detail the guarantees provided by PotionDB under both models.
 %In VLDB, Paragraph is like another subsection - "10.1.0.1" doesn't look good, so I changed to \emph
 \emph{Causality.} 
 We leverage on the happens-before relationship defined by Lamport \cite{???} to define causality.
-We represent than $op_1$ happened before $op_2$ as $op_1 \prec op_2$.
+We represent that $op_1$ happened before $op_2$ as $op_1 \prec op_2$.
 We can say that $op_1 \prec op_2$ iff any of the following conditions is true:
 
 \begin{compactitem}
@@ -1026,16 +1081,17 @@ We can say that $op_1 \prec op_2$ iff any of the following conditions is true:
 
 We say two operations are casually related iff $op_1 \prec op_2$ or $op_2 \prec op_1$.
 %By contrast, if neither condition is true, then the operations are concurrent.
-By contrast, if $op_1 \nprec op_2$ and $op_1 \nprec op_2$, then the operations are concurrent.
+By contrast, if $op_1 \nprec op_2$ and $op_2 \nprec op_1$, then $op_1 \parallel op_2$, i.e., are concurrent.
 
 \emph{Causal Consistency.}
 With causal consistency, it is required that the values observed by the clients respect causality.
 Formally, given a read $r$ issued by a client, the result returned by $r$ must be the result of executing all write operations that preceed it according to the happens-before order.
-As an example, if we assume registers, $r$ must return the value written by the write that causally preceeds it.
+As an example, if we assume a set and the operations $add(a)$ $\prec$ $add(b)$ $\prec$ $rem(c)$ $\prec$ $add(c)$ $\prec$ $rem(b)$, $r$ must return the set $\{a, c\}$, i.e., the result of executing the aforementioned operations according to the happens-before order.
+%As an example, if we assume registers, $r$ must return the value written by the write that causally preceeds it.
 
 If $op_1$ and $op_2$ are concurrent, they can be applied by any order.
 Specifically, they may be executed by different orders in different replicas.
-If both operations are a write for the same object, this could lead to replicas diverging forever \cite{cops, cure} (i.e., returning different results for the same read forever).
+If both operations are a write for the same object, this could lead to replicas' state diverging forever \cite{cops, cure}, i.e., returning different results for the same read forever.
 In this situation we say the writes are conflicting.
 We assume in our model of causal consistency that some mechanism of conflict resolution is provided to solve conflicts in a per-object basis, i.e., that for any two conflicting writes the result is deterministic independently of the execution order.
 In our solution, we leverage on CRDTs to solve these conflits \cite{crdt}.
@@ -1059,9 +1115,9 @@ Since the serialization respects the happens-before relationship, $S_n$ is a con
 %Try to avoid the repetion below.
 All reads and updates of a transaction execute on top of a consistent snapshot, i.e., reads return the effects of $op_1, ..., op_n$ in $S_n$ and all updates happen after $op_1, ..., op_n$.
 Our transactions are atomic and generate a new consistent snapshot when commited.
-I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_1, ..., op_n$, either $T$ commits and $S_t$ = $op_n(...(op_1(S_n)))$ (all operations on the new snapshot) or it aborts and $\forall (op_1, ..., op_n) \in T : op_1 \notin Ops(S_t), ..., op_n \notin Ops(S_t)$ (none of the operations are in the new snapshot), where $Ops(S_t)$ denotates the list of operations that generated the snapshot $S_t$.
+I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_{t1}, ..., op_{tn}$, either $T$ commits and $S_t$ = $op_{tn}(...(op_{t1}(S_n)))$ (all operations on the new snapshot) or it aborts and $\forall (op_{t} \in T : op_t \notin Ops(S_{t})$ (none of the operations are in the new snapshot, i.e., $S_{t}$ = $S_n$), where $Ops(S)$ denotates the list of operations that generated $S$ from $S_{init}$.
  
-Our PotionDB prototype provides Transactional Causal Consistency (TCC), i.e., our transactions always observe a consistent snapshot of the database.
+Our PotionDB prototype provides Transactional Causal Consistency (TCC) by default, i.e., our transactions always observe a consistent snapshot of the database.
 Transactions are atomic, i.e., either all the effects of the updates in the transaction are reflected in the next state of the database or none are.
 
 \subsection{Read Commited}
@@ -1069,113 +1125,92 @@ Transactions are atomic, i.e., either all the effects of the updates in the tran
 %TODO: Maybe a table with all the symbols we use like in Cure?
 %Note for self:  PotionDB does not provide repeatable reads under the weaker consistency model, because the same read during one transaction can return different values under Rc
 Read Commited (RC) is a consistency model which guarantees that only states resulting from commited transactions can be read.
-This model is weaker, i.e., less guarantees, than transactional causal consistency.
-However, on write-heavy scenarios (e.g., 75\%-25\% write-read), the provision of consistent snapshots for TCC is more expensive.
-This is usually common for systems providing some sort of causal consistency.
+This model provides weaker guarantees than transactional causal consistency.
+However, on write-heavy scenarios (e.g., 75\%-25\% write-read), the provision of consistent snapshots for TCC is rather expensive.
+This is common problem for systems providing some sort of causal consistency.
 E.g., Cure, Eiger, Gentlerain, COPS \cite{cure, eiger, gentlerain, cops} also have considerable performance drops when update ratios are high.
 Thus, we provide RC for write-heavy scenarios where maintaining a high read throughput is a must.
 
-Intuitively, under RC, PotionDB returns for each object whichever last version (commited) is available.
+Intuitively, under RC, PotionDB returns for each object whichever (commited) version is the latest available.
 Thus, reads for different objects may return different versions.
 This can be undesirable for some applications.
-For example, if for a given product we have two different objects, one stating the number of sales and the other the total value of the sales, it is desirable to read both objects under TCC to observe a consistent state, as the objects are correlated.
+For example, if we want to access the data of a customer alongside his list of purchases, and assuming both informations are stored in two different objects, it is desirable to read both under TCC in order to observe a consistent state, as the objects are correlated.
+%For example, if for a given product we have two different objects, one stating the number of sales and the other the total value of the sales, it is desirable to read both objects under TCC to observe a consistent state, as the objects are correlated.
 However, for situations of reading unrelated objects or single objects, we argue RC is strong enough.
-This scenario is common enough as we expect that most complex queries in PotionDB to be served by a single view and, thus, single read.
-Besides, the application developer can always fall back to TCC when needed.
+This scenario is somewhat common as we expect most complex queries in PotionDB to be served by a single view and, thus, a single read.
+Besides, the application developer can always fall back to TCC whenever necessary.
 
 We now define precisely our guarantees under RC.
-First, consecutive reads of the same object read the same state or more recent, even if under the same transaction.
-I.e., consider a transaction T, reads $R_1(o) \in T$ and $R_2(o) \in T$, as well as the statues returned by them $s_1(o)$ and $s_2(o)$.
+First, consecutive reads of the same object either return the same state, or the second read returns a more recent state, even if under the same transaction.
+I.e., consider a transaction T, reads $R_1(o) \in T$ and $R_2(o) \in T$, as well as the states returned by them, respectively, $s_1(o)$ and $s_2(o)$.
 Under RC, we have that $R_1(o) \prec R_2(o) \implies s_1(o) \prec s_2(o)$
-Thus causality on a single object is respected, but isolation from other transactions is not (under TCC, both reads would return the same state).
+Thus causality on a single object is respected, but isolation from other transactions is not.
+Under TCC, both reads would return the same state, while under RC, $s_2(o)$ could reflect changes from some other transaction that commited in the meantime.
+
 Causality across objects is also not respected.
 Assume $R_1(o_1) \in T$ and $R_2(o_2) \in T$, with $o_1^{id} \neq o_2^{id}$.
-Under RC, the following is possible: $R_1(o_1) \prec R_2(o_2) \land s_2 \prec s_1$.
+Under RC, the following is possible: $R_1(o_1) \prec R_2(o_2) \land s_2(o) \prec s_1(o)$.
 I.e., reads of different objects may return states corresponding to different snapshots.
 
-\section{PotionDB Overview}
+For two transactions $T_1$, $T_2$, with $T_1 \prec T_2$, there is still no causality across objects. However, for $R_1(o) \in T_1$, $R_2(o) \in T_2$, $s_1(o)$ $\prec$ $s_2(o)$.
 
-[TODO]. I think this likely needs to be merged with Data model/interface. Will leave this for later.
+\section{Transactions}
+\label{sec:transactions}
 
-\subsection{Architecture}
-\label{subsec:architecture}
+PotionDB employs a transactional protocol in order to ensure the database's state evolves correctly and that transactions observe casually consistent snapshots.
+This is necessary as internally PotionDB is sharded for performance, thus coordination is required.
+Furthermore, our transactional protocol is also responsible for ensuring transaction's atomicity, as well as ensure views and their base objects are updated simultaneously and kept consistent.
 
-%Maybe I don't need to always refer "more details in Section x, y, z if I provide an overview in the Introduction?"
-%Note: Here we refer to objects before defining objects!
-%TODO: Maybe make a scheme where we spread the servers accross the globe? That would look nicer. I think it is OK if only one of the "servers" shows its internal structure.
+In this section we describe PotionDB's sharding, our commit and reading protocols as well as how views are kept up-to-date with their base objects. %Do I need to make it clear the transactional protocol is commit + read?
 
-\begin{figure}
-	\centering
-	\includegraphics[width=.95\linewidth]{potiondb_architecture}
-	\caption{PotionDB Architecture}
-	\label{fig:arch}
-\end{figure}
 
-We designed PotionDB with geo-replication in mind.
-Thus, we assume PotionDB instances are spread across the globe (Figure \ref{fig:arch}).
-Each instance only replicates a subset of the whole datastore's data.
-The system administrator has control over where each object is replicated.
-This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
-Objects without locality on their access pattern can be replicated everywhere if desired.
-We detail this more in Section \ref{sec:replication}.
+%A table summarizing all symbols could be useful.
+%Each PotionDB instance is internally sharded, as described in Section \ref{subsec:sharding}.
+%Thus, to enable the provisioning of casually consistent snapshots of the whole database, coordination among partitions is required to execute transactions, ensuring state evolves correctly.
+%If no coordination was employed it would be possible to observe inconsistent states of the database - e.g., observe a state where a base object is already updated but its base view is not. %I don't think I need to motivate this further... is it necessary to say this would lead to application errors/difficulties for the application developer, or that it would break transactional causal consistency?
 
-%I think details on how transactions work and guarantees do not belong here. So this is OK (but still needs to be explained somewhere).
-Clients communicate with the nearest PotionDB instance to ensure low latency.
-A client's transactions are executed locally in the PotionDB's instance with which the client communicates.
-Updates are propragated asynchronously to other replicas.
-If a client's transaction accesses data not localy replicated, other instances with said data are contacted and involved in the transaction.
-We note this should be an exceptional case, not the norm.
-We discuss this further in Section \ref{subsec:operationsNonLocal}.
-
-The internal architecture of PotionDB is inspired by Cure and can be split in three main components:
-
-%Not sure if I'll need these abbreviations later. Consider removing if unused.
-\begin{compactitem}
-	\item TransactionManager (TM). This component is reponsible for receiving and replying to client's requests.
-	It coordinates transactions, implementing a transactional protocol (described in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as the transaction's atomicity.
-	\item Materializer: This component stores the objects on their latest version, as well as the necessary data to generate previous versions when needed.
-	Garbage collection keeps the amount of metadata in check.
-	\item Replication: This component ensures that commited transactions are replicated asynchronously to other PotionDB instances.
-	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
-	The replication component is aware of each instances's replication scheme, ensuring each instance only receives, for each transaction, updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
-\end{compactitem}
+%We define the following notation to help with our protocols definition in this section. %Maybe I should define a table for this like in Cure?
+%Let $T$ be the current transaction being considered, $p_T$ the set of partitions for which there is a read or write in $T$, $p_{w(T)}$ the same but for writes only.
+%Let $S_1, ..., S_n$ be the set of servers of the system.
+%Let $clk^p_i$ be the value of the physical
 
 \subsection{Sharding}
 \label{subsec:sharding}
 
-%Maybe I can mention doing partitioning based on some other criteria (e.g., to make better usage of views + objects) is left as future work/orthogonal line of research.
-%I need the object definition before this section.
+%Maybe I can mention doing sharding based on some other criteria (e.g., to make better usage of views + objects) is left as future work/orthogonal line of research.
 
-%Note: Redis is also single-threaded - I can use that as an example if needed too
-
-Internally, the Materializer component is partitioned (sharded).
-This allows to efficiently utilize multicore CPUs, allowing reads and updates to execute concurrently whenever possible.
+Internally, the Materializer component (our datastore) is sharded.
+This allows multicore CPUs to be efficiently utilized,
+with reads and updates executing in parallel whenever possible.
 Each object $o$ is assigned to only one shard, based on a hash of $o^{id}$.
 For clarity, let $o^{shard}$ be the shard where $o$ is stored.
-%We also define the set of shards accessed by a Transaction $T$ as $part(T) = {o^{part} | o \in T}.
 
 Each shard has one dedicated thread.
 This avoids the usage of locks when acessing objects, simplifying the implementation and avoiding other issues such as lock contention.
 It also allows for reads and updates on non-overlapping shards to execute in parallel.
 In a way, our approach is similar to the one used in H-Store \cite{h-store}.
-However, instead of running multiple instances of PotionDB and sharding the data across those instances, we shard the dataset across threads of the same database instance, as this allows more efficient communication between shards when needed.
+However, instead of running multiple instances of PotionDB and sharding the data across those instances, we shard the dataset across threads of the same database instance, as this allows for a more efficient communication between shards when necessary.
 %Do I need to justify further the H-Store reference? 
 
 %This needs us to define that we access the server with read() and update() before.
-The intuition is that in a given transaction, operations for different shards can execute concurrently without any conflict.
-When considering multiple transactions, if there's only reads then there is no conflict either, as states do not change.
-However, when considering writes, if there is an overlap of updates of different transactions for the same shard, there is a conflict, as the results may be different depending on the execution order.
+%The intuition is that in a given transaction, operations for different shards can execute concurrently without any conflict.
+%For multiple transactions, if all transactions are read-only, then there is no conflict either as states do not change.
+%However, when considering updates, if there is an overlap of updates of different transactions for the same shard, then there is a conflict, as the results may differ depending on the execution order.
 %I am not sure if the "intuition" above is necessary at all.
 
-We now define some notations in order to precisely describe the scenarios where operations, i.e. reads and writes, can be executed concurrently.
-First, for a given transaction $T$, let $W(T)$ and $R(T)$ be, respectivelly, the set of writes/reads present in $T$.
-We say that $o \in W(T)$ (resp. $o \in R(T)$) if there exists a write (resp. read) operation in $W(T)$ (resp. $R(T)$) for object $o$.
-Furthermore, $shard(W(T))$ (resp. $shard(R(T))$) returns the set of shards for which at least one object $o$ resides in each shard, i.e., $\forall s \in shard(W(T)) | \exists o^{shard} \in W(T) : shard = s$ (and similarly for $R(T)$).
+Ideally, all transactions would execute concurrently at will, and long transactions would also execute concurrently across shards.
+However, concurrent writes to the same shard conflict, as the results may different depending on execution order.
+Thus, we now define some notations in order to precisely describe the scenarios where operations, i.e. reads and writes, can be executed concurrently.
+First, for a given transaction $T$, let $W_T$ and $R_T$ be, respectively, the set of writes/reads present in $T$.
+We say that $o \in W_T$ (resp. $o \in R_T$) if there exists a write (resp. read) operation in $W_T$ (resp. $R_T$) for object $o$.
+Furthermore, $sh_{W_T}$ (resp. $sh_{R_T}$) returns the set of shards for which at least one object $o$ resides in each shard, i.e., $\forall s \in sh_{W_T} | \exists o^{shard} \in W_T : shard = s$ (and similarly for $R_T$).
+
+The scenarios where transactions can safely execute concurrently are as follows:
 
 \begin{compactitem}
-	\item Operations for a given transaction that belong to different shards may always execute concurrently;
-	\item For a given set of transactions T1, ..., Tn, if all transactions are read-only, they can execute freely in any order, exploiting full concurrency between shards;
-	\item For a given set of transactions T1, ..., Tn, with a subset of the operations being writes, the transactions can execute concurrently as long as $\forall Ta, Tb \in T1, ..., Tn, Ta \neq Tb \implies (shard(W(Ta)) \cap shard(W(Tb)) = \emptyset)$ (informally, there is no intersection of shards between any of the write sets). Note that the read sets can interset freely.
+	\item Subsets of operations of a given transaction $T$ that belong to different shards may always execute concurrently;
+	\item For a given set of transactions $T_1$, ..., $T_n$, if all transactions are read-only, they can execute freely in any order, exploiting full concurrency between shards;
+	\item For a given set of transactions $T_1$, ..., $T_n$, with a subset of the operations being writes, the transactions can execute concurrently as long as $\forall T_a, T_b \in T_1, ..., T_n, T_a \neq T_b \implies (sh_{W_{Ta}} \cap sh_{W_{Tb}} = \emptyset)$ (informally, there is no intersection of shards between any of the write sets). Note that the read sets can interset freely.
 \end{compactitem}
 
 In PotionDB, views are defined to answer complex queries directly with a single read.
@@ -1189,99 +1224,93 @@ Other possible solutions to make use of multi-core CPUs are possible, for instan
 	\item \label{item:multiplePotion} running multiple PotionDB servers in the same computer.
 \end{compactenum}
 
-Alternative \ref{item:locks} is difficult to implement, as it is required to find the right level of lock granularity and when should locks be obtained/released. 
-Special care is needed to avoid deadlocking concurrent transactions. 
-There's also concerns with both fairness and overhead of obtaining locks.
-Our solution does not need to lock data, thus it avoids the overhead from using locks, is easier to implement and does not have deadlocks.
+Alternative \ref{item:locks} is difficult to implement efficiently, as the right level of lock granularity is needed.
+Deadlocking, lock overhead and fairness are also concerning.
+%Alternative \ref{item:locks} is difficult to implement, as it is required to find the right level of lock granularity and when should locks be obtained/released. 
+%Special care is needed to avoid deadlocking concurrent transactions. 
+%There's also concerns with both fairness and overhead of obtaining locks.
+Our solution does not need to lock data, thus avoiding lock overhead and deadlocks, while also being easier to implement.
+%Our solution does not need to lock data, thus it avoids the overhead from using locks, is easier to implement and does not have deadlocks.
 
 As for \ref{item:multiplePotion}, this would imply more replicas running in the system, which increases both replication and storage costs.
 This would also imply concurrency conflicts even in the same computer.
-Finally, while this can allow more clients to be processed in the same period of time, and is quite easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. \andre{Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.}
+Finally, while this solution can allow more clients to be processed in the same period of time, and is rather easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. \andre{Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.}
 
-Many existing solutions shard the data across multiple machines in the same datacenter \cite{cops, eiger, cure, mdcc, gentlerain}.
+Many existing solutions shard the data across multiple machines in the same data center \cite{cops, eiger, cure, mdcc, gentlerain}.
 While this implies coordination between machines for executing cross-shard transactions (e.g. with 2PC), it allows to scale the dataset size further than what a single machine can handle.
 This is, however, orthogonal to our research, as we focus on scalability of each individual server.
 %Any need to mention we could adapt this to PotionDB if desired?
 
-\section{Transactions}
-\label{sec:transactions}
-%I need to check if I need to introduce snapshots or clocks more properly in one of the previous sections, or here (I should check this when reviewing the entire document).
-%A table summarizing all symbols could be useful.
-Each PotionDB instance is internally sharded, as described in Section \ref{subsec:sharding}.
-Thus, to enable the provisioning of casually consistent snapshots of the whole database, coordination among partitions is required to execute transactions, ensuring state evolves correctly.
-If no coordination was employed it would be possible to observe inconsistent states of the database - e.g., observe a state where a base object is already updated but its base view is not. %I don't think I need to motivate this further... is it necessary to say this would lead to application errors/difficulties for the application developer, or that it would break transactional causal consistency?
-
-We define the following notation to help with our protocols definition in this section. %Maybe I should define a table for this like in Cure?
-Let $T$ be the current transaction being considered, $p_T$ the set of partitions for which there is a read or write in $T$, $p_{w(T)}$ the same but for writes only.
-Let $S_1, ..., S_n$ be the set of servers of the system.
-%Let $clk^p_i$ be the value of the physical
-
 \subsection{Clocks}
 
-Each server keeps a global vector clock $vc_g$, with one entry for each server in the system.
-This clock represents the latest snapshot available in the server.
-Each partition $i$ also keeps a local vector clock $vc_i$.
-The local vector clock simbolizes the latest snapshot available in the partition, which may be different from $vc_G$.
-Any partition can access the server's physical clock, $pc$.
-Each partition also keeps a list of prepared vector clocks, $prep_i$, as well as a list of commits on hold, $hold_i$
+Let $S_1$, ..., $S_n$ be the set of servers in the system.
+Each server $S_j$ keeps a global vector clock $vc_G$, with one entry for each $S_k \in S_1, ..., S_n$.
+This clock represents the latest snapshot available in $S_j$.
+Each shard $sh_i$ also keeps a local vector clock $vc_i$.
+The local vector clock simbolizes the latest snapshot available in $sh_i$, which may be different from $vc_G$.
+Any shard can access the server's physical clock, $pc$.
+Each shard $sh_i$ also keeps a list of prepared vector clocks, $prep_i$, as well as a list of commits on hold, $hold_i$.
 While we leverage on physical clocks for our protocols, the correctness of our protocols is independent of the skew of physical clocks between servers.
-In fact, any monotonic increasing clock would suffice.
+In fact, any monotonically increasing clock would suffice for implementing $pc$.
 
 A transaction $T$ has two clocks associated - a read vector clock, $T.rc$, and a commit clock (single scalar), $T.cc$.
 The former represents the snapshot to be read by the transaction, while the latter is the snapshot that will be generated by the transaction's updates on commit.
-Applying a local commit only advances the replica's entry in a vector clock, hence why a single scalar is enough for $T.cc$.
+Applying a local commit only advances $S_j$'s entry in a vector clock, hence why a single scalar is enough for $T.cc$.
 Updates are only applied when a transaction is commited. 
 Reads are applied as soon as they are issued. %This phrase probably belongs in another place.
 
-%I may need to define some more notation or information
 
 \subsection{Commit protocol}
 %Probably I should write the pseudo-code of this algorithm?
 We apply a two-phase commit protocol as follows.
-First, a prepare message is sent to all partitions in $p_w(T)$.
-Each partition $i$ replies with the value of the physical clock $pc$ at the time the message is processed and also stores it in $prep_i$. %Do I need to say it also stores the transaction ID?
-We assume that $pc$ is precise enough that the same $pc$ value won't be returned for two different prepares in the same partition.
-It is however acceptable for two different partitions to read and return the same $pc$ even if for different transactions.
-We set $T.cc$ be the highest of the returned clocks.
-A commit message is then sent to all partitions in $p_T$.	%I may need to prove how this still converges - I remember me and Carla talked about this and it is not obvious.
-%Also, should I just say we require a monotonic increasing clock? What we require is a bit weaker actually (just needs to be monotonic increasing on the level of a partition)
+First, a prepare message is sent to all shards in $W_T$.
+Each $sh_i$ replies with the value of $pc$ at the time the message is processed and also stores it in $prep_i$. %Do I need to say it also stores the transaction ID?
+Since $pc$ is monotonically increasing, all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
+We set $T.cc$ equal to the highest returned clock.
+A commit message is then sent to all shards in $W_T$.	%I may need to prove how this still converges - I remember me and Carla talked about this and it is not obvious.
 
-A partition $i$ proceeds as follows when it receives a commit message.
-A commit can only be applied if all prepared clocks in $prep_i$, except the one prepared for $T$, are higher than $T.cc$.
-If so, the commit and $T$'s updates are applied and the partition's $vc_i[server]$ is updated to $T.cc$.
+A shard $sh_i$ proceeds as follows when it receives a commit message.
+A commit can only be applied if
+\begin{enumerate*}[label=(\roman*)] 
+	\item all prepared clocks except the one for $T$ are higher than $T.cc$ and
+	\item there is no $T_a.cc$ in $hold_i$ for which $T_a.cc < T.cc$.
+\end{enumerate*}
+If so, the commit and $T$'s updates are applied and $vc_i[S_j]$ is updated to $T.cc$.
 Otherwise, the commit is queued in $hold_i$ to be applied later, as other transactions may commit with a lower $cc$ than $T.cc$.
-In either case, $T$'s prepared clock is removed from $prep_i$ and the partition replies with a commited message.
+In either case, $T$'s prepared clock is removed from $prep_i$ and $sh_i$ replies with a commited message.
 
-If $T$'s commit was applied in partition $i$, or $T$'s prepare clock was the lowest value in $prep_i$, the transaction with lowest $cc$ in $hold_i$, $T_h$, is verified for appliance, with the same rules as above.
+If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $prep_i$, the transaction with lowest $cc$ in $hold_i$, $T_h$, is verified for appliance, with the same rules as above.
 If the conditions hold, $T_h$ is removed from $hold_i$ and applied as described above, and the verification process repeats for the next lowest in $hold_i$.
 This process loops until $hold_i$ is empty or the lowest commit in $hold_i$ cannot be applied. %Do I need to state that vc is updated?
 
-A client receives a confirmation of transaction commited (along with $T.cc$ which will then be piggybacked on the next transaction) when all partitions in $p_w(T)$ send the commited message.
-This happens even if any of the partitions queued the commit.
-On the other hand, $vc_G$ is updated only when all partitions in $p_w(T)$ actually finish executing the transaction.
+A client receives a confirmation of transaction commited, along with $T.cc$, when all shards in $W_T$ send the commited message.
+This happens even if any of the shards queued the commit.
+On the other hand, $vc_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
 To be precise, assuming the transaction was commited on server $S_j$, we set $vc_G[j] = max(vc_G[j], T.cc)$.
-The max is necessary as transactions accessing disjoins sets of write partitions may commit concurrently.
+The max is necessary as transactions accessing disjoins sets of write shards may commit concurrently.
 Note that this does not break consistency as the write sets are disjoint - thus no racing conditions occour to the same object.
+Furthermore, the reading protocol consider this possibility when applying reads.
 
 %Maybe this should be before commit?
 \subsection{Consistent reads}
 \label{subsec:consistentReads}
 PotionDB provides transactional causal consistency as described in Section \ref{subsec:transactionalcausal}.
-Thus, all reads in a transaction observe a consistent view of the database, even when accessing multiple partitions.
+Thus, all reads in a transaction observe a consistent view of the database, even when accessing multiple shards.
 %Intro may be unecessary given the Transactions section's intro
 
 We provide consistent reads as follows.
 Clients' new transaction requests include a clock representing the latest snapshot observed by the client. %Any need to say this is optional? For max read throughput (but with potencial causality loss) we support not including a clock
-This ensures causality is maintaned while reading even if the client changes servers.
+This ensures causality is maintaned even if the client changes servers.
 When a transaction $T$ is started, its read clock $T.rc$ is set as $T.rc = max(vc_G, clientClk)$, where $max$ does a pairwise max for each entry.
-If at the time of reading, $\exists i \in S_1, ..., S_n : T.rc[i] > vc_G[i]$, the reads will be put on hold before being sent to the partitions. 
-When $\forall i \in S_1, ..., S_n, vc_G[i] >= T.rc[i]$, i.e., the replica can already provide the snapshot requested by the client's clock, the reads will be sent to the respectives partitions.
+If at the time of reading, $\exists i \in S_1, ..., S_n : T.rc[i] > vc_G[i]$, the reads will be put on hold before being sent to the shards. 
+When $\forall i \in S_1, ..., S_n, vc_G[i] \geq T.rc[i]$, i.e., the replica can already provide the snapshot requested by the client's clock, the reads will be sent to the respective shards.
 Reads are executed as soon as the client issues them, i.e., does not wait for commit. %Do I need to justify? I would assume this is fairly standard behaviour.
 
-The partitions receive $T.rc$ when applying reads. If $T.rc$ belongs to the past, the correspondent version of the object is calculated. %Do I need to give details on this?
-If it is the latest, the state is read directly.
+The shards receive $T.rc$ when applying reads.
+If $T.rc$ belongs to the past, the correspondent version of the object is calculated - we achieve this by keeping a list of recent updates of each object and undoing the necessary operations. %Should I mention more details on this mechanism are outside of the scope of this paper?
+If it is the latest, the state is read directly \footnote{On an exceptional scenario, the read may have to be put on hold. This only happens when write transactions with disjoint sets of write shards commit concurrently, and a new snapshot reflecting one of the transaction's $cc$ is issued before the other transaction finishes being applied - in practice, this is a very rare occourence.}.
 
-The waiting situation can happen when the client changes servers or if the client recently commited some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be comitted.
+Waiting for the snapshot to be available can happen when the client changes servers or if the client recently commited some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be comitted.
 The former is exceptional - we assume clients are sticky, as data has locality.
 The later is uncommon and is still better than forcing the client to wait during the commit - with our solution, the commit will very likely be applied during RTT.
 Even if not, i.e. the next request of the client arrives before the commit is fully applied, our solution is still beneficial -  the client only waits for the commit duration instead of commit duration + RTT.
@@ -1291,7 +1320,7 @@ Even if not, i.e. the next request of the client arrives before the commit is fu
 %Reads reflect the effect of previous updates in the same transaction.
 %That is, even though updates are not applied until a transaction is commited, reads still reflect the state that would result from applying said updates on $T.rc$'s snapshot.
 Reads reflect the effect of previous updates in the same transaction, despite updates not being applied until the transaction commits.
-In our prototype we achieve this by, for a given $read(o)$, calculating the effects of all $update(o) \in T$ that have been issued before said read on top of $T.rc$'s snapshot.
+PotionDB achieves this by, for a given $read(o)$, calculating the effects of all $update(o) \in T$ that have been issued before said read on top of $T.rc$'s snapshot.
 Then the state of $o$ reflecting such changes is returned.
 
 \subsection{Views}
@@ -1300,27 +1329,27 @@ Then the state of $o$ reflecting such changes is returned.
 One key goal in PotionDB is to keep views consistent with their base data.
 As such, it is desirable for views to be correctly updated whenever one of their base objects is.
 
-We achieve this by requiring that, whenever an object $o$ that is base object of some views $v_1, ..., v_k$ is updated in $T$, the respective updates for views $v_1, ..., v_k$ to be included in $T$.
-To be precise, for each view $v_i \in v_1, ..., v_k$ the update must set the view's state back to $v_i = fun_{(v_i)}(o, ...)$.
+We achieve this by requiring that, whenever an object $o$ that is base object of some views $v_1, ..., v_k$ is updated in $T$, the respective updates for views $v_1, ..., v_k$ must be included in $T$.
+To be precise, for each view $v_i \in v_1, ..., v_k$, the update for $v_i$ must set back vi’s state to $v_i = fun_{(v_i)}(o, ...)$.
 The intuition is, for each view $v_i \in v_1, ..., v_k$, an update that correctly reflects the changes of $o$ in $v_i$ must be issued in $T$.
 With this, views' state can progress correctly and, furthermore, they are updated at the same logical time as their base objects, thus keeping views and their base objects consistent.
 
 In summary, views must be updated in the same transaction as their base objects.
 These view updates can be provided in different ways - e.g., automatically through database triggers \cite{oracleTriggers, dbtoaster} or through a proxy close to PotionDB that uses application logic to generate the views' updates.
 How those updates are supplied is agnostic to our protocol, as long as they are included in the same transaction.
+%Should I refer here how we do it in PotionDB? Or mention the Section?
 %Should I mention that automated view updating isn't really a "solved" problem but rather more of a "forgotten" problem?
 
 \section{Replication}
 \label{sec:replication}
 Replication in PotionDB is asynchronous and partial.
-Operations are executed localy, without needing to contact other replicas.
+Operations are executed locally, without needing to contact other replicas.
 Periodically, new updates are propagated asynchronously to other replicas, according to causal order.
 Since objects in PotionDB are operation-based CRDTs, for each transaction's updates we propagate the updates themselves.
-Updates received are also applied according to causal order, keeping the replicas consistent and ensuring state convergence.
+Updates received are applied according to causal order, keeping the replicas consistent and ensuring state convergence.
 %Do I need to mention transactions here?
-%Or maybe that we use vector clocks inspired in clock-si?
 
-In this section we discuss how objects are partitioned across PotionDB instances and how our replication algorithm takes advantage of this partitioning.
+In this section we discuss how objects can be partitioned across PotionDB instances and how our replication algorithm takes advantage of this partitioning.
 Afterwards, we explain how views are kept consistent with their base objects despite partial replication.
 Finally, we describe how we incorporate non-uniform replication to further reduce views' storage and replication costs.
 
@@ -1329,21 +1358,21 @@ Finally, we describe how we incorporate non-uniform replication to further reduc
 %Explain how we partition the objects
 %Maybe some picture showing an example of objects split across buckets and being replicated in different servers?
 As described in Section \ref{subsec:datamodel}, objects are uniquely identified by the triple ($key, bucket, type$).
-Buckets are the unit of partitioning - objects with the same bucket value will be replicated by the same set of servers.
-Each server replicates a set of buckets.
+Buckets are the unit of partitioning - objects with the same bucket value will be replicated by the same subset of servers.
+Each server replicates a subset of buckets.
 The same bucket can be replicated in many servers, potencially all if desired.
 In the typical use case, views will be replicated in every server, which can be achieved by associating them to the same bucket and adding that bucket to all servers.
 For ease of usage, PotionDB supports using regular expressions for defining the set of buckets a server replicates.
 This allows, e.g., for a server to replicate any bucket that ends in "europe".
 
 %Consider changing this example with a picture. Also, is this example necessary?
-To exemplify, consider the e-commerce example in Section \ref{sec:introduction}.
+To exemplify, consider the e-commerce example in Section \ref{sec:overview}.
 Let us assume we want to distribute the customer's data according to their home country's continent + one other continent for fault tolerance purposes.
 This could be achieved with the following steps:
 
 \begin{compactenum}
 	\item Define one bucket per continent (europe, asia, etc.);
-	\item Configure each server to replicate the continent it is located in + another continent. Do this in such a way that each continent is replicated in, at least, two datacenters;
+	\item Configure each server to replicate the continent it is located in + another continent. Do this in such a way that each continent is replicated in, at least, two data centers;
 	\item When adding a new customer to the database, specify the bucket correspondent to the customer's continent.
 \end{compactenum}
 
@@ -1357,47 +1386,45 @@ This could be achieved with the following steps:
 %I will either need a subsection to talk about publish/subscribe and RabbitMQ, or to talk it here. Consider having a figure showing rabbitMQ + PotionDB and how the communication is done.
 
 %I may need to define somewhere that transactions have a commit clock associated to them.
-When a transaction commits localy, it is queued for replication.
+When a transaction commits locally, it is queued for replication.
 Periodically, our replication algorithm collects queued transactions and sends them asynchronously to other replicas.
 
 Given a transaction $T$, we group all updates $u \in T$ according to each update's bucket.
 Let $T^{bkt}$ be the sublist of updates of $T$ such that, $\forall u(o) \in T^{bkt}, o^{bucket} = bkt$.
-Note that $T^{bkt}$ maintains the order of updates, that is, for any pair of updates $u_1$, $u_2 \in T^{bkt}$, if $u_1$ (resp. $u_2$) comes before $u_2$ (resp. $u_1$) in $T$, then $u_1$ (resp. $u_2$) comes before $u_2$ (resp. $u_1$) in $T^{bkt}$.
-This ensures that updates for the same object are applied by causal order and, thus, the correct final state is reached in every replica. %Should I had used "happens-before" symbol instead of "comes before"? I did not since we usually used happens-before between different transactions (thus denoting different clocks)
+Note that $T^{bkt}$ maintains the order of updates, that is, for any pair of updates $u_1$, $u_2 \in T^{bkt}$, if $u_1 \prec u_2$ in $T$, then $u_1 \prec u_2$ in $T^{bkt}$.
+This ensures updates for the same object are applied by causal order and, thus, the correct final state is reached in every replica.
 
 %I want to say our algorithm's unit of delivery is T_{bkt}. We demand no order in sending T_{bkt}, but we do demand that T1 \prec T2 => All T1_{bkt} are sent before any T2_{bkt}  gets sent.
-For a given transaction $T$, all of its $T^{bkt}$ can be sent with an arbitrary order.
-We do however require that for any $T_1$, $T_2$, $T_1 \prec T_2 \implies$ all $T_1^{bkt}$ is sent before any $T_2^{bkt}$ is.
+For a given transaction $T$, all of its $T^{bkt}$ can be sent in an arbitrary order.
+We do however require that for any $T_1$, $T_2$: $T_1 \prec T_2 \implies$ all $T_1^{bkt}$ is sent before any $T_2^{bkt}$ is.
 Thus, our algorithm sends transactions according to the serialization order.
-We assume an underlying communication mechanism that ensures causal order delivery, ensuring that all servers receive transactions from a given server according to their serialization order in said server.
-We also assume some mechanism that allows knowing which buckets each server replicates, in order to only send to each server the $T^{bkt}$s relevant to the receiving server.
+We assume an underlying communication mechanism that ensures causal order delivery, ensuring that all servers receive transactions from a given server $S_i$ according to their serialization order in $S_i$.
+We also assume some mechanism that allows knowing which buckets each server replicates, in order to only send to each server the $T^{bkt}$s relevant for the receiving server.
 %For a given transaction $T$, we do not require any order for its $T_{bkt}$s to be sent.
 %We do however require that, $\forall bkt : \exists u(o{bucket}) \in T \land bucket = bkt$, all the respective $T_{bkt}$ get sent before the next transaction.
 %This ensures that each server, for each transaction, receives all updates of said transaction for all buckets it replicates before receiving the next transaction.
 
 %Note: This probably belongs to the transaction algorithm description.
-Assume $S_1, ..., S_n$ is the list of PotionDB servers and $S_i, S_j \in S_1, ..., S_n \land i \neq j$.
-$\forall k \in (1, ..., n \setminus i)$, server $S_i$ has a queue $q_k$ which holds the transactions received from $S_k$, by the order received.
-A transaction $T$ on the head of a queue is only applied if T's clock is $\leq$ than $S_i$'s clock.
-Note that transactions from different servers can be applied by any order if they are concurrent.
-%And, for two transactions $T_1$, $T_2$ from different replicas that are not concurrent (let us assume $T_1 \prec T_2$), 
-If they are not, e.g. if for two transactions $T_1$, $T_2$ from different replicas we have $T_1 \prec T_2$, then $T_1$'s clock will not be $\leq$ $S_i$'s clock until $T_2$ is applied.
-Thus, $T_1$ will be applied after $T_2$, maintaining causality. %I do not know if this explanation is generic enough - the idea here is that, for transactions causally related from different replicas, they will be applied with causal order, as their clocks will enforce so (we cannot apply a transaction until the replica's clock reflects all preceding transactions).
-%TODO: Need to define the "replica's clock" somewhere. Likely on transaction algorithm
+Assume $S_1, ..., S_n$ is the list of PotionDB servers and $S_i \in S_1, ..., S_n$.
+$\forall j \in (1, ..., n \setminus i)$, server $S_i$ has a queue $q_j$ which holds the transactions received from $S_j$ sorted by the order received.
+A transaction $T$ on the head of a queue is only applied if $T.rc \leq S_i$'s $vc_G$.
+Note that transactions from different servers can be applied by any order if they are concurrent. 
+If they are not, e.g. if for two transactions $T_1$, $T_2$ from different replicas we have $T_1 \prec T_2$, then $T_2.rc$ will not be $\leq$ $S_i$'s $vc_G$ until $T_1$ is applied.
+Thus, $T_2$ will be applied after $T_1$, maintaining causality. %I do not know if this explanation is generic enough - the idea here is that, for transactions causally related from different replicas, they will be applied with causal order, as their clocks will enforce so (we cannot apply a transaction until the replica's clock reflects all preceding transactions).
 
 In our PotionDB prototype we leverage on RabbitMQ \cite{???} for handling communication between replicas.
 RabbitMQ is a message brooker which allows consumers to register the topics of messages in which they are interested.
 We associate a topic to a bucket in order to allow servers to only receives updates for buckets they are replicating.
 
-We use RabbitMQ as follows. We run a RabbitMQ instance alongside each PotionDB server (replica).
-When a replica starts, it contacts other server's RabbitMQs and subscribes the topics matching the buckets replicated by the replica.
+We use RabbitMQ as follows. We run a RabbitMQ instance alongside each PotionDB instance.
+When a server starts, it contacts other server's RabbitMQs and subscribes the topics matching the buckets it replicates.
 To replicate, a server sends updates to its RabbitMQ instance.
 Transactions are sorted by serialization order and each transaction is split in buckets, as described previously.
-Updates are sent in group to RabbitMQ, one group per bucket of a transaction.
+Updates are sent in group to RabbitMQ, with one group per bucket of a transaction.
 The group's topic is set to the value of the bucket.
-This allows RabbitMQ to later forward the updates to each interested PotionDB instance, ensuring each PotionDB receives only the relevant buckets and maintaining the transaction order.
-The receiving replica rebuilds the transaction as it receives the buckets.
-The end of a transaction is signalized either by the receival of another transaction from the same server, or by a special message in the case of being the last transaction replicated so far.
+This allows RabbitMQ to later forward the updates to each interested PotionDB instance, ensuring each server receives only the relevant buckets and maintaining the transaction order.
+The receiving server rebuilds the transaction as it receives the buckets.
+The end of a transaction is signalized either by receiving another transaction from the same server, or by a special message in the case of being the last transaction that is being replicated so far.
 
 %I am unsure which text of RabbitMQ is better, thus I leave the old one here too:
 
@@ -1432,27 +1459,27 @@ Consider the following two possibilities:
 
 \begin{compactenum}
 	\item \label{repl_sol_1} Replicate only the updates for base objects, and have the receiving replica generate the correspondent view updates. The replica would then apply all updates in the context of the same transaction;
-	\item \label{repl_sol_2} Replicate both base object and view updates together. 
+	\item \label{repl_sol_2} Replicate both base objects and view updates together. 
 	Since base objects and their view's updates are in the same transaction, the replication algorithm would send them together and the receiving replicas would apply them atomically and generate a new causally consistent snapshot.	
 \end{compactenum}
 
 Partial replication poses challenges to both solutions.
 First, possibility \ref{repl_sol_1} would require a way to automatically generate view updates based solely on base object updates, which is far from trivial \cite{ahmed2020automated}. %I need citations of papers that talk about automatic view updating.
-It would also require propragating all the base objects' updates (and possibly current state), which is undesirable, as it would defeat the purpose of partial replication.
+It would also require propagating all base objects' updates (and possibly current state), which is undesirable, as it would defeat the purpose of partial replication.
 Both requirements are undesirable.
 
 Possibility \ref{repl_sol_2} faces different challenges.
 Namely, 
 \begin{enumerate*}[label=(\roman*)] 
-	\item \label{item:view_challenge1}source replica may not replicate a view but may replicate some of its base objects;
-	\item \label{item:view_challenge2}receiving replica may replicate a view but not some of the updated base objects.
+	\item \label{item:view_challenge1}the source replica may not replicate a view but may replicate some of its base objects;
+	\item \label{item:view_challenge2}the receiving replica may replicate a view but not some of the updated base objects.
 \end{enumerate*}
-Our solution must account for both challenges.
+A solution must account for both challenges.
 We decide to follow this possibility, as it does not have undesirable requirements and allows for replicas to only receive and process updates for objects in buckets they replicate.
 
 An initial solution to support possibility \ref{repl_sol_2} is to require views to be replicated in every server.
 This can be achieved by associating views to bucket(s) that are replicated everywhere.
-Challenge \ref{item:view_challenge1} is addressed as every server with base objects relevant to some view will now also have said view and, thus, include the necessary view updates in the local transactions and replicate said updates.
+Challenge \ref{item:view_challenge1} is addressed as every server with base objects relevant to some view will now also have said views and, thus, include the necessary view updates in the local transactions and replicate said updates.
 Every server will receive view updates and apply them as all servers replicate the bucket(s) with views.
 As for challenge \ref{item:view_challenge2}, a server will receive all view updates and updates only for the base objects (potencially none) it replicates. %Do I need to refer that those view and base object updates will be received in the same transaction? That's already mentioned at the start of this subsection. And the previous subsection states that replication keeps updates of the same transaction in... the same transaction.
 %If the server only replicates the view, only the view updates will be received.
@@ -1462,31 +1489,31 @@ Thus, views will be kept up to date (i.e., states will converge) in all servers,
 We now provide an informal proof sketch of how views are updated correctly.
 We need to prove three properties:
 \begin{enumerate*}[label=(\roman*)] 
-	\item \label{viewProp1} a server replicating a view receives all view updates;
-	\item \label{viewProp2} views are always consistent with their base objects in any given server;
-	\item \label{viewProp3} the state of the view in different replicas eventually converges.
+	\item \label{viewProp1} a server replicating a view $v$ receives all updates for $v$;
+	\item \label{viewProp2} $v$ is always consistent with its base objects in any given server;
+	\item \label{viewProp3} the state of $v$ in different replicas eventually converges.
 \end{enumerate*}
 
 For property \ref{viewProp1}, assume all servers replicate all views.
-When a base object is updated, its view is updated in the same transaction.
+When a base object of $v$ is updated, $v$ is updated in the same transaction.
 The whole transaction will be sent to replication, and split by buckets.
-Because all servers replicate all views, all servers will receive the view's updates and all servers will send the view's updates generated by their local transactions.
-Thus, all servers receive all of the view's updates.
+Because all servers replicate all views, all servers will receive $v$'s updates and all servers will send $v$'s updates generated by their local transactions.
+Thus, all servers receive all of $v$'s updates.
 
 Property \ref{viewProp3} follows up from the propositions above.
-Given all servers receive all updates and they are applied by causal order, and concurrent operations are commutative (views are CRDTs), all replicas will converge when the set of updates applied is the same.
+Given all servers receive all of $v$'s updates, they are applied by causal order and concurrent operations are commutative (views are CRDTs), then all replicas will converge when the set of updates applied is the same.
 
 Property \ref{viewProp2} can be proven by leveraging on how buckets are replicated.
 A server receives updates for all objects it replicates.
 Assume server $S_1$ replicates objects $o_1, ..., o_k$ and that view $v = fun_v(o_1, ..., o_k, ..., o_n)$.
-Thus, $S_1$ replicates the buckets of $o_1, ..., o_k$ and as such will receive all updates for $o_1, ..., o_k$.
+Thus, $S_1$ replicates the buckets of $o_1, ..., o_k$ and will receive all updates for $o_1, ..., o_k$.
 Since objects and their views are updated together, updates for $v$ will be applied in the same transactions as updates for $o_1, ..., o_k$, and made visible at the same logical time.
-Thus, views and their base objects are kept consistent.
-Note that $S_1$ does not replicate $o_k+1, ..., o_n$, thus consistency between those base objects and their views does not apply for those objects.
+Consequently, views and their base objects are kept consistent.
+Note that $S_1$ does not replicate $o_k+1, ..., o_n$, therefore consistency between those base objects and $v$ does not apply for those objects.
 However, as proven before, $S_1$ will still receive the view updates corresponding to $o_k+1, ..., o_n$ updates and thus $v$ is kept up-to-date and will converge with other replicas. %The last 2 sentences may be unecessary.
 
 To be precise, the requirement to ensure views are kept up-to-date can be relaxed.
-Our exact requirement is for view $v$ to be replicated in every server that replicates any of the objects in $o_1, ..., o_n$.
+Our exact requirement is for $v$ to be replicated in every server that replicates any of the objects in $o_1, ..., o_n$.
 Replication in other servers is optional, e.g., for fault tolerance or faster access in other locations.
 This relaxation can be useful, e.g., for views concerning data of only one country or continent.
 
@@ -1504,41 +1531,48 @@ This relaxation can be useful, e.g., for views concerning data of only one count
 \label{subsec:nonuniform}
 %Note: we do not really guarantee causality when considering non-uniform CRDTs. How should we handle this? Do we mention this in the paper? Or maybe mention how we could "fix" this?
 
-Cabrita et. al \cite{Cabrita17Nonuniform} introduces the concept of non-uniform distributed system.
+Cabrita et. al \cite{Cabrita17Nonuniform} introduce the concept of non-uniform distributed system.
 In a non-uniform distributed system, the state of any given object $o$ can diverge between replicas forever, as long as when the system is in a quiescent state, the \emph{observable state} of all replicas is the same.
 Two observable states are defined as equivallent iff, for each possible query, the result is equivalent when executed on either states.
 
-Non-uniform replication allows to save both replication, processing and storage costs, as not all updates for a given object $o$ need to be replicated and applied everywhere.
+Non-uniform replication allows to save on both replication, processing and storage costs, as not all updates for a given object $o$ need to be replicated and applied everywhere.
 E.g., in a topK object, only the k entries in the top must be replicated everywhere.
 Adding an element that does not belong to the top does not need to be replicated.
 Even if removals are considered, not all entries need to be replicated everywhere - e.g., entries that are far from the top or that were removed before ever entering the top do not need to be replicated.
 
-We leverage on non-uniform replication, namely on non-uniform CRDTs (NuCRDTs) to provide materialized views with space-efficiency.
-The savings on space and operation processing can be quite considerable, as in some scenarios most data is not relevant for a query.
+We leverage on non-uniform replication, namely on non-uniform CRDTs (NuCRDTs) to provide materialized views with good space efficiency.
+The savings on space and operation processing are considerable, as in some scenarios most data is not relevant for queries.
 E.g., in an global e-commerce scenario, consider the query "top 10 most sold products worldwide".
-Even if there are hundreds of thousands of products, only a small subset of entries needs to be replicated everywhere to correctly reply the query, as the vast majority of entries will never be relevant.
-In PotionDB, we support many NuCRDTs such as max/min, average, topK (with removals) and topSum.
-We extended some of these designs for better expressivety.
+Even with hundreds of thousands of products, only a small subset of entries needs to be replicated everywhere to correctly reply the query, as the vast majority of entries will never be relevant.
+In PotionDB, we support the following NuCRDTs: max/min, average, topK (with removals) and topSum.
+We extended the specification of some NuCRDTs for better expressivety.
 For instance, our topK supports extra data on each entry in order to contain all the information relevant for the query (e.g., in the previous example, one may want to display the product name, number of sales and total value of the sales).
-Our topSum also supports decrements, allowing support for dynamic leaderboards where points can be added or subtracted whenever necessary.
+Furthermore, our topSum also supports decrements, allowing support for dynamic leaderboards where points can be added or subtracted whenever necessary.
 This can be useful, e.g., to represent the top 10 most sold products in the last 30 days - when a new day comes by, sales from the first day must be removed (subtract) and sales from the new day must be accounted for (addition).
 %Should I mention computational CRDTs? The average is, in theory, a computational CRDT...
 %Do I need to describe what is the heuristic for TopSum and how we support subtractions?
 
-Supporting NuCRDTs in PotionDB has the following implications on the replication algorithm.
-First, only operations that change the observable state are replicated - when executing transactions, PotionDB checks if said state changed.
-Otherwise, the operation is still stored locally if it may be relevant later on.
-If it is known that the operation will never be relevant, e.g. when adding an element outside of the top for a topK without removes, the operation is discarded.
+With NuCRDTs, only updates that change the visible state must be replicated right away.
+We adapted our transaction execution algorithm to account for this - an update is only queued for replication if the visible state changed. 
+If the operation may be relevant later on (e.g., an add that is close to the top), it is stored locally. ~\footnote{Operations in this category are still replicated right away to a small subset of replicas to account for faults.}
+If not, i.e., it is known it will never be relevant, e.g., when adding an element outside of the top for a topK without removes, it is discarded.
+
+%Supporting NuCRDTs in PotionDB has the following implications on the replication algorithm.
+%First, only operations that change the observable state are replicated - when executing transactions, PotionDB checks if said state changed.
+%Otherwise, the operation is still stored locally if it may be relevant later on.
+%If it is known that the operation will never be relevant, e.g. when adding an element outside of the top for a topK without removes, the operation is discarded.
 
 When operations are applied in a NuCRDT, some previously non-relevant operations may become relevant.
 E.g., in a topK, removing an entry in the top will promote another entry to the top - if this promoted entry was not replicated previously, it will need to be replicated now.
 This can happen when executing either local or remote transactions.
 PotionDB supports both situations as follows.
 In the former case, the newly relevant operations are appended to the transaction and will, thus, be replicated normally.
-In the latter case, a new transaction is created that holds the newly relevant operations that were generated by any of the NuCRDTs that were modified in the remote transaction being applied.
+In the latter case, a new transaction is created that holds the newly relevant operations that were generated by the NuCRDTs that were modified in the remote transaction being applied.
 This new transaction is locally commited but without applying said operations, as they were already applied locally before.
 The transaction is then replicated to other replicas, which apply it normally.
-This new transaction may potencially make more operations relevant, however it is ensured eventually the observable state will converge.
+This new transaction may potencially make more operations relevant.
+However it is ensured the observable states will eventually converge.
+eventually the observable state will converge.
 We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and more details on non-uniform replication.
 
 \subsection{Operations on objects not locally replicated}
@@ -1547,22 +1581,22 @@ We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and mo
 In an optimal scenario, clients only need to access data that is present in a nearby server.
 Ideally, partial replication is done in such a way that data is distributed according to its relevance in the geographical area where each server is located in.
 This is also the scenario for which PotionDB is optimized.
-We do however recognize the need for queries that may involve global data (namely analytic/statistical queries), hence why we provide materialized views of data not replicated locally.
+We do however recognize the need for queries that may involve global data (namely analytic/statistical queries), hence why we provide materialized views of data not locally replicated.
 
 Nevertheless, in case a client sporadically needs to access an object not served by a view and not locally replicated, the client can still request it to his local server.
 The request will be forwarded to a server with said object.
 On transaction commit, said server will also execute the requested operation and return its result.
-Forward requests are executed under RC, thus different versions may be read.
+Forwarded requests are executed under RC, thus different versions may be read from the rest of the transaction.
 
-We believe for most use cases, good data locality when doing partial replication, alongside the usage of views, will make needing to access other servers a very sporadic event.
-We note that data which may be revelant everywhere can still be replicated in every server if so is desired.
+We believe for most use cases, good data locality when doing partial replication, alongside global views, will ensure forwarded requests will rarely to never be necessary.
+We note that data which may be revelant everywhere can be fully replicated if so is desired.
 
 \section{Designing views for applications}
 \label{sec:views_for_apps}
 
 %I think it needs a different motivation
-In order to evaluate PotionDB's performance, as well as demonstrate the expressivity of PotionDB's views and objects, we implemented TPC-H's data model, as well as all proposed updates and a subset of the proposed queries.
-In this section we discuss the experience of adapting a SQL-oriented database scenario like TPC-H to PotionDB, focusing on view design and limitations of our solution.
+In order to evaluate PotionDB's performance and demonstrate the expressivity of PotionDB's views and objects, we implemented TPC-H's data model, along with all proposed updates and a subset of the proposed queries.
+In this section we discuss the experience of adapting a SQL-oriented database scenario like TPC-H to PotionDB, focusing on view design and shortcomings of our solution.
 
 \subsection{Dataset and partial replication}
 \label{subsec:dataset}
@@ -1578,15 +1612,15 @@ We defined a bucket for each region and partitioned each table as follows:
 \begin{compactitem}
 	\item Customer, Supplier, Nation, Region, Orders, Partsupply: associated to one region bucket. 
 	All but orders and partsupply have a nation or region directly associated to it, which is used to select the bucket.
-	For orders and partsupply, we select, respectively, the customer's and supplier's region.
+	For orders and partsupply, we use, respectively, the customer's and supplier's region.
 	\item Parts: associated to the bucket \emph{parts} which is fully replicated.
 	This is because both multiple suppliers and multiple customers across the globe may, respectively, supply/order the same part.
-	Our analysis into the dataset shows this happen frequently.
-	\item Lineitem: associated to both the customer's and supplier's region, as this information is relevant for both customer and supplier.
+	Our analysis of TPC-H's dataset shows this happens frequently.
+	\item Lineitem: associated to both the customer's and supplier's region, as this information is relevant for both.
 \end{compactitem}
 
-We highlight that views are fully replicated (they have their own bucket).
-Thus, queries that access worldwide data, which are frequent in TPC-H, can still be served efficiently.
+We highlight that views are fully replicated with a common bucket associated to them all.
+Thus, queries that access worldwide data, which are frequent in TPC-H, can  be served efficiently in any server.
 
 \subsection{Converting tables to objects}
 \label{subsec:tables_to_objects}
@@ -1595,9 +1629,9 @@ All tables in TPC-H have either an unique key (e.g., customer key for customer) 
 We use those as keys for our objects.	%Basically we have unique keys for each row that we use as the key of our objects
 
 Each entry in a table maps directly to a map CRDT.
-E.g., each customer is represented by a map, with the map's key being the customer's key.
+E.g., each customer is represented by a map, with the map's object key being the customer's key.
 Each field of the table is also a CRDT - we use whichever data type most closely matches the data in the tables - e.g. registers for strings, counters for numbers.
-Buckets are associated to each object as described in the previous section. %Is this phrase necessary?
+Buckets are associated to each object as previously described.
 %Should I say something @ containers here?
 
 \subsection{Specifying views for queries}
@@ -1607,12 +1641,13 @@ Buckets are associated to each object as described in the previous section. %Is 
 Given a query, the application developer can specify one or more views that hold the necessary data to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
 
 As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
-PotionDB's view API (Section \ref{subsec:viewapi}) and its similarities with SQL make this challenge similar to the one faced when using relational databases.
-PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring the view is correctly updated when any base object of the view is inserted/updated/deleted.
+PotionDB's view API (Section \ref{subsec:viewAPI}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
+PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
 Such inference takes out a considerable burden from the application developer.
 
-The key point for specifying a materialized view is to determine the information needed to answer the query.
-To illustrate the process, consider query 3 (Q3) of TPC-H \cite{tpch}, defined in Figure \ref{fig:q3} \footnote{For simplicity, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
+We now illustrate how to obtain a materialized view’s specification for a given query. 
+Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
+\footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
 
 \begin{figure}[h]
 	Return the first 10 rows: \\
@@ -1620,7 +1655,7 @@ To illustrate the process, consider query 3 (Q3) of TPC-H \cite{tpch}, defined i
 	\hphantom{SELECT }orderdate, shippriority \\
 	FROM lineitem \\
 	WHERE mktsegment = [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE]\\
-	GROUP BY orderkey, orderdate, shippriority
+	GROUP BY orderkey, orderdate, shippriority \\
 	ORDER BY revenue DESC, orderdate \\
 \caption{SQL of TPC-H's Query 3}
 \label{fig:q3}
@@ -1640,14 +1675,14 @@ The idea behind Q3 is to detect orders of high value for a certain market segmen
 The top 10 of such orders is presented, sorted by revenue and using as tiebreaker the orderdate.
 The query has two parameters - DATE and SEGMENT, where date can only take values between 1995-03-01 and 1995-03-31.
 
-For the view, we will want to select the same fields as in the query, so that all information necessary is in the view.
+For the view, we want to select the same fields as in the query, so that all necessary information is in the view.
 This avoids having to fetch extra data from other objects, which could imply communication with other servers due to partial replication.
-The \emph{from} and \emph{order by} clauses will also be the same. %Do I need to justify this?
-Since the quey only needs to list the top 10 rows, we add a \emph{limit} 10 clause.
-Finally, we need to modify the \emph{where} clause to add restrictions to DATE - this query parameter only varies between 1995-03-01 and 1995-03-31, so we add ``and 1995-03-01 $<=$ DATE $<=$ 1995-03-31''.
+The \emph{from} and \emph{order by} clauses are also unchanged. %Do I need to justify this?
+Since the query only needs to list the top 10 rows, we add a \emph{limit} 10 clause.
+Furthermore, we need to modify the \emph{where} clause to add restrictions to DATE - this query parameter only varies between 1995-03-01 and 1995-03-31, so we add ``and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31''.
 This is necessary so that only lineitem objects whose \emph{where} clause is valid for these ranges are reflected in the view's state.
-No restriction is needed for SEGMENT, as all valid values for SEGMENT are to be considered for the view.
-Finally, the group by cause is not needed for the correct generation of either the view or its updates.
+No restriction is needed for SEGMENT, as all values of SEGMENT are to be considered for the view.
+Finally, the group by cause is not used in PotionDB.
 
 The final materialized view can be specified as follows:
 
@@ -1656,7 +1691,7 @@ The final materialized view can be specified as follows:
 	SELECT orderkey, sum(price*(1-discount)) AS renevue, \\
 	\hphantom{SELECT }orderdate, shippriority \\
 	FROM lineitem \\
-	WHERE mktsegment = [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $<=$ DATE $<=$ 1995-03-31\\
+	WHERE mktsegment = [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31\\
 	ORDER BY revenue DESC, orderdate \\
 	LIMIT 10 \\
 \caption{PotionDB specification of a view for TPC-H's Query 3}
@@ -1671,61 +1706,64 @@ For the sake of brevity and simplicity, we do not dive deep into the details of 
 
 Recall the view specification in Figure \ref{fig:q3_view}.
 \emph{Limit} tells PotionDB that the view's data will be represented by a TopK or TopSum.
-\emph{Order By} specifies how the elements in the top will be sorted - first by revenue, then orderdate.
+\emph{Order By} specifies how the top's elements will be sorted - first by revenue, then orderdate.
 These elements will be the "value" of each entry.
 The id of each entry will be composed by the elements in \emph{select} not used in \emph{order by}. %NOTE: I can change this if we want to use a clause or similar like ID() just for TopK/TopSum
 After analysing select, PotionDB concludes the \emph{revenue} field in \emph{order by} is a sum and, thus, decides to use a TopSum in order to support increments and decrements of an entry.
 
-The parameters of a query, [SEGMENT] and [DATE], in practice represent different variations of the query.
+The parameters of the query, [SEGMENT] and [DATE], in practice represent different variations of the query.
 That is, the query may be instantiated with different values of both SEGMENT and DATE.
 As such, it is necessary for the materialized view to support all these variations efficiently, without requiring expensive filtering or processing.
-For this, a different object is used for each pair of SEGMENT, DATE - the key of the view for each object is the concatenation of "Q3", the value of SEGMENT followed by DATE.
-The order is the same as the order by which the parametes appear in \emph{Where}.
-Executing the right variation of the query is as simple as building the key and doing a direct get on the database.
+PotionDB accomplishes this by deploying a different object for each value of a parameter - in this case, a different TopSum CRDT for each pair of SEGMENT, DATE. 
+The key of each object is the concatenation of “Q3” with the value of SEGMENT, followed by DATE’s. 
+The order of the parameters in the key is the order of their appearence in \emph{Where}. 
+Executing the right variation of the query is as simple as building the key and executing a single read in the database.
+%For this, a different object is used for each pair of SEGMENT, DATE - the key of the view for each object is the concatenation of "Q3", the value of SEGMENT followed by DATE.
+%The order is the same as the order by which the parameters appear in \emph{Where}.
+%Executing the right variation of the query is as simple as building the key and doing a direct get on the database.
+ 
  %There is an alternative solution (which we actually do in our implementation depending on the query) for handling parameters. This different solution consists in using Map CRDTs, one per parameter, and embed them on each other. So the idea is kinda like "levels" of filtering. Should we describe this solution instead? Advantages: easier because only one key for the view, defined by the user. Disadvantages: can't do internal sharding because everything is condensed into a single big object.
  
- With both of the above, PotionDB concludes that to support Q3's materialized view a TopSum CRDT should be employed for each pair of (SEGMENT, DATE).
+ Given the information above, PotionDB decides to support Q3’s materialized view with a TopSum CRDT per pair of SEGMENT, DATE.
  Each pair's CRDT is only initialized when the first respective update is executed, thus it is not necessary to know the possible values of SEGMENT.
- That is, we support parameters whose set of possible values is not known or determined beforehand and remain efficient by only initializing objects as necessary.
+ That is, we support parameters whose set of possible values is unknown and remain efficient by only initializing objects as necessary.
  
  \subsection{Generating updates}
  \label{subsec:generated_updates}
  %NOTE: Important limitation of our algorithm for this view API - we do not support a view based on another view, unless it is a map!!!
  
- %TODO: I think our view API and automatic generation of objects/updates is a contribution! Need to add that.
- 
  %Should I explain the algorithm in detail? I think for that I would need to present the pseudo-code or at least some parts of it, like e.g. say which structures are needed to gather information collected by parsing the specification, and how triggers are generated from that.
-After determining the objects used to represent the view, PotionDB generates two triggers that will be used to update those objects.
-One trigger corresponds to new objects or updates of objects relevant to the view, while the other for removals of said objects.	%Is this safe to say? I don't know how updates would do actually.
-The respective trigger is fired when an object relevant to the view is added/updated/removed, generating the necessary updates for the view.
+After determining the view objects used to represent the view, PotionDB generates two triggers that will be used to update those view objects.
+One trigger corresponds to new/updates of objects relevant to the view (base objects), while the other to removals of said objects.	%Is this safe to say? I don't know how updates would do actually.
+The respective trigger is fired when a base object is added/updated/removed, generating the necessary updates for the view.
 These updates are then appended to the current transaction, ensuring views get updated simultaneously with the respective base objects.
-The set of relevant objects for the view is determined by the \emph{from} clause - only objects with the container specified activate the triggers.
-The conditions in the \emph{where} clause further restrict which objects may generate updates for the view.
+The set of base objects of a view is determined by the \emph{from} clause - only objects with the container specified activate the triggers.
+The conditions in the \emph{where} clause further restrict which objects generate updates for the view.
 
 For the generation of the triggers themselves, for brevity sake we only present the intuition behind update generation and not the full algorithm.
-For the rest of the explanation, assume \emph{view} refers to all possible variants generated by the parameters, \emph{subview} refer to one of the variants.
+For the rest of the explanation, assume \emph{view} refers to all possible variants generated by the parameters, while \emph{subview} refers to one of the variants.
 Assuming the objects in the container are maps, PotionDB uses the field names in \emph{select}, \emph{where} and \emph{order by} as the map's keys to obtain the necessary values.
 
 The fields that are compared to parameters are used to build the key for the subview to be updated - when compared as equality, only a single subview is updated. If inequality, the update is isued for all keys of subviews for which the \emph{where} clause is true. %By inequality I mean, < and >.
-Testing $=, <, >$ and $!=$ between two fields or between a field and some constant value is straightforward. 
+Testing $=, <, >, \leq, \geq$ and $\neq$ between two fields or between a field and some constant value is straightforward. 
 Comparing with a parameter is done as follows.
 If comparing by equality and no restriction is defined for the parameter (e.g. SEGMENT), the field's value is directly used to build the update's key.
 Otherwise, if a restriction is defined, it is verified if the value respects said restriction (e.g. DATE).
 When comparing by inequality, the condition must be tested for every possible value of the parameter - thus, when \emph{where} has an inequality with a parameter, bounds must be defined for the parameter.
 
 Since the objects used to represent a view are known, knowing which type of update to generate is straightforward.
-Note also the matching of fields in select to the view is also straightforward - this was already necessary to do previously to determine the CRDT(s) to represent the view.
-In the example of Figure \ref{fig:q3_view}, it is known that a new lineitem is an increment to a TopSum, an update a increment or decrement depending on the change, and a remove a decrement.
-This is known as it was previously determined that the view is represented by a TopSum, due to limit and the existence of the sum aggregation.
+The matching of fields in select with the view is also straightforward - this was already necessary to do previously to determine the required CRDT(s) to represent the view.
+In the example of Figure \ref{fig:q3_view}, it is known that a new lineitem is an increment to a TopSum, an update an increment or decrement depending on the change, and a remove a decrement.
+This is known as it was previously determined that the view is represented by a TopSum due to limit and the existence of a sum aggregation.
 It is also known which fields compose the id and value parts of the TopSum entry, as this was previously defined too.
-Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase respectively the example of two new lineitems and the respective view updates.
+Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectively, the example of two new lineitems and the respective view updates.
 
 %Note: Probably the caption should be of both tables?
 \begin{table}
 	\small
 	%\setlength\tabcolsep{0.1pt}
 	\setlength\tabcolsep{5pt}
-	\begin{minipage}{0.28\textwidth}
+	\begin{minipage}{0.26\textwidth}
 	\begin{tabular}{lcc}
 		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
 		\multicolumn{1}{|l|}{orderkey}     & \multicolumn{1}{c|}{5}         & \multicolumn{1}{c|}{5}         \\
@@ -1745,7 +1783,7 @@ Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase respective
 		\captionof{table}{New lineitems}
 		\label{table:new_lineitems}
 	\end{minipage}
-	\begin{minipage}{0.18\textwidth}
+	\begin{minipage}{0.2\textwidth}
 	\begin{tabular}{lc}
 		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
 		\multicolumn{1}{|l|}{orderkey}     & \multicolumn{1}{c|}{5}        \\
@@ -1766,7 +1804,7 @@ Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase respective
 		\multicolumn{1}{|l|}{shippriority} & \multicolumn{1}{c|}{high}     \\ \hline
 	\end{tabular}
 \vspace{1em}
-\captionof{table}{Updated views. Note that none of the other pairs of (mktsegment, date) get updated.}
+\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
 \label{table:view_update}
 	\end{minipage}
 \end{table}
@@ -1779,16 +1817,18 @@ While the parameters give some flexibility, if the queries themselves are consta
 We note however that applications with rapidly changing query patterns are outside of the scope that PotionDB aims for.
 
 Our view specification language also has some limitations.
-First, joins of containers are not supported.
-This shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. %Check oracle paper, I think some others like the documents one also had this limitation
-%Note: We do support a very basic form of joining - must be a 1:1 match of keys.
+First, our support for joins is limited. While our join support at least helps fetching data from other objects, thus avoiding the need to denormalize/repeat data, it does not provide the expressivity of full joins.
+Note however this shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. Many do not support any form of join for materialized views \cite{???}.
+%First, joins of containers are not supported.
+%This shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. %Check oracle paper, I think some others like the documents one also had this limitation
 Furthermore, the specification language is also not as expressive as SQL in other clauses like \emph{select} and \emph{where} - for instance, it does not support embedded queries.
 This may difficult the specification of certain advanced views or make some cases not possible.
 However, we note most TPC-H queries can be specified with some ease by using our specification language.
-Furthermore, they are all supported by manually supplying the triggers to the database, which also goes around the limitation of joins.
-%Thus, PotionDB's datatypes are expressive enough to fully support all TPC-H queries with efficient views, demonstrating PotionDB's adequaty for OLAP
+Moreover, they are all supported by manually supplying the triggers to the database, which also goes around the limitation of joins.
+%Thus, PotionDB's data types are expressive enough to fully support all TPC-H queries with efficient views, demonstrating PotionDB's adequaty for OLAP
 
-Finally, triggers raise security and safety concerns due to the usage of custom code. However this is a shortcoming of our implementation and not of triggers themselves - it would be possible to use an existing data manipulation language (e.g., \cite{oracleTriggers}) instead of custom code.
+%I don't think I need to mention this shotcoming anymore.
+%Finally, manually supplied triggers raise security and safety concerns due to the usage of custom code. However this is a shortcoming of our implementation and not of triggers themselves - it would be possible to use an existing data manipulation language (e.g., \cite{oracleTriggers}) instead of custom code.
 
 %Any suggestions for further limitations
 
@@ -1796,7 +1836,7 @@ Finally, triggers raise security and safety concerns due to the usage of custom 
 \label{subsec:implementedQueries}
 %Maybe this should be under the Evaluation section.
 
-\textbf{NOTE (Andre)}: I feel this section is not as necessary anymore, as using the specification language we described, as well as assuming data is not normalized, defeats half of the purpose/reasoning for selecting the queries. It is, however, in some way helpful for Evaluation (but maybe we could short it just to provide enough information for Evaluation, like e.g., say only the datatypes supporting each query)
+\textbf{NOTE (Andre)}: I feel this section is not as necessary anymore, as using the specification language we described, as well as assuming data is not normalized, defeats half of the purpose/reasoning for selecting the queries. It is, however, in some way helpful for Evaluation (but maybe we could short it just to provide enough information for Evaluation, like e.g., say only the data types supporting each query)
 
 \textbf{NOTE2 (Andre)}: Also note that our implementation of view updating and what would be automatically generated by a view specification do not match - namely, our implementation takes advantage of TPC-H's granularity of updating (one whole order at a time) for more efficient view updating. This is not trivial to do with a specification language as most queries depend on lineitem (1 item of an order) specific information.
 
@@ -1807,45 +1847,62 @@ Another factor considered is the interest/relevance of the business question ass
 
 \begin{compactitem}
 	\item Query 3: this query challenges how PotionDB deals with queries whose parameters can have multiple values, as well as inequalities as restrictions. 
-	This implies that an update to one single object may have to update multiple views. 
+	This implies that an update to one object may update multiple views. 
 	The query is implemented with a TopSum CRDT. %Actually we implemented with a TopK but for consistency with previous section I said TopSum.
-	\item Query 5: this query was choosen to represent queries local to a region, i.e., queries that could be served only with data locally replicated, not requiring global views.
+	\item Query 5: this query was choosen to represent queries local to a region, i.e., queries that could be served with only data locally replicated. %, not requiring global views.
 	This query is implemented with a Map CRDT, as well as counters and registers.
-	\item Query 11: this query requires limitting the results by a factor that depends on the value of many items, instead of a constant.
-	Thus, this required a different approach to querying a TopK CRDT, requiring two views: one with the top, and another with a counter maintaining the actual value of said factor.
+	\item Query 11: this query requires limitting the results by a factor that depends on the value of many items instead of a constant.
+	This required a different approach to querying a TopK CRDT, utilizing two views: one with the top and another with a counter CRDT storing the actual value of said factor.
 	\item Query 14: this query allows us to evaluate how our Average CRDT behaves, as well as further test the filtering capabilities of PotionDB.
 	Namely, this query requires doing a string comparison to determine if a sold item is on sale or not, as this affects how the view should be updated.
-	\item Query 15: this query not only mandates the usage of a TopSum CRDT, it also has an interesting query pattern - only one entry of the top is returned except when multiple entries have the same max value. %Thus it's interesting because in theory we could keep less data in each server.
-	\item Query 18: this query's interests are two-fold: first, it requires each entry of the TopK to maintain considerable extra fields the top in order to avoid having to query the base objects.
-	Our TopK CRDT implementation had to be extended to support extra fields.
-	Second, the TopK is expected to have relatively few entries, as the restriction is quite limiting - thus, most updates to base objects won't generate any update for the view.
+	\item Query 15: this query not only mandates the usage of a TopSum CRDT, it also has an interesting query pattern - only one entry of the top is returned except when multiple entries have the same max value.
+	It also shows how multiple CRDTs (20, in this case) can be used to represent data concerning multiple ranges of time (quarters of 5 years).
+ %Thus it's interesting because in theory we could keep less data in each server.
+	\item Query 18: this query's interests are two-fold: %first, it requires each entry of the TopK to maintain considerable extra fields the top in order to avoid having to query the base objects.
+	first, it requires each entry of the TopK to maintain extra information in the top to avoid having to query the base objects.
+	%Our TopK CRDT implementation had to be extended to support extra fields.
+	Second, the TopK is expected to have relatively few entries, as the query conditions are quite restricting - thus, most updates to base objects won't generate any update for the view.
 \end{compactitem}
 
-Despite only having implemented 6 of TPC-H's queries, we highlight all were analyzed.
+Even though only 6 of TPC-H’s queries were implemented in PotionDB, all were analyzed.
 Our specification language can provide views for most queries - the few that it can not, manually supplying triggers does the trick.
-Thus, PotionDB's datatypes are expressive enough to fully support TPC-H queries' efficiently, demonstrating PotionDB's adequaty for OLAP scenarios. %Maybe replace OLAP with analytical.
+Thus, PotionDB's data types are expressive enough to fully support TPC-H queries' efficiently, demonstrating PotionDB's expressivety adequaty for OLAP scenarios. %Maybe replace OLAP with analytical.
 
 \section{Evaluation}
+\label{sec:evaluation}
 
 \andre{I added more text to this intro to explain the differences between the versions of PotionDB, but the text is much longer now. Old one is commented.}
 
-In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
+In this section we conduct multiple experiments for evaluating PotionDB's performance.
 Namely, we try to assess the advantage of having, in each server, views that span data partitioned across multiple replicas.
-We compare PotionDB with a solution in which each server's view only reflects data replicated locally (local view PotionDB). In this solution, some queries may need to query multiple servers to aggregate all the necessary view data.
-We also compare PotionDB with a solution in which one server hosts all the views, but those views are, similarly to PotionDB, of data partitioned across multiple replicas (single view PotionDB).
-To exemplify the differences, consider a view concerning orders from all over the globe:
-\begin{itemize}
-	\item PotionDB: all servers replicate the view, and the view is complete, i.e., takes in consideration all orders, no matter where they are partitioned.
-	\item Local view PotionDB: each server contains the view, but the view only concerns data replicated locally. E.g: an european server only replicates data or orders made in europe.
-	In this example, if a query requires data from multiple continents, multiple servers have to be contacted to answer the query.
-	\item Single view PotionDB: only one server contains the view, but the view is complete.
-	This can lead to great pressure in the server with the view when updating objects related to the view and when querying views, as well as worse latency for faraway clients.	
-\end{itemize}
+To this end we compare PotionDB with two other solutions.
+
+To showcase the difference between said solutions, consider a view $v$ concerning orders from all over the globe:
+
+\begin{compactitem}
+	\item \emph{PotionDB}: all servers replicate the view and $v$ is complete, i.e., considers all orders that are partitioned across servers;
+	\item \emph{Local view PotionDB}: each server contains views concerning only local data - e.g., on an european server, $v$ would only consider orders from european customers.
+	Thus, for queries concerning worldwide/multi-continent data, multiple servers have to be contacted to answer the query and extra processing logic to compute the result may be necessary;
+	\item \emph{Single view PotionDB}: only one server has all views, but the views are complete.
+	This can lead to great pressure in the server with views when updating base objects, as well as when querying views.
+	Moreover, faraway clients will experience high latency.
+\end{compactitem}
+
+%We compare PotionDB with a solution in which each server's view only reflects data replicated locally (local view PotionDB). In this solution, some queries may need to query multiple servers to aggregate all the necessary view data.
+%We also compare PotionDB with a solution in which one server hosts all the views, but those views are, similarly to PotionDB, of data partitioned across multiple replicas (single view PotionDB).
+%To exemplify the differences, consider a view concerning orders from all over the globe:
+%\begin{itemize}
+%	\item PotionDB: all servers replicate the view, and the view is complete, i.e., takes in consideration all orders, no matter where they are partitioned.
+%	\item Local view PotionDB: each server contains the view, but the view only concerns data replicated locally. E.g: an european server only replicates data or orders made in europe.
+%	In this example, if a query requires data from multiple continents, multiple servers have to be contacted to answer the query.
+%	\item Single view PotionDB: only one server contains the view, but the view is complete.
+%	This can lead to great pressure in the server with the view when updating objects related to the view and when querying views, as well as worse latency for faraway clients.	
+%\end{itemize}
 
 %In this section we conduct multiple experiments in order to evaluate PotionDB's performance.
 %Namely, we try to assess the advantage of all replicas having views spanning data partitioned across multiple replicas, instead of each replica having an incomplete view with only its local data (local PotionDB).
 %E.g., if we partition customer's data based on the continent of the customer's country, the local view of a server in Europe would only concern the data of european customers, while a global view would include customers from all over the globe.
-%We also compare PotionDB with a solution that has one server dedicated to host all indexes (single index PotionDB).
+%We also compare PotionDB with a solution that has one server dedicated to host all views (single view PotionDB).
 
 \subsection{Settings}
 
@@ -1853,68 +1910,71 @@ To exemplify the differences, consider a view concerning orders from all over th
 \label{subsubsec:commonSettings}
 
 In our tests a dataset based on TPC-H's dataset \cite{tpch} is used.
-More precisely, while we keep all the tables and use data generated by the dbgen tool \cite{tpch}, we focus only on a subset of the queries and, for each table, we only keep the columns necessary to answer such queries.
+Accurately, while we keep all the tables and use data generated by the dbgen tool \cite{tpch}, we focus only on a subset of the queries and, for each table, we only keep the columns necessary to answer such queries.
 The subset of queries used is described in Section \ref{subsec:implementedQueries}.
 
 
-In general, our test environment is set up with the following configurations:
-%We also use the following settings in common across all of our tests:
+In general, our test environment has the following configuration:
+%In general, our test environment is set up with the following configurations
 
 \andre{Proper reference to the Grid project (on the website they list how to refer to them)}
 
 \begin{itemize}
-	\item Five PotionDB instances, each one executing in its own node. We also use another five nodes to execute the clients that will access PotionDB;
-	\item Each PotionDB instance replicates the data concerning one continent (i.e., one replicates all data relevant for Europe; another replicates for Asia, etc.)
-	Data that is not location based, like products, are replicated in all servers.
-	\item The replication of views works as follows:
-	\begin{enumerate*}[label=(\roman*)]
-		\item PotionDB - all servers replicate all views, and the views contain data regarding all continents;
-		\item Local view PotionDB - each server's views only concerns data regarding its own continent;
-		\item Single view PotionDB - only one server replicates views, but said views contain data regarding all continents.
-	\end{enumerate*}
+	\item Five PotionDB instances, each one executing in its own node. We also use another five nodes to execute the clients that will access PotionDB.
+	\item Each PotionDB instance replicates data concerning one continent.
+	Products, which are not location based, are replicated everywhere.
+	View replication works as previously described.
+%	\item The replication of views works as follows:
+%	\begin{enumerate*}[label=(\roman*)]
+%		\item PotionDB - all servers replicate all views, and the views contain data regarding all continents;
+%		\item Local view PotionDB - each server's views only concerns data regarding its own continent;
+%		\item Single view PotionDB - only one server replicates views, but said views contain data regarding all continents.
+%	\end{enumerate*}
 	\item All nodes contain 2x Intel Xeon Gold 6130 with 192 GB of RAM. All nodes are interconnected by a 10Gbps LAN.
-	\item Each client selects one server to execute queries upon, and only contacts said server. In the case of local view and single view PotionDBs, if a server cannot satisfy a query with its data, that server contacts other servers in order to reply to the query.
+	\item Each client selects one server to execute queries upon and only contacts said server. For local view and single view PotionDBs, if a server cannot satisfy a query with its data, said server contacts other servers in order to reply to the query.
+	\item Clients communicate with a server using Google’s protobufs \cite{???} to serialize/deserialize data. PotionDB’s protobuf interface is an extension of AntidoteDB’s protobuf interface \cite{???}.
 	\item Unless otherwise specified, each request is a transaction which contains one instance of each query - this implies that, for local view PotionDB, transactions have more operations, as some queries need data from multiple regions.
 	\item In some scenarios, we impose latency between the servers, in order to simulate how PotionDB would perform when distributed accross the globe.
 	We use as reference the latency between AWS instances, as measured in \cite{AWSLatency} \andre{(Add a date of access?)}.
 	The following regions were selected: EU (Paris), US (N.Virginia), Canada (Central), Asia Pacific (Tokyo), Middle East (Bahrain). The highest latency measured is between Canada and Middle East at 204ms as of the date of measure.
-	\andre{Note: a possible critic here is that we don't have one server per continent, which is the scenario we always describe in the paper}.
+	\andre{Note: a possible critic here is that we don't have one server per continent, which is the scenario we always describe in the paper.}
 	\andre{Second note: I rechecked the website - the latency between those two servers has improved a lot!!! Nowadays it is around 161ms. If I put a timeframe of 1 year it still shows 204ms, which suggests improvements in the connection. I probably need to reconsider the latencies?}
-	
-	
-	
 \end{itemize}
 
 %Old settings for FCT's cluster
 %\begin{itemize}
 %	\item Five PotionDB instances, each one executing in its own node.
 %	Each node has a AMD EPYC 7281 CPU with 96GB of RAM, with PotionDB only being able to use 8 cores of the CPU (this helps ensure the bottleneck is not on the client side); \andre{Should I keep this?}
-%	\item Each PotionDB instance replicates the data of a continent, e.g., a server replicates all data concerning Europe while another keeps the data of Asia. Data that is not location based such as products is replicated in all servers, as are indexes.
+%	\item Each PotionDB instance replicates the data of a continent, e.g., a server replicates all data concerning Europe while another keeps the data of Asia. Data that is not location based such as products is replicated in all servers, as are views.
 %	\item Servers are interconnected by a LAN with 10 Gbps speed;
 %	\item Clients execute on nodes with 2x Intel Xeon E5-2620 v2 CPU and 64GB of RAM, being on the same LAN as the servers but with a reduced network speed of 1Gbps;
 %	\item Each client selects one server to execute queries upon, only contacting other servers if all the data required to reply to a query isn't present in the selected server. \andre{Should I refer that, in practice, this only happens in the local views scenario?} By default, the queries executed are 3, 5, 11, 14, 15 and 18 of the TPC-H specification \cite{tpch};
-%	\item Unless otherwise specified, each request only executes one query or updates one sale (including all related indexes).
+%	\item Unless otherwise specified, each request only executes one query or updates one sale (including all related views).
 %\end{itemize}
 
 All our experiments execute as follows.
 First, all servers are started, with each one estabilishing a connection with all others.
-Afterwards, a special client is started to load the initial database state into the servers, taking into consideration the locality of the data.
+Afterwards, the initial database state is loaded into the servers, taking into consideration data’s locality.
+%Afterwards, a special client is started to load the initial database state into the servers, taking into consideration the locality of the data.
 %Finally, after all data has been loaded into the servers, multiple clients are started to execute queries.
 %In some tests, a client responsible for updating the dataset (i.e., insert new elements and remove old ones) is also started along with the query clients.
 %We call this last client of update client.
 %In some other tests, all clients can do both queries and updates, with a varying percentage.
-Finally, after all data has been loaded into the servers, multiple clients per client node are started to execute queries and, possibly, updates, with the query/update rate depending on the test.
+Finally, after the loading phase ends, 
+%Finally, after all data has been loaded into the servers, 
+multiple clients are started to execute queries and/or updates, with the query/update rate depending on the test.
 
-In our experiments we use as metrics the amount of queries per second (query/s) achieved by all clients aggregated, as well as the average latency of each client transaction.
+In our experiments we use as metrics the amount of queries per second (query/s) achieved by all clients aggregated and the average latency of each transaction (including RTT).
 In tests with both updates and queries, we instead use operations per second (ops/s).
-To determine how much each test can scale, we vary the number of clients.
+To grasp how each test scales, we vary the number of clients.
+%To determine how much each test can scale, we vary the number of clients.
 As the number of clients increases, so does the latency of each transaction and, until the servers saturate, the throughput of the servers.
 
 \subsubsection{Scenarios}
 
-We make an extensive evaluation of PotionDB, conducting multiple experiments in order to evaluate how PotionDB scales in different scenarios. %When appropriate, we also execute the same experiments for local PotionDB and single index PotionDB.
+We make an extensive evaluation of PotionDB, conducting multiple experiments in order to evaluate how PotionDB scales in different scenarios. %When appropriate, we also execute the same experiments for local PotionDB and single view PotionDB.
 %With these experiments, we try to assess the following:
-With these experiments, we try to answer the following:
+With these experiments, we try to answer the following questions:
 
 %\begin{itemize}
 %	\item How does PotionDB compare with other solutions, namely the local and single versions of PotionDB? How does the data locality and size affect the performance?
@@ -1925,9 +1985,9 @@ With these experiments, we try to answer the following:
 \begin{enumerate}
 	\item \label{enum:question1} What is the practical benefict of having views of data replicated across different servers, compared to having only views of local data (local PotionDB) or a single view server (single PotionDB)?
 	\item \label{enum:question2}What is the effect on PotionDB's throughput of executing updates, namely as the write/read ratio increases?
-	\item \label{enum:question3} \andre{Note: Before there used to be a section for how PotionDB scales by grouping operations. Now that doesn't seem to have much effect (about same throughput, but with less clients). But maybe this could help in the scenario with latency added. Should I still do this?}
-	\item\label{enum:question4}How does each kind of CRDT scale in PotionDB as we vary the number of clients, the number of replicas and other CRDT-specific settings (e.g., number of elements in the top in Top-K CRDT)?
-	\item\label{enum:question5}\andre{Any other question/evaluation?}
+	%\item \label{enum:question3} \andre{Note: Before there used to be a section for how PotionDB scales by grouping operations. Now that doesn't seem to have much effect (about same throughput, but with less clients). But maybe this could help in the scenario with latency added. Should I still do this?}
+	\item\label{enum:question4}How does each kind of CRDT scale in PotionDB as we vary the number of clients, the number of replicas and other CRDT-specific settings (e.g., number of top elements in Top-K CRDT)?
+	%\item\label{enum:question5}\andre{Any other question/evaluation?}
 \end{enumerate}
 
 \subsection{Results}
@@ -1936,8 +1996,8 @@ With these experiments, we try to answer the following:
 
 \andre{Is it worth to mention how much the number of clients vary by test?}
 
-To evaluate the benefits of having views replicated in every replica, we compare PotionDB with the local view and single view versions, namely in terms of queries per second.
-Mainly, we try to assess how much each configuration can scale, to better grasp the benefict of having global views in every server.
+To evaluate the benefits of having views replicated in every replica, we compare PotionDB with the local view and single view versions.
+Mainly, we try to assess how much each configuration scales in terms of throughput and latency, in order to grasp the benefict of having global views in every server.
 
 \begin{figure}
 	\centering
@@ -1953,49 +2013,46 @@ Mainly, we try to assess how much each configuration can scale, to better grasp 
 		\caption{Single query type}
 		\label{fig:q3q5}
 	\end{subfigure}
-	\caption{Query-only performance of PotionDB and its local and single view versions. On the left all queries are executed, while on right it is only Q3 or Q5.}
+	\caption{Query-only performance of PotionDB and its local and single view versions. On the left all queries are executed, while on the right only Q3 or Q5 are.}
 	\label{fig:query_only}
 \end{figure}
 
 Figure \ref{fig:query_only} shows the results of experiments for the three versions of PotionDB, in terms of query/s versus latency.
 Figure \ref{fig:global_local_single} includes all queries in the execution, while \ref{fig:q3q5} only includes a single type of query at a time.
 
-When factoring in all the queries (Figure \ref{fig:global_local_single}), as expected both local and single view PotionDB perform worse than normal PotionDB.
+When factoring in all queries (Figure \ref{fig:global_local_single}), as expected both local and single view PotionDB perform worse than (normal) PotionDB.
 The single version's max throughput is about 1/5th of PotionDB's.
-This occours due to the fact that queries are served entirely by views, which are all in a single server - thus, in a query-only scenario, one server gets all the load, instead of it being distributed by 5 servers.
-The local version seems to have about 1/6th of PotionDB's performance, which is because some of the queries require data from all regions, which implies that in local mode, such queries need to consult the views in every server.
-\andre{Note: the section describing redirected operations needs to be reviewed for sure.}
-Due to the redirection of requests (see Section \ref{subsec:operationsNonLocal}) that occours due to not all data required being in the server contacted by a client, this implies an extra round-trip for some requests, which further slows down performance.
-Thus for a transaction to complete, it is necessary to wait for all the servers to process the redirected requests.
+This occours due to queries being entirely served by views, which are all in a single server - thus, in a query-only scenario, one server gets all the load, instead of it being distributed across 5 servers.
+The local version has about 1/6th of PotionDB's performance, as 2/3rd of the queries require data from all regions, which implies that in local mode such queries need to consult the views in every server.
+The redirection of requests (see Section \ref{subsec:operationsNonLocal}) required to consult the views of others servers implies an extra round-trip for most queries. It also implies waiting for all servers to reply in order to complete a transaction, further reducing thoughput and increasing latency.
 
 In Figure \ref{fig:q3q5} the focus is on two particular queries. Query 3 (Q3) requires data from all over the globe, while Query 5 (Q5) can be answered with data from a single region.
 Thus, Q5 fits well both normal and local versions of PotionDB.
-In fact, Q5 performance in local and normal modes is very similar - both can reach a max throughput of around 4 million queries/s.
+In fact, Q5's performance in local and normal modes is very similar - both reach a max throughput of around 4 million queries/s.
 This occours as clients query data concerning the region of the server they are connected to, thus there is no need to contact other servers even in the local version.
 As for the single version, Q5's performance is about 1/5th of the other two.
 \andre{Note: I'm not sure I should say "locality of the data" here. Basically what I mean is that for queries which require a global view is where PotionDB shines.}
-On the other hand, Q3 is a perfect example of how locality of the data affects performance.
+On the other hand, Q3 is a perfect example of how data locality affects performance.
 This query requires data from all servers, thus in the local version every server needs to be contacted. The extra pressure on the servers (as all servers are required to answer all queries), as well as the extra round-trip, alongside bigger transfers of data, lead to a decreased performance of about 1/13th compared to PotionDB.
-The single version has, as expected, about 1/5th of normal PotionDB's performance.
+The single version has, as expected, about 1/5th of PotionDB's performance.
 
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{clientScale_tc_cut}
-	\caption{PotionDB performance executing all queries with latency. Both axes have a log(10) scale.}
+	\caption{PotionDB's performance executing all queries with added latency. Both axes have a log(10) scale.}
 	\label{fig:global_local_single_tc}
 \end{figure}
 
 In the previous tests the latency of the clients to all servers is very low, as all servers and clients are connected in a LAN.
 Figure \ref{fig:global_local_single_tc} shows the result of adding latency between servers (clients still retain low latency to represent being close to their server of choice).
-Normal PotionDB is "unnafected" in terms of throughput as clients only contact their nearby server - since no latency is added between client-server, no effect is noticeable.
+Normal PotionDB is "unnafected" in terms of throughput and client's latency as clients only contact their nearby server - since no latency is added between client-server, no effect is noticeable.
 In a scenario with updates however, an effect would be noticeable "under the hood" - replication would take longer to happen due to the imposed latency, thus a given client would take longer to be able to see the effects of updates executed on servers other than the one said client is connected to.
-This would not affect query throughput, just the freshness of data.
+This would not affect query throughput, instead only the freshness of data.
 For single PotionDB, a higher latency is noticeable compared to Figure \ref{fig:global_local_single}.
-This happens as most clients will have high latency (the ones not connected to the server with the views) and do few operations, while the remaining ones will be operating directly on the view server.
-The ones operating directly will be responsible for the majority of the load in the server with views.
+This happens as most clients will have high latency (i.e., the ones not connected to the server with the views) and do few operations, while the remaining ones will be operating directly on the view server.
+The ones operating directly will be responsible for the majority of the load in the server with views - hence why the average client's latency increased midly.
 As such, as long as more clients are used compared to Figure \ref{fig:global_local_single}, a similar max throughput is still achieved.
-Finally, on the local PotionDB, is where the effects of latency are most noticeable - here, to answer some queries, all servers will be contacted. Since all transactions consist in one of each type of query, this implies all transactions will take, at least, as long as a round trip between the two most faraway servers takes.
-Here, the observed latency is about 210ms.
+Finally, it is on local PotionDB where the effects of latency are most noticeable - here, for 2/3rd of the queries, all servers will be contacted. Since all transactions consist in one of each type of query, this implies all transactions will take, at least, as long as a RTT between the two most faraway servers - hence the observed latency of about 210ms.
 Compared to Figure \ref{fig:global_local_single}, the max throughput is much lower. This is due to the much higher amount of clients needed to sature the servers: aproximately 3000 clients instead of 160.
 The much higher amount of connections to each server, as well as the much more frequent "swap" of the processor cores between each client justify this lower throughput.
 
@@ -2004,11 +2061,11 @@ The much higher amount of connections to each server, as well as the much more f
 We now evaluate the impact on PotionDB's throughput of executing updates alongside queries, with multiple read/write ratios (\ref{enum:question2}).
 In this scenario, when a client wants to execute an operation, it picks at random whenever a query or an update is executed.
 
-In TPC-H, an update is defined as the replacement of an old order with a new one.
-As such, our granularity of update is the addition and removal of an order, with the associated items and necessary updates do the views.
-Finally, it is worth noting that even though some updates will execute in multiple replicas (e.g.: view updates), only one execution is counted in our graphs.
-%It is worth noting that an update affects both base data and all associated indexes.
-%Also note that while index updates are executed in every replica, we only count them once (i.e., if one update is executed 5 times, it still only counts as 1 operation).
+In TPC-H an update is defined as the replacement of an old order with a new one.
+As such, our granularity of update is the addition and removal of an order, with the associated items and necessary views' updates.
+Finally, it is worth noting that even though some updates will execute in multiple replicas (e.g.: view updates), we only count one execution in our graphs.
+%It is worth noting that an update affects both base data and all associated views.
+%Also note that while view updates are executed in every replica, we only count them once (i.e., if one update is executed 5 times, it still only counts as 1 operation).
 
 \begin{figure}
 	\centering
@@ -2030,31 +2087,31 @@ Finally, it is worth noting that even though some updates will execute in multip
 		\caption{Update-latency}
 		\label{fig:update_rates_update}
 	\end{subfigure}
-	\caption{PotionDB performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, associated items and indexes, thus having more operations than one query-only transaction.}
+	\caption{PotionDB's performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, as well as associated items and views, thus having more operations than one query-only transaction.}
 	\label{fig:update_rates_split}
 \end{figure}
 
 Figure \ref{fig:update_rates} shows the results of executing updates alongside queries, with varying odds of choosing an update.
-For low update rates (1\% and 10\%), the decrease in performance can be considered reasonable (aproximately 4\% and 16\%).
+For low update rates (1\% and 10\%), the decrease in performance can be considered reasonable: aproximately 4\% and 16\%.
 For higher rates, two observations can be made:
 \begin{enumerate*}[label=(\roman*)]
 	\item the servers saturate earlier, in some cases even decreasing throughput as the number of clients rises;
 	\item the max throughput is lower.
 \end{enumerate*}
 
-The referred observations can be explained if we consider the following. 
-With PotionDB's internal partitioning, queries on different objects can be executed concurrently, thus query-only scenarios scale easily. 
-However, updates in a transaction must lock the partitions they are involved and do a 2-phase commit, in order to ensure the states evolve sequentially in a replica even when concurrent transactions are issued.
+The referred observations can be explained by considering the following. 
+With PotionDB's sharding (Section \ref{subsec:sharding}), queries on objects of different shards can be executed concurrently, thus query-only scenarios scale easily. 
+However, transactions with updates must lock the partitions they are involved and do our commit protocol in order to ensure the states evolve sequentially in a replica even when concurrent transactions are issued.
 As such, if the update rate is high, clients executing queries or updates may often have to wait for a transaction with updates to finish executing before executing their own operations.
 
 Figure \ref{fig:update_rates_split} shows the same experiment as Figure \ref{fig:update_rates}, but showcases the latencies of queries and updates splitted, instead of together.
-It is noticeable that updates, even for low values, have higher latency than queries - this is mostly due to the fact that update transactions have more operations than queries.
-The abrupt spike observed at the end, in the update latency graph, happens as many clients are doing updates and thus, many 2-phase commits are issued, which have to wait for each other to finish.
+It is noticeable that updates, even with few clients, have higher latency than queries - this is mostly due to update transactions having more operations than queries.
+The abrupt spike observed at the end in the update latency graph happens as many clients are doing updates and, thus, many commits with locks are issued, which have to wait for each other to finish.
 
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{updRate_localvsglobal_cut}
-	\caption{Normal(P\_) and Local (L\_) PotionDB performance with varying update rate.}
+	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate.}
 	\label{fig:update_rates_normal_vs_local}
 \end{figure}
 
@@ -2062,32 +2119,34 @@ The abrupt spike observed at the end, in the update latency graph, happens as ma
 
 \andre{IMPORTANT: I need to refer somewhere that we adapted TPC-H's data to have locality. Where should I do that? This actually beneficts more the "local PotionDB" than the normal one.}
 
-Figure \ref{fig:update_rates_normal_vs_local} showcases the performance of both normal PotionDB and local PotionDB with varying update rates.
-As expected, local PotionDB performs worse than normal PotionDB, however as the percentage of updates increases in local PotionDB, so does the throughput.
-This happens as updates are not as hindered by the views being split per region as queries.
-Aproximately half of the orders are local to a region, and most others refer few regions, thus not many view updates need to be redirected to other servers.
+Figure \ref{fig:update_rates_normal_vs_local} showcases the performance of both PotionDB and local PotionDB with varying update rates.
+As expected, local PotionDB performs worse than PotionDB.
+However, as the percentage of updates increases in local PotionDB, so does the throughput.
+This happens as updates are not as hindered by views being split per region as queries.
+Aproximately half of the orders are local to a region \footnote{This does not occour on the original TPC-H dataset, whose items of orders are totally random. We did this modification to add locality to orders. This helps local PotionDB more than PotionDB.} while most others refer few regions, thus not many view updates need to be redirected to other servers.
 Besides, since each view only contains local data, updates to a view do not need to be replicated to every other server, reducing the load on the servers due to replication.
-These factors added up allow local PotionDB to even increase the performance when updates are added, and end up with a similar throughput to normal PotionDB when only updates are executed.
+These factors added up allow local PotionDB to have higher performance when updates are added and end up with a similar throughput to PotionDB when only updates are executed.
 
 \andre{Maybe a graph of local VS normal PotionDB with updates of all views and only queries of Q5? That query has high performance in both modes - may be interesting to see how it scales with updates (I wonder if local PotionDB has higher throughput than normal in that scenario?)}
 
 We now consider a scenario with latency added between servers, as described in Section \ref{subsubsec:commonSettings}.
-Recall that on normal PotionDB, as discussed previously, throughput isn't affected as clients only interact with the server they are close to, even when doing updates (they would, however, take longer to see the effects of updates done on views that were executed in other servers, due to the added latency on replication).
+Recall that on normal PotionDB, as previously discussed, throughput isn't affected as clients only interact with the server they are close to, even when doing updates.
+They would, however, take longer to see the effects of updates done on views that were executed in other servers, due to the added latency on replication.
 
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{updRate_tc_cut}
-	\caption{PotionDB performance with varying update rate.}
+	\caption{PotionDB's performance with varying update rate.}
 	\label{fig:update_rates_tc}
 \end{figure}
 
 Thus, we focus on local PotionDB, which is shown on Figure \ref{fig:update_rates_tc}.
-We can easily observe that as the percentage of updates rise, the maximum throughput also rises.
-At a first glance this may seem confusing, however the following two points justify this behavior:
-\begin{itemize}
+We can easily observe that as the percentage of updates rise, the maximum throughput also rises quickly.
+At a first glance this may seem confusing, however the following justifies this behavior:
+\begin{compactitem}
 	\item Updates have lower latency than queries, as each update transaction only needs to contact a subset of servers, unlike query transactions which need to contact all. Thus, they can often avoid the connection with highest latency.
 	\item Updates have more operations per transaction than queries, which means more operations done per round trip.
-\end{itemize}
+\end{compactitem}
 
 \andre{Should I mention that a lot less clients are needed to sature the server, the higher the update rate is? (mainly on scenarios without latency)}
 \andre{Probably some concluding note that reffers that for PotionDB's intented usages it is likely that updates are much less frequent than queries, or maybe even that updates could maybe be delayed?}
@@ -2097,14 +2156,17 @@ At a first glance this may seem confusing, however the following two points just
 \andre{Note: On the graphs here I forgot to put "Latency per transaction (ms)" instead of just "Latency (ms)"... will fix that when we do a final version of those graphs}
 
 We now focus on evaluating the performance of the CRDTs used to build the views of TPC-H.
-Namely, we test the TopK, TopSum, Counter and Average CRDTs.
+Namely, we test TopK, TopSum, Counter and Average CRDTs.
 \andre{TODO: Maybe I should test embedded maps too? Since they are used to ``hold'' multiple CRDTs in Q5, acting as a group by.}
 
 In this scenario, we drop the TPC-H dataset.
-Instead, we prepare each CRDT with some random initial data.
-In each test, 20 CRDTs are created/manipulated by the clients (the same number of CRDTs that are used to build the views for Query 15, discussed in Section \ref{subsec:implementedQueries}).
-Then, each client does query and/or update operations on one of the CRDTs.
-The number of operations per transaction is the same as in the TPC-H scenario (\andre{Do I need to define this in the TPC-H scenario?}).
+Instead, for each test we prepare 20 CRDTs with random initial data (the same amount of CRDTs used for Q15’s views, discussed in Section \ref{subsec:implementedQueries}).
+%Instead, we prepare each CRDT with some random initial data.
+%In each test, 20 CRDTs are created/manipulated by the clients (the same number of CRDTs that are used to build the views for Query 15, discussed in Section \ref{subsec:implementedQueries}).
+Each client picks a CRDT randomly from an uniform distribution and uses said CRDT to do query and/or update operations. 
+%Then, each client does query and/or update operations on one of the CRDTs.
+The number of operations per transaction is the same as in the TPC-H scenario. \andre{(Do I need to define this in the TPC-H scenario?)}
+%The distribution of CRDTs is the type "shared"
 
 
 %TOPK test max throughputs: 11.3M, 10.3M, 3.1M, 0.37M
@@ -2202,7 +2264,7 @@ However, PotionDB's replication mechanism groups updates from different transact
 
 \andre{Old text - batching does not really have any noticeable improvement when testing on Grid in normal settings. It would surely help with tests that have latency added though.}
 
-On the previous scenarios, each client only requested one query at a time, even through updates were executed in groups (whenever one update to a base object is usued, all associated indexes are updated in the same transaction).
+On the previous scenarios, each client only requested one query at a time, even through updates were executed in groups (whenever one update to a base object is usued, all associated views are updated in the same transaction).
 With this we've noticed that, with a low number of clients, an update-only scenario actually has better throughput than a query-only scenario.
 Thus, we now evaluate the effect observable on PotionDB's throughput if multiple queries are included in the same transaction (\ref{enum:question3}).
 
@@ -2340,6 +2402,7 @@ Increasing the number of queries/txn also leads to PotionDB saturating with less
 %In conclusion, there is a performance gain to be obtained from having indexes of data replicated both locally and on other servers when there are queries that concern such data.
 
 \section{Related Work}
+\label{sec:related_work}
 
 %y [12, 18, 22, 29, 36, 44], an
 
@@ -2347,7 +2410,7 @@ Increasing the number of queries/txn also leads to PotionDB saturating with less
 
 Database systems can offer different levels of consistency, with solutions usually being labeled as either strong consistency or weak consistency.
 Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
-However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions. Furthermore, high latency is to be expected in geo-distributed scenarios as multiple datacenters need to be contacted in order to commit a transaction.
+However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions. Furthermore, high latency is to be expected in geo-distributed scenarios as multiple data centers need to be contacted in order to commit a transaction.
 By relaxing the provided consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
 Causal consistency is a sub-form of weak consistency that alleviates this problem, however anomalities can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
@@ -2359,19 +2422,19 @@ On the other hand, materialized views work as a cache for the result of a large 
 Materialized views can provide quick access to data that would take a long time to calcultate, and are often useful for analytic queries \cite{analyticdb}.
 \andre{[I didn't find a proper reference for ``views being useful for analytic queries''. Suggestions?]}
 However, maintaining views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria}, even though they can speed up queries considerably.
-To the best of our knowledge, PotionDB is the first system to support materialized views in a geo-distributed, partially replicated scenario.
+To the best of our knowledge, PotionDB is the first system to support materialized views in a patially geo-replicated scenario.
 
-Geo-distributed scenarios imply high latency when acessing far away datacenters, which is required for strong consistency \cite{chronocache, slog, cops, eiger}. 
+Geo-distributed scenarios imply high latency when acessing far away data centers, which is required for strong consistency \cite{chronocache, slog, cops, eiger}. 
 Network partitions are also a concern, as they may render strongly consistent systems unavailable.
 Weak consistency can help avoid both problems, but lack the useful consistency guarantees provided by strong consistency.
 
 \andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
 
-Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations being applied on each server) \cite{spire, optimisticPartial, coda}, and are thus of interest for geo distribution.
-The partitioning of the data must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{spire, optimisticPartial, coda}
-However, one common problem with partial replication is that, sometimes, it is necessary to access data sharded among different datacenters \cite{spire}.
+Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations being applied on each server) \cite{sipre, optimisticPartial, coda}, and are thus of interest for geo distribution.
+The partitioning of the data must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{sipre, optimisticPartial, coda}
+However, one common problem with partial replication is that, sometimes, it is necessary to access data sharded among different data centers \cite{sipre}.
 %Many systems provide partial replication \cite{???}.
-%However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different datacenters.
+%However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different data centers.
 Without views, this process can be slow, specially when trying to provide a consistent snapshot of the database.
 PotionDB tackles this problem by providing views that summarize partially replicated data and directly answer such queries.
 
@@ -2392,10 +2455,10 @@ It also makes usage of indexes to speed up queries.
 However, complex queries still take hundreds of milliseconds to execute and they may slow down other simpler queries.
 They do not make usage of views.
 
-SLOG \cite{slog} provides ACID transactions in a geo-distributed scenario.
+SLOG \cite{slog} provides ACID transactions in a geo-replicated scenario.
 They share one of PotionDB's insights - not all data is relevant everywhere and clients will often access data relevant in their region.
-Thus, SLOG achieves low latency ACID transactions for transactions that can be served by a single datacenter.
-However, unlike PotionDB, queries regarding data partitioned across multiple datacenters has considerably higher latency.
+Thus, SLOG achieves low latency ACID transactions for transactions that can be served by a single data center.
+However, unlike PotionDB, queries regarding data partitioned across multiple data centers has considerably higher latency.
 We leverage on views of global data to prevent this.
 
 ESTOCADA \cite{estocada} is a system designed to work with polystores and focus on taking advantage of each database's stronger points and make extensive usage of the materialized views provided on each.
@@ -2434,7 +2497,7 @@ CouchDB \cite{couchDB} provides both indexes and materialized views, however the
 %%Strong consistency solutions like Spanner \cite{???} \comment{likely introduce others}
 %%Some examples include, for strong, Spanner \cite{???} and ???; while for weak ??? and ???.
 %Strong consistency solutions like Spanner \cite{spanner} and CockroachDB \cite{cockroachdb} provide the ilusion of a single replica, thus making it easier to provide a consistent view for clients.
-%However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions, and high latency is expected as multiple datacenters need to be contacted for executing operations.
+%However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions, and high latency is expected as multiple data centers need to be contacted for executing operations.
 %Weak consistent solutions such as Dynamo \cite{dynamo} and COPS \cite{cops} can provide highly available, low latency operations, but providing a consistent view of the database to clients is challenging.
 %Causal consistency is a sub-form of weak consistency that alleviates this problem, however anomalities can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
 %
@@ -2463,9 +2526,22 @@ CouchDB \cite{couchDB} provides both indexes and materialized views, however the
 %%Maybe mention views in consistent databases.
 %%Hourglass is mentioned in Pixida paper.
 
-\section{Conclusions}
+\section{Conclusion}
+\label{sec:conclusion}
 
-TODO :)
+PotionDB is a weakly consistent, partially geo-replicated database geared to efficiently support OLAP queries.
+PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
+PotionDB’s view can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
+Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
+Transactional causal consistency, alongside our rich library of data types, view API and usage of CRDTs to automatically handle concurrency conflicts, ease the programmer’s difficulty on developing distributed applications using PotionDB when compared to other weakly consistent solutions.
+
+Our evaluation shows that PotionDB can answer complex queries with very low latency and high throughput, even under scenarios with considerable update ratios.
+Our implementation and analysis of TPC-H benchmark showcases both the expressivity and efficiency of PotionDB.
+
+\paragraph{Acknowledgements:} This work was partially funded by FCT, Fundação para a Ciência e Tecnologia - Portugal, through SAMOA, Project PTDC/CCI-INF/32662/2017, and PhD scolarship SFRH/BD/143401/2019.
+Experiments presented in this paper were carried out using the Grid'5000 testbed, supported by a scientific interest group hosted by Inria and including CNRS, RENATER and several Universities as well as other organizations (see https://www.grid5000.fr).
+
+%Anything else I should mention? Like the replication/transaction algorithms?
 
 \bibliographystyle{abbrv}
 \bibliography{bib}
@@ -2733,7 +2809,7 @@ Possiveis pontos mais detalhados?
 \if 0
 \section{System Design}
 
-PotionDB is weekly consistent, geo-distributed storage system with support for partial replication.
+PotionDB is weekly consistent, geo-replicated storage system with support for partial replication.
 A key feature in PotionDB is the ability to efficiently provide global views on partially replicated data under the conditions mentioned previously.
 In this section we discuss design decisions which made it possible to provide such feature.
 
@@ -2776,7 +2852,7 @@ This allows, e.g., for a server to replicate any bucket that ends in ``europe''.
 Unlike typical key-value stores, PotionDB provides support for materialized views.
 As in relational databases, defining the right materialized views allows for efficient execution of complex queries.
 We highlight that views can refer to data not replicated locally, i.e., it is possible to have views spanning data partitioned across multiple replicas.
-Thus, queries that would usually require consulting multiple servers in a typical geo-distributed database can be executed quickly in just one PotionDB server.
+Thus, queries that would usually require consulting multiple servers in a typical geo-replicated database can be executed quickly in just one PotionDB server.
 Views are updated automatically by using user-defined triggers.
 Whenever an object is updated, all the views that refer to it are updated in the same transaction - thus, a sticky client sees updates to the base data and their views as if they happened at the same point in time.
 We leave the description of the inner workings of views and triggers to Section \ref{sec:views}.
@@ -2975,7 +3051,7 @@ We leave further details on the inner workings of triggers, as well as views, to
 \end{figure}
 
 Figure \ref{fig:potiondbArch} illustrates PotionDB's architecture.
-%PotionDB is a key-value, geo-distributed store as illustrated in Figure \ref{fig:potiondbArch}.
+%PotionDB is a geo-replicated key-value store as illustrated in Figure \ref{fig:potiondbArch}.
 Clients communicate with one or more servers to execute their operations.
 Transactions are executed locally in one server, with updates being propagated asynchronously to other replicas.
 
@@ -3137,7 +3213,7 @@ Furthermore, clients can access and modify multiple objects in the same transact
 Any object in PotionDB is a CRDT, which allows objects to converge even in the presence of concurrency.
 
 In this section we detail the consistency guarantees provided by PotionDB.
-We also describe how transactions refering objects not localy replicated proceed, as well as the guarantees in said scenario.
+We also describe how transactions refering objects not locally replicated proceed, as well as the guarantees in said scenario.
 
 %In PotionDB data is partially replicated across the servers.
 %Moreover, views may refer to data not present in the local replica.
@@ -3538,7 +3614,7 @@ Finally, while this can allow more clients to be processed in the same period of
 
 %Explain the basic idea of replication (async, partial, etc). Also include NuCRDTs here.
 Replication in PotionDB is asynchronous and partial.
-Operations are executed localy, without needing to contact other replicas.
+Operations are executed locally, without needing to contact other replicas.
 Periodically, new updates are propagated asynchronously to other replicas.
 All objects in PotionDB are operation-based CRDTs, thus the information required to propagate an update consists in the operation type and its arguments.
 
@@ -3592,7 +3668,7 @@ When an object is updated the views must also be updated, otherwise the database
 Usually in relational databases, views are updated automatically by using triggers associated to the base data tables \cite{???}.
 Due to data being fully replicated and strongly consistent, it is guaranteed that at all times the view reflects the latest correct state \cite{???}.
 
-PotionDB also uses triggers to keep the views updated. However, as PotionDB is a weakly consistent, geo-distributed and partially replicated database, extra challenges are imposed for maintaining materialized views up-to-date, namelly:
+PotionDB also uses triggers to keep the views updated. However, as PotionDB is a weakly consistent, partially geo-replicated database, extra challenges are imposed for maintaining materialized views up-to-date, namelly:
 \begin{enumerate}
 	\item Association between views and their base data. 
 	PotionDB is a key-value store, thus multiple objects that would usually belong to the same table in a relational database (e.g., customers) have different keys associated.
