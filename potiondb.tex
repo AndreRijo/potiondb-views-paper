@@ -1949,8 +1949,6 @@ Thus, PotionDB's data types are expressive enough to fully support TPC-H queries
 \section{Evaluation}
 \label{sec:evaluation}
 
-\andre{I added more text to this intro to explain the differences between the versions of PotionDB, but the text is much longer now. Old one is commented.}
-
 In this section we conduct multiple experiments for evaluating PotionDB's performance.
 Namely, we try to assess the advantage of having, in each server, views that span data partitioned across multiple replicas.
 To this end we compare PotionDB with two other solutions.
@@ -1995,8 +1993,6 @@ The subset of queries used is described in Section \ref{subsec:implementedQuerie
 In general, our test environment has the following configuration:
 %In general, our test environment is set up with the following configurations
 
-\andre{Proper reference to the Grid project (on the website they list how to refer to them)}
-
 \begin{itemize}
 	\item Five PotionDB instances, each one executing in its own node. We also use another five nodes to execute the clients that will access PotionDB.
 	\item Each PotionDB instance replicates data concerning one continent.
@@ -2010,7 +2006,7 @@ In general, our test environment has the following configuration:
 %	\end{enumerate*}
 	\item All nodes contain 2x Intel Xeon Gold 6130 with 192 GB of RAM. All nodes are interconnected by a 10Gbps LAN.
 	\item Each client selects one server to execute queries upon and only contacts said server. For local view and single view PotionDBs, if a server cannot satisfy a query with its data, said server contacts other servers in order to reply to the query.
-	\item Clients communicate with a server using Google’s protobufs \cite{???} to serialize/deserialize data. PotionDB’s protobuf interface is an extension of AntidoteDB’s protobuf interface \cite{???}.
+	\item Clients communicate with a server using Google’s protobufs \cite{Protobufs} to serialize/deserialize data. PotionDB’s protobuf interface is an extension of AntidoteDB’s protobuf interface \cite{AntidoteDB}.
 	\item Unless otherwise specified, each request is a transaction which contains one instance of each query - this implies that, for local view PotionDB, transactions have more operations, as some queries need data from multiple regions.
 	\item In some scenarios, we impose latency between the servers, in order to simulate how PotionDB would perform when distributed accross the globe.
 	We use as reference the latency between AWS instances, as measured in \cite{AWSLatency} \andre{(Add a date of access?)}.
@@ -2064,7 +2060,7 @@ With these experiments, we try to answer the following questions:
 	\item \label{enum:question1} What is the practical benefict of having views of data replicated across different servers, compared to having only views of local data (local PotionDB) or a single view server (single PotionDB)?
 	\item \label{enum:question2}What is the effect on PotionDB's throughput of executing updates, namely as the write/read ratio increases?
 	%\item \label{enum:question3} \andre{Note: Before there used to be a section for how PotionDB scales by grouping operations. Now that doesn't seem to have much effect (about same throughput, but with less clients). But maybe this could help in the scenario with latency added. Should I still do this?}
-	\item\label{enum:question4}How does each kind of CRDT scale in PotionDB as we vary the number of clients, the number of replicas and other CRDT-specific settings (e.g., number of top elements in Top-K CRDT)?
+	\item\label{enum:question4}How does each kind of CRDT scale in PotionDB as we vary the number of clients, the number of replicas and other CRDT-specific settings (e.g., number of top elements in TopK CRDT)?
 	%\item\label{enum:question5}\andre{Any other question/evaluation?}
 \end{enumerate}
 
@@ -2109,7 +2105,6 @@ Thus, Q5 fits well both normal and local versions of PotionDB.
 In fact, Q5's performance in local and normal modes is very similar - both reach a max throughput of around 4 million queries/s.
 This occours as clients query data concerning the region of the server they are connected to, thus there is no need to contact other servers even in the local version.
 As for the single version, Q5's performance is about 1/5th of the other two.
-\andre{Note: I'm not sure I should say "locality of the data" here. Basically what I mean is that for queries which require a global view is where PotionDB shines.}
 On the other hand, Q3 is a perfect example of how data locality affects performance.
 This query requires data from all servers, thus in the local version every server needs to be contacted. The extra pressure on the servers (as all servers are required to answer all queries), as well as the extra round-trip, alongside bigger transfers of data, lead to a decreased performance of about 1/13th compared to PotionDB.
 The single version has, as expected, about 1/5th of PotionDB's performance.
@@ -2195,8 +2190,6 @@ The abrupt spike observed at the end in the update latency graph happens as many
 
 \andre{Note: I'm not sure on the explanation below. Basically, in local mode, more update ops are done per transaction, thus actually less orders are updated in the same period of time. However, since views are local, there's less replication work. Not much redirection is done as 50\% of the orders are fully local, and most others have few regions.}
 
-\andre{IMPORTANT: I need to refer somewhere that we adapted TPC-H's data to have locality. Where should I do that? This actually beneficts more the "local PotionDB" than the normal one.}
-
 Figure \ref{fig:update_rates_normal_vs_local} showcases the performance of both PotionDB and local PotionDB with varying update rates.
 As expected, local PotionDB performs worse than PotionDB.
 However, as the percentage of updates increases in local PotionDB, so does the throughput.
@@ -2231,7 +2224,7 @@ At a first glance this may seem confusing, however the following justifies this 
 
 \subsubsection{CRDT Benchmarks}
 
-\andre{Note: On the graphs here I forgot to put "Latency per transaction (ms)" instead of just "Latency (ms)"... will fix that when we do a final version of those graphs}
+%\andre{Note: On the graphs here I forgot to put "Latency per transaction (ms)" instead of just "Latency (ms)"... will fix that when we do a final version of those graphs}
 
 We now focus on evaluating the performance of the CRDTs used to build the views of TPC-H.
 Namely, we test TopK, TopSum, Counter and Average CRDTs.
@@ -2241,7 +2234,7 @@ In this scenario, we drop the TPC-H dataset.
 Instead, for each test we prepare 20 CRDTs with random initial data (the same amount of CRDTs used for Q15’s views, discussed in Section \ref{subsec:implementedQueries}).
 %Instead, we prepare each CRDT with some random initial data.
 %In each test, 20 CRDTs are created/manipulated by the clients (the same number of CRDTs that are used to build the views for Query 15, discussed in Section \ref{subsec:implementedQueries}).
-Each client picks a CRDT randomly from an uniform distribution and uses said CRDT to do query and/or update operations. 
+Each client picks a CRDT randomly following an uniform distribution and uses said CRDT to do query and/or update operations. 
 %Then, each client does query and/or update operations on one of the CRDTs.
 The number of operations per transaction is the same as in the TPC-H scenario. \andre{(Do I need to define this in the TPC-H scenario?)}
 %The distribution of CRDTs is the type "shared"
@@ -2255,13 +2248,13 @@ The number of operations per transaction is the same as in the TPC-H scenario. \
 	\label{fig:TopkSize0upd}
 \end{figure}
 
-Figure \ref{fig:TopkSize0upd} contains the results of executing Top-K queries with different values for K.
-The throughput difference between Top-1 and Top-10 is small (10\%). This happens as on both the amount of data transfered is small compared to the communication overhead (latency + metadata transfered, as well as the cost of serializing/parsing the protobufs for request and reply), as well as PotionDB handling a high amount of clients.
-As the size of the Top-K is increased, the performance of the queries quickly drops as the amount of data transfered starts to become more relevant.
-From Top-10 to Top-100, throughput decreases by 70\%, from Top-100 to Top-1000 by 88\%.
+Figure \ref{fig:TopkSize0upd} contains the results of executing TopK queries with different values for K.
+The throughput difference between Top-1 and Top-10 is small (10\%). This happens as the amount of data transfered is small compared to the communication overhead (latency + metadata transfered, alongside the cost of serializing/parsing the protobufs for request and reply), as well as the overhead of handling a high amount of clients.
+As the size of the TopK increases, the query performance drops as the amount of data transfered starts to become more relevant.
+From Top-10 to Top-100 and Top-100 to Top-1000 the throughput decreases by, respectively, 70\% and 88\%.
 We expect that after 1000, increasing linearly the number of elements on top will decrease the throughput by the same factor.
-\andre{Should I mention throughput numbers? The max of each is 11.3M, 10.3M, 3.1M, 0.37M ops/s.}
-\andre{Is it relevant to mention the number of entries in the TopK? (10000, same as in Q15) If so, how/where do I mention that?}
+%\andre{Should I mention throughput numbers? The max of each is 11.3M, 10.3M, 3.1M, 0.37M ops/s.}
+%\andre{Is it relevant to mention the number of entries in the TopK? (10000, same as in Q15) If so, how/where do I mention that?}
 
 \begin{figure}
 	\centering
@@ -2283,14 +2276,13 @@ We expect that after 1000, increasing linearly the number of elements on top wil
 
 
 Figure \ref{fig:TopkSize25_100upd} contains the same test as before but with, respectively, 25\% and 100\% updates.
-The differences in performance here are different compared to a scenario of query-only.
+The differences in performance here are different compared to query-only's scenario.
 This happens as on updates, the amount of data transfered is similar for all scenarios. 
-However, as expected, as the size of the Top increases, adding or removing elements to the top gets more expensive.
+However, as expected, as the value of K increases, adding or removing elements to the top gets more expensive.
 \andre{Not sure if/how I explain this. I believe the reason why it becomes more expensive is because of when the TopK needs to search for the ``new minimum'' of the top - since the elements ``not in top'' are stored as a set, sometimes that entire set needs to be searched upon to find a new minimum.}
 
 %\andre{Note: Interestingly, the TopSum graphs for 100\% updates are quite different from TopK. TopSum scores 5M ops/s on all top sizes for 100\% updates (to be precise: 5.4M, 5.4M, 5.3M, 5.1M Top1, Top10, Top100, Top1000); while TopK scores below 2M ops/s for Top1000. I haven't searched yet why it is like that.}
 
-%Graph with bars, showing the "max" performance of TopK and TopSum in some different scenarios (different top sizes and update rates). Maybe stack TopK and TopSum, and use as groups the same Top size?
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{TopKVSTopSum_cut}
@@ -2299,7 +2291,8 @@ However, as expected, as the size of the Top increases, adding or removing eleme
 \end{figure}
 
 Figure \ref{fig:TopkVSTopsum} shows how the TopSum compares to the TopK CRDT in similar scenarios.
-When only executing queries, the performance is very similar, however for high update rates, TopSum handles updates better than TopK.
+When only executing queries, the performance is very similar. 
+However for high update rates, TopSum handles updates better than TopK.
 \andre{TODO: I have to check why this is happening... some guesses: 1- TopSum doesn't have removes but rather incs/subs, so less elements being removed/created from each set (but still, some should when moved between top and not-top) ; 2 - topK has tombstones, topSum does not (but should be okay as it is only 1 timestamp per element) ; 3 - TopSum uses pointers to structures for the elements while TopK uses structures ; 4 - some other reason? Like different behaviour? I don't know. Maybe I need to test with a Map or Set CRDT. But even so it is odd...}
 
 \begin{figure}
@@ -2328,167 +2321,25 @@ When only executing queries, the performance is very similar, however for high u
 
 Figure \ref{fig:CounterAvgTopK} shows the max throughput of Counter, Average, and TopK (top of one) CRDTs.
 In these tests we try to assess how the performance of CRDTs scales with the number of replicas.
-When executing queries-only, the performance scales aproximately linearly with the number of servers for the three CRDTs, with the three CRDTs having similar throughput.
+When executing queries-only, the performance scales aproximately linearly with the number of servers for the three CRDTs, with all three CRDTs having similar throughput.
 For instance, Average CRDT goes from 11.1M ops/s with 5 servers to 2.35M ops/s with 1 server (78.8\% decrease).
 This happens as any server can be queried without needing to synchronize with other servers.
 With updates, the max throughput is lower and it scales down less linearly.
 For example, Average CRDT with 25\% update rate goes from 3.46M ops/s with 5 servers to 2.87M ops/s with 4 servers (17.1\% decrease) and to 1.11M ops/s with 1 server (67.9\% decrease from 5 servers).
 A similar percentage drop is observed with 100\% updates.
-This happens as with updates, they have to be propagated to the other replicas and executed in every replica.
+This happens as updates have to be propagated and executed in every other replica.
 However, PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed more efficiently.
 \andre{No idea why topK has a bit more performance with 25\% updates. I'm not sure why update-only has better throughput than query+update, but I can think of two possible reasons: a) updates make queries wait; b) updates reply quicker as a reply is sent as soon as the partitions confirm they will commit (and not after the commit is executed), unlike queries which must wait for the result to be ready.}
 
-\subsubsection{Batching}
-
-\andre{Old text - batching does not really have any noticeable improvement when testing on Grid in normal settings. It would surely help with tests that have latency added though.}
-
-On the previous scenarios, each client only requested one query at a time, even through updates were executed in groups (whenever one update to a base object is usued, all associated views are updated in the same transaction).
-With this we've noticed that, with a low number of clients, an update-only scenario actually has better throughput than a query-only scenario.
-Thus, we now evaluate the effect observable on PotionDB's throughput if multiple queries are included in the same transaction (\ref{enum:question3}).
-
-%\begin{figure}
-%	\centering
-%	\includegraphics[width=.95\linewidth]{ops_per_txn_cut}
-%	\caption{PotionDB performance when batching queries. Note that latency is in logarithmic scale.}
-%	\label{fig:ops_per_txn}
-%\end{figure}
-
-\begin{figure}
-	\centering
-	\includegraphics[width=.95\linewidth]{ops_per_txn_few_cut}
-	\caption{[OLD] PotionDB performance when batching queries. %Note that latency is in logarithmic scale.}
-	}
-	\label{fig:ops_per_txn}
-\end{figure}
-
-%\andre{Note: this graph is temporary - I'll have to repeat the tests with less clients and a few repetitions of the same executions. Also probably with lower values. When I first did this test it was more for curiosity than for really putting it here...}
-
-Figure \ref{fig:ops_per_txn} shows how PotionDB scales in terms of query/s depending on how many queries are executed in each transaction.
-As expected, as we increase the amount of queries per transaction, so does the latency, as there is more data to send, receive and process.
-However, the beneficts for throughput are visible - comparing 1 query/txn with 8 query/txn, we can see the throughput more than double before the server saturates, and latency increase by less than double.
-Increasing the number of queries/txn also leads to PotionDB saturating with less clients, as more time is spent on processing queries instead of waiting/switching clients, thus making better usage of machine resources.
-%We can see that with batching PotionDB reaches its peak performance with a lower number of clients (high query/s with low latency), and is able to provide higher throughput with lower latency - up to 1.2M ops/s with batching compared to 0.36M ops/s without batching.
-
-%Graphs:
-%TopK with 5 servers in which we vary the number of elements on top;
-%Maybe some "bar" graph for updRate + servers? The idea is, each bar = number of servers. Then, in each bar, there are the multiple update rates. Scale may be an issue, as the max amount of ops/s is 11M, and we can go under 1M in some scenarios.
-
-
-%\andre{Outdated. If this is still necessary, we need to define precisely what we want to showcase here.}
-%
-%\andre{I didn't know what to title this}
-%
-%We now evaluate how a single PotionDB server scales outside of the TPC-H scenario.
-%Namely we do a few benchmarks to determine the raw throughput of PotionDB when executing random operations, instead of specific queries or updates.
-%
-%\begin{figure}
-%		\centering
-%	\begin{subfigure}{.535\linewidth}
-%		\centering
-%		\includegraphics[width=.95\linewidth]{bench_read_cut}
-%		\caption{Read-only}
-%		\label{fig:bench_read}
-%	\end{subfigure}%
-%	\begin{subfigure}{.465\linewidth}
-%		\centering
-%		\includegraphics[width=.95\linewidth]{bench_update_cut}
-%		\caption{10\% update rate}
-%		\label{fig:bench_upd}
-%	\end{subfigure}
-%	\caption{Single server performance when executing random operations on set CRDTs. 1 key corresponds to a single CRDT shared between all clients, while multi key corresponds to multi CRDTs per client. 1/multi op refer to single or multi operation transactions.}
-%	\label{fig:bench}
-%\end{figure}
-%
-%Figure \ref{fig:bench} contains results on the execution of benchmarks on set CRDTs.
-%Namely, figure \ref{fig:bench_read} concerns a read-only scenario, while \ref{fig:bench_upd} has a 10\% update rate.
-%
-%Focusing on figure \ref{fig:bench_read}, it can be observed that increasing the number of operations per transaction greatly increases the throughput (up to 7x more in the tested scenario).
-%Increasing the number of CRDTs only seems to have a considerable effect when there's multiple operations in a transaction.
-%This may be due to the fact that a lookup operation in a set CRDT executes so quickly that most of the overhead may be in communication between threads or on converting data to the wire, thus not taking much benefict from the CRDTs being split across different partitions.
-%
-%Considering figure \ref{fig:bench_upd}, considerably lower latencies can be observed when using multiple keys with only 1 operation per transaction.
-%Based on other tests we done, we can affirm that this difference is bigger the higher the rate of updates are.
-%This is due to the fact that updates must lock a partition, thus if different keys are used, and each client only manipulates one key at a time, some reads may be executed in parallel with updates, as long as it is for different partitions.
-%With a single key used by all clients, no concurrency is possible when an update is being executed.
-%
-%The observed performance is worse than in a read-only scenario, 
-%which is specially noticeable in scenarios with multiple operations per transaction.
-%This is even more noticeable in the case with only one key, as the vast majority of transactions will include updates and thus the different clients end up having their transactions executed sequentially.
-%Having multiple keys eases this, as only partitions which get updated need to be locked, thus some concurrency is still possible.
-%
-%\andre{This subsection VERY LIKELY needs to be rewritten/better thought of. Maybe even choose different data to show...}
-
-%\subsection{Old Results}
-%
-%We first start by comparing the performance between running PotionDB in its intended mode, i.e., with views of global data, versus having each view only include data replicated locally.
-%To distinguish between both, we call the former simply PotionDB and the later Local PotionDB.
-%It is expectable for Local PotionDB to have worse performance, as most TPC-H queries concern data that is replicated across multiple replicas, which implies that clients need to contact multiple replicas to answer a single query in the case of local views.
-%
-%\begin{figure}
-%	\centering
-%	\begin{subfigure}{.5\linewidth}
-%		\centering
-%		\includegraphics[width=.95\linewidth]{8_CPU_global_LQ_cut}
-%		\caption{Global PotionDB}
-%		\label{fig:global8CPU}
-%	\end{subfigure}%
-%	\begin{subfigure}{.5\linewidth}
-%		\centering
-%		\includegraphics[width=.95\linewidth]{8_CPU_local_LQ_cut}
-%		\caption{Local PotionDB}
-%		\label{fig:local8CPU}
-%	\end{subfigure}
-%	\caption{Performance of PotionDB (left) with global indexes versus a version with local indexes (right). Square points represent the situation with both query clients and an update client, while circle is query only. Notice the difference in the scales between the graphs.}
-%	\label{fig:8CPU}
-%\end{figure}
-%
-%%\andre{Suggestions for graphs are more than welcome. Also, should instead of using Figure \ref{fig:global8CPU} and \ref{fig:local8CPU} use a single graph which contains both the local and global scenarios?}
-%%
-%%\begin{figure}
-%%	\centering
-%%	\begin{subfigure}{.5\linewidth}
-%%		\centering
-%%		\includegraphics[width=.95\linewidth]{8_CPU_global_index_cut}
-%%		\caption{Global PotionDB}
-%%		\label{fig:global8CPU}
-%%	\end{subfigure}%
-%%	\begin{subfigure}{.5\linewidth}
-%%		\centering
-%%		\includegraphics[width=.95\linewidth]{8_CPU_local_index_cut}
-%%		\caption{Local PotionDB}
-%%		\label{fig:local8CPU}
-%%	\end{subfigure}
-%%	\caption{Performance of PotionDB (left) with global indexes versus a version with local indexes (right). Square points represent the situation with both query clients and an update client, while circle is query only. Notice the difference in the y scale (query/s) between the graphs.}
-%%	\label{fig:8CPU}
-%%\end{figure}
-%%
-%
-%\andre{TODO: Este texto é ainda o antigo!!!}
-%
-%Figure \ref{fig:global8CPU} and \ref{fig:local8CPU} show the results of experiments for, respectively, PotionDB and Local PotionDB in terms of query/s.
-%There is at least two noteworthy points to be taken from the graphs.
-%
-%First, the number of queries that PotionDB can answer decreases to aproximately half when there are updates going on - this is expected, as due to causality PotionDB needs to ensure all reads of a transaction see the same version.
-%This also implies that old object versions may need to be computed, which implies extra server work.
-%
-%Second, as expected, the local version has considerably lower performance than the global version, peaking its performance at a much lower number of clients (120 to be precise).
-%In short this can be justified by considering that to answer a single query in the local version, multiple servers may need to be contacted. 
-%To exemplify, consider the query "Top 10 product orders not yet shipped."
-%This could be answered with a single Top-K CRDT read in the global scenario, but on the local scenario all servers need to be contacted as each server only knows of the orders done in its continent.
-%Thus, the client has to wait for all servers to answer and then aggregate the results before moving to the next query.
-%In other words, for some queries all servers need to reply to all clients and thus send/process more data, unlike with the global scenario in which each server is, in practice, dedicated to a subset of the clients.
-%In conclusion, there is a performance gain to be obtained from having indexes of data replicated both locally and on other servers when there are queries that concern such data.
-
 \section{Related Work}
 \label{sec:related_work}
-
-%y [12, 18, 22, 29, 36, 44], an
 
 %TODO: Veronica uses projection to improve queries, might be worth comparing to.
 
 Database systems can offer different levels of consistency, with solutions usually being labeled as either strong consistency or weak consistency.
 Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
-However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions. Furthermore, high latency is to be expected in geo-distributed scenarios as multiple data centers need to be contacted in order to commit a transaction.
+However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions.
+Furthermore, high latency is to be expected in geo-distributed scenarios as multiple data centers must be contacted for commiting a transaction.
 By relaxing the provided consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
 Causal consistency is a sub-form of weak consistency that alleviates this problem, however anomalities can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
@@ -2497,40 +2348,40 @@ Both indexes and materialized views can speed up the execution of queries.
 Indexes can provide quick access to a table or object using a non-primary key, and are often used by queries which require sorting or a given range of values.
 Multiple systems implement indexes \cite{dynamo, couchDB, cassandra, megastore} and research on efficient usage and storage of those is a common research topic \cite{lee2020asymmetric, lisa, alex, bindex, slik}.
 On the other hand, materialized views work as a cache for the result of a large query.
-Materialized views can provide quick access to data that would take a long time to calcultate, and are often useful for analytic queries \cite{analyticdb}.
+Materialized views can provide quick access to data that would take a long time to calculate, and are often useful for analytic queries \cite{analyticdb}.
 \andre{[I didn't find a proper reference for ``views being useful for analytic queries''. Suggestions?]}
 However, maintaining views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria}, even though they can speed up queries considerably.
-To the best of our knowledge, PotionDB is the first system to support materialized views in a patially geo-replicated scenario.
+To the best of our knowledge, PotionDB is the first system to support materialized views of global data in a partially geo-replicated scenario.
 
 Geo-distributed scenarios imply high latency when acessing far away data centers, which is required for strong consistency \cite{chronocache, slog, cops, eiger}. 
 Network partitions are also a concern, as they may render strongly consistent systems unavailable.
-Weak consistency can help avoid both problems, but lack the useful consistency guarantees provided by strong consistency.
+Weak consistency can help avoid both problems but lacks the useful consistency guarantees provided by strong consistency.
 
-\andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
+%\andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
 
-Partial replication allows to reduce storage costs and can even improve a system's performance (e.g., due to less operations being applied on each server) \cite{sipre, optimisticPartial, coda}, and are thus of interest for geo distribution.
-The partitioning of the data must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{sipre, optimisticPartial, coda}
-However, one common problem with partial replication is that, sometimes, it is necessary to access data sharded among different data centers \cite{sipre}.
+Partial replication allows to reduce storage costs and can potencially improve a system's performance, e.g., due to less operations being applied on each server \cite{sipre, optimisticPartial, coda}, and are thus of interest for geo distribution.
+The partitioning of data must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{sipre, optimisticPartial, coda}.
+However, one common problem with partial replication is that, sometimes, it is necessary to query data sharded among different data centers \cite{sipre}.
 %Many systems provide partial replication \cite{???}.
 %However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different data centers.
 Without views, this process can be slow, specially when trying to provide a consistent snapshot of the database.
 PotionDB tackles this problem by providing views that summarize partially replicated data and directly answer such queries.
 
-Conflict-free Replicated Data Types, CRDTs \cite{crdt}, are replicated data types that guarantee state convergence, assuming all updates are eventually delivered.
+Conflict-free Replicated Data Types, CRDTs \cite{crdt}, are replicated data types that guarantee state convergence as long as all updates are eventually delivered.
 Thus, they are often used in weakly consistent systems, e.g., Redis \cite{redisCRDT} and Riak \cite{riak}.
 Some types of CRDTs have been introduced that can help with representing views of data, namely computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform}.
-The former computes some result over data (e.g., a sum), while the later focus on minimizing the information that needs to be replicated to correctly reply to queries (e.g.: a top-k CRDT doesn't need all entries to be replicated).
-In PotionDB every object is a CRDT, and in particular we make usage of both computational and non-uniform CRDTs to support our views.
+The former computes some result over data (e.g., a sum), while the later focus on minimizing the information that needs to be replicated to correctly reply to queries (e.g.: a top-k CRDT does not need all entries to be replicated).
+In PotionDB every object is a CRDT and, in particular, we leverage on both computational and non-uniform CRDTs to support our views.
 
-\andre{The comparisons to other systems are still unorganized, but at least there's already content.}
+\andre{I did not really organize/compact the comparisons to other systems. Are they OK like this? Suggestions/changes are appreciated.}
 
 ChronoCache \cite{chronocache} is a middleware caching layer for geo-replicated databases which focus on combining multiple queries into one request and caching query results.
-While the caching can speed up future requests, complex queries may still need to contact multiple servers and updates can invalidade the cache or else the clients read stale data.
+While the caching can speed up future requests, complex queries may still need to contact multiple servers and updates can invalidade the cache or else clients read stale data.
 
-AnalyticDB \cite{analyticdb} focus on optimizing analyctic queries. 
+AnalyticDB \cite{analyticdb} focus on optimizing analytic queries. 
 It separates write and read paths to prevent complex queries from slowing down writes. 
 It also makes usage of indexes to speed up queries.
-However, complex queries still take hundreds of milliseconds to execute and they may slow down other simpler queries.
+However, complex queries still take hundreds of milliseconds to execute and may slow down other simpler queries.
 They do not make usage of views.
 
 SLOG \cite{slog} provides ACID transactions in a geo-replicated scenario.
@@ -2550,14 +2401,14 @@ Magrino et. al. \cite{treaties} propose predictive treaties.
 The insight is that some computations can be expressed by treaties, and is possible to antecipate a range of how a value might change over time.
 While this can lead to fast query replies and less duplicated data compared to views, since those treaties are not enforced as invariants, it is possible to read incorrect values.
 It may also be unfeasable to predict changes for some data.
-Finally, since a strong consistency scenario is assumed, care is needed to specify treaties in such a way that synchronization is kept to close-by replicas, which may make it difficult or infeasible to specify treaties concerning global data.
+Finally, since a strong consistency scenario is assumed, care is needed to specify treaties in such a way that synchronization is kept to close-by replicas, which may make it difficult or unfeasible to specify treaties concerning global data.
 
 Noria \cite{noria} is a streaming data-flow system. 
-It makes usage of views and partial data to provide fast query reply and reasonable memory usage.
+It leverages on views and partial data to provide fast query reply with reasonable memory usage.
 While it features high throughput, it is only able to provide eventual consistency, which is tougher to work with than casual consistency.
 There is also concerns on the performance of queries when a view needs to be rebuilt and data is sharded.
 
-Dynamo \cite{dynamo} and Cassandra \cite{cassandra} both are eventually consistent databases (the latter can provide stronger consistency when needed).
+Dynamo \cite{dynamo} and Cassandra \cite{cassandra} are eventually consistent databases (the latter can provide stronger consistency when needed).
 Both provide indexes to speed up some queries but not materialized views, thus complex queries may need to access large amounts of objects.
 CouchDB \cite{couchDB} provides both indexes and materialized views, however their views can only refer to data in one partition.
 
