@@ -419,7 +419,7 @@ Without dynamic transactions, we could first read user $B$ as offline, then user
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{potiondb_architecture}
-	\caption{PotionDB Architecture}
+	\caption{PotionDB Architecture~\carla{wasted space}}
 	\label{fig:arch}
 \end{figure}
 
@@ -447,7 +447,7 @@ The internal architecture of PotionDB is inspired by Cure~\cite{cure} and is spl
 	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
 	\item Materializer: This component stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
 	Garbage collection keeps the amount of metadata in check.
-	\item Replication: This component ensures that commited transactions are replicated asynchronously to other PotionDB instances.
+	\item Replication: This component ensures that committed transactions are replicated asynchronously to other PotionDB instances.
 	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
 	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
 \end{compactitem}
@@ -1137,7 +1137,7 @@ On Section \ref{sec:views} we address multiple difficulties related to supportin
 \label{sec:consistency}
 
 By default, PotionDB provides Transactional Causal Consistency (TCC).
-We also support the weaker Read Commited (RC) consistency. %Do I need to justify why we provide both? Basically the later is provided to achieve higher throughput.
+We also support the weaker Read committed (RC) consistency. %Do I need to justify why we provide both? Basically the later is provided to achieve higher throughput.
 We now detail the guarantees provided by PotionDB under both models.
 
 \subsection{Transactional Causal Consistency}
@@ -1186,23 +1186,23 @@ In a transaction, it is desirable to have a consistent view of the database - i.
 We define such a state as a snapshot.
 
 Formally, we denote by $op(S)$ the state after applying the update(s) of $op$ to state $S$.
-Let $S_{init}$ be the initial, empty state of the database.
-We can define a snapshot $S_n$ as the state of the database after executing a sequence of operations $op_1, ..., op_n$ according to some valid serialization that respects the happens-before relationship, i.e., $S_n = op_1(...(op_n(S_{init})))$.
+Let $S_{\mathit{init}}$ be the initial, empty state of the database.
+We can define a snapshot $S_n$ as the state of the database after executing a sequence of operations $op_1, ..., op_n$ according to some valid serialization that respects the happens-before relationship, i.e., $S_n = op_1(...(op_n(S_{\mathit{init}})))$.
 Since the serialization respects the happens-before relationship, $S_n$ is a consistent snapshot of the database.
 
 %Try to avoid the repetion below.
 All reads and updates of a transaction execute on top of a consistent snapshot, i.e., reads return the effects of $op_1, ..., op_n$ in $S_n$ and all updates happen after $op_1, ..., op_n$.
 Our transactions are atomic and generate a new consistent snapshot when committed.
-I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_{t1}, ..., op_{tn}$, either $T$ commits and $S_t$ = $op_{tn}(...(op_{t1}(S_n)))$ (all operations on the new snapshot) or it aborts and $\forall\, op_{t} \in T : op_t \notin Ops(S_{t})$ (none of the operations are in the new snapshot, i.e., $S_{t}$ = $S_n$), where $Ops(S)$ denotes the list of operations that generated $S$ from $S_{init}$.
+I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_{t1}, ..., op_{tn}$, either $T$ commits and $S_t$ = $op_{tn}(...(op_{t1}(S_n)))$ (all operations on the new snapshot) or it aborts and $\forall\, op_{t} \in T : op_t \notin \mathit{Ops}(S_{t})$ (none of the operations are in the new snapshot, i.e., $S_{t}$ = $S_n$), where $\mathit{Ops}(S)$ denotes the list of operations that generated $S$ from $S_{\mathit{init}}$.
  
 Our PotionDB prototype provides Transactional Causal Consistency (TCC) by default, i.e., our transactions always observe a consistent snapshot of the database.
 Transactions are atomic, i.e., either all the effects of the updates in the transaction are reflected in the next state of the database or none are.
 
-\subsection{Read Commited}
-\label{subsec:readcommited}
+\subsection{Read committed}
+\label{subsec:readcommitted}
 %TODO: Maybe a table with all the symbols we use like in Cure?
 %Note for self:  PotionDB does not provide repeatable reads under the weaker consistency model, because the same read during one transaction can return different values under Rc
-Read Commited (RC) is a consistency model which guarantees that only states resulting from committed transactions can be read.
+Read committed (RC) is a consistency model which guarantees that only states resulting from committed transactions can be read.
 This model provides weaker guarantees than transactional causal consistency.
 However, on write-heavy scenarios (e.g., 75\%-25\% write-read workloads), the provision of consistent snapshots for TCC is expensive.
 This is common problem for systems providing some sort of causal consistency.
@@ -1220,17 +1220,17 @@ Besides, the application developer can always fall back to TCC whenever necessar
 
 We now define precisely our guarantees under RC.
 First, consecutive reads of the same object either return the same state, or the second read returns a more recent state, even if under the same transaction.
-I.e., consider a transaction T, reads $R_1(o) \in T$ and $R_2(o) \in T$, as well as the states returned by them, respectively, $s_1(o)$ and $s_2(o)$.
-Under RC, we have that $R_1(o) \prec R_2(o) \implies s_1(o) \prec s_2(o)$
+I.e., consider a transaction T, reads $R_1(o) \in T$ and $R_2(o) \in T$, as well as the states returned by them, respectively, $S_1(o)$ and $S_2(o)$.
+Under RC, we have that $R_1(o) \prec R_2(o) \implies S_1(o) \prec S_2(o)$. \carla{I changed $s_i$ to $S_i$}
 Thus causality on a single object is respected, but isolation from other transactions is not.
-Under TCC, both reads would return the same state, while under RC, $s_2(o)$ could reflect changes from some other transaction that commited in the meantime.
+Under TCC, both reads would return the same state, while under RC, $S_2(o)$ could reflect changes from some other transaction that committed in the meantime.
 
 Causality across objects is also not respected.
 Assume $R_1(o_1) \in T$ and $R_2(o_2) \in T$, with $o_1^{id} \neq o_2^{id}$.
-Under RC, the following is possible: $R_1(o_1) \prec R_2(o_2) \land s_2(o) \prec s_1(o)$.
+Under RC, the following is possible: $R_1(o_1) \prec R_2(o_2) \land S_2(o) \prec S_1(o)$.
 I.e., reads of different objects may return states corresponding to different snapshots.
 
-For two transactions $T_1$, $T_2$, with $T_1 \prec T_2$, there is still no causality across objects. However, for $R_1(o) \in T_1$, $R_2(o) \in T_2$, $s_1(o)$ $\prec$ $s_2(o)$.
+For two transactions $T_1$, $T_2$, with $T_1 \prec T_2$, there is still no causality across objects. However, for $R_1(o) \in T_1$, $R_2(o) \in T_2$, $S_1(o)$ $\prec$ $S_2(o)$.
 
 \section{Transactions}
 \label{sec:transactions}
@@ -1260,11 +1260,11 @@ In this section we describe PotionDB's sharding, our commit and reading protocol
 Internally, the Materializer component (our datastore) is sharded.
 This allows multicore CPUs to be efficiently utilized,
 with reads and updates executing in parallel whenever possible.
-Each object $o$ is assigned to only one shard, based on a hash of $o^{id}$.
-For clarity, let $o^{shard}$ be the shard where $o$ is stored.
+Each object $o$ is assigned to only one shard, based on a hash of $o^{\mathit{id}}$.
+For clarity, let $o^{\mathit{shard}}$ be the shard where $o$ is stored.
 
 Each shard has one dedicated thread.
-This avoids the usage of locks when acessing objects, simplifying the implementation and avoiding other issues such as lock contention.
+This avoids the usage of locks when accessing objects, simplifying the implementation and avoiding other issues such as lock contention.
 It also allows for reads and updates on non-overlapping shards to execute in parallel.
 In a way, our approach is similar to the one used in H-Store \cite{h-store}.
 However, instead of running multiple instances of PotionDB and sharding the data across those instances, we shard the dataset across threads of the same database instance, as this allows for a more efficient communication between shards when necessary.
@@ -1281,20 +1281,22 @@ However, concurrent writes to the same shard conflict, as the results may differ
 Thus, we now define some notations in order to precisely describe the scenarios where operations, i.e. reads and writes, can be executed concurrently.
 First, for a given transaction $T$, let $W_T$ and $R_T$ be, respectively, the set of writes/reads present in $T$.
 We say that $o \in W_T$ (resp. $o \in R_T$) if there exists a write (resp. read) operation in $W_T$ (resp. $R_T$) for object $o$.
-Furthermore, $sh_{W_T}$ (resp. $sh_{R_T}$) returns the set of shards for which at least one object $o$ resides in each shard, i.e., $\forall s \in sh_{W_T} | \exists o^{shard} \in W_T : shard = s$ (and similarly for $R_T$).
+Furthermore, $\mathit{sh}_{W_T}$ (resp. $\mathit{sh}_{R_T}$) returns the set of shards for which at least one object $o$ resides in each shard, i.e., 
+$\forall\, s \in \mathit{sh}_{W_T} : \exists o^{\mathit{shard}} \in W_T : \mathit{shard} = s$ (and similarly for $R_T$).
 
 The scenarios where transactions can safely execute concurrently are as follows:
 
 \begin{compactitem}
 	\item Subsets of operations of a given transaction $T$ that belong to different shards may always execute concurrently;
 	\item For a given set of transactions $T_1$, ..., $T_n$, if all transactions are read-only, they can execute freely in any order, exploiting full concurrency between shards;
-	\item For a given set of transactions $T_1$, ..., $T_n$, with a subset of the operations being writes, the transactions can execute concurrently as long as $\forall T_a, T_b \in T_1, ..., T_n, T_a \neq T_b \implies (sh_{W_{Ta}} \cap sh_{W_{Tb}} = \emptyset)$ (informally, there is no intersection of shards between any of the write sets). Note that the read sets can interset freely.
+	\item For a given set of transactions $T_1$, ..., $T_n$, with a subset of the operations being writes, the transactions can execute concurrently as long as 
+	$\forall\, T_a, T_b \in T_1, ..., T_n :T_a \neq T_b \implies (\mathit{sh}_{W_{T_a}} \cap \mathit{sh}_{W_{T_b}} = \emptyset)$ (informally, there is no intersection of shards between any of the write sets). Note that the read sets can intersect freely.
 \end{compactitem}
 
 In PotionDB, views are defined to answer complex queries directly with a single read.
 Due to the nature of hashing, views are likely to be spread across different shards.
-Thus, we expect most transactions will access few shards, allowing transactions to execute concurrently even in the presence of concurrent updates to unrelated objects. Our pratical evaluation shows that sharding improves PotionDB's performance considerably.
-([TODO] I don't actually have any results that demonstrate this)
+Thus, we expect most transactions will access few shards, allowing transactions to execute concurrently even in the presence of concurrent updates to unrelated objects. Our practical evaluation shows that sharding improves PotionDB's performance considerably.
+\andre{TODO: I don't actually have any results that demonstrate this}
 
 Other possible solutions to make use of multi-core CPUs are possible, for instance:
 \begin{compactenum}
@@ -1303,15 +1305,15 @@ Other possible solutions to make use of multi-core CPUs are possible, for instan
 \end{compactenum}
 
 Alternative \ref{item:locks} is difficult to implement efficiently, as the right level of lock granularity is needed.
-Deadlocking, lock overhead and fairness are also concerning.
+Deadlocking, lock overhead, and fairness are also concerning.
 %Alternative \ref{item:locks} is difficult to implement, as it is required to find the right level of lock granularity and when should locks be obtained/released. 
 %Special care is needed to avoid deadlocking concurrent transactions. 
 %There's also concerns with both fairness and overhead of obtaining locks.
 Our solution does not need to lock data, thus avoiding lock overhead and deadlocks, while also being easier to implement.
 %Our solution does not need to lock data, thus it avoids the overhead from using locks, is easier to implement and does not have deadlocks.
 
-As for \ref{item:multiplePotion}, this would imply more replicas running in the system, which increases both replication and storage costs.
-This would also imply concurrency conflicts even in the same computer.
+Alternative \ref{item:multiplePotion} would imply more replicas running in the system, which increases both replication and storage costs.
+This would also imply concurrency conflicts even in the same computer. \carla{computer or replica?}
 Finally, while this solution can allow more clients to be processed in the same period of time, and is rather easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. \andre{Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.}
 
 Many existing solutions shard the data across multiple machines in the same data center \cite{cops, eiger, cure, mdcc, gentlerain}.
@@ -1321,52 +1323,55 @@ This is, however, orthogonal to our research, as we focus on scalability of each
 
 \subsection{Clocks}
 
-Let $S_1$, ..., $S_n$ be the set of servers in the system.
-Each server $S_j$ keeps a global vector clock $vc_G$, with one entry for each $S_k \in S_1, ..., S_n$.
+Let $S_1$, ..., $S_n$ be the set of servers in the system. \carla{$S$ is already used as state, cannot be used as server.}
+Each server $S_j$ keeps a global vector clock $\mathit{vc}_G$, with one entry for each $S_k \in S_1, ..., S_n$.
 This clock represents the latest snapshot available in $S_j$.
-Each shard $sh_i$ also keeps a local vector clock $vc_i$.
-The local vector clock simbolizes the latest snapshot available in $sh_i$, which may be different from $vc_G$.
-Any shard can access the server's physical clock, $pc$.
-Each shard $sh_i$ also keeps a list of prepared vector clocks, $prep_i$, as well as a list of commits on hold, $hold_i$.
+Each shard $\mathit{sh}_i$ also keeps a local vector clock $\mathit{vc}_i$.
+The local vector clock symbolises the latest snapshot available in $sh_i$, which may be different from $\mathit{vc}_G$.
+Any shard can access the server's physical clock, $\mathit{pc}$.
+Each shard $\mathit{sh}_i$ also keeps a list of prepared vector clocks, $prep_i$, as well as a list of commits on hold, $\mathit{hold}_i$.
 While we leverage on physical clocks for our protocols, the correctness of our protocols is independent of the skew of physical clocks between servers.
-In fact, any monotonically increasing clock would suffice for implementing $pc$.
+In fact, any monotonically increasing clock would suffice for implementing $\mathit{pc}$.
 
-A transaction $T$ has two clocks associated - a read vector clock, $T.rc$, and a commit clock (single scalar), $T.cc$.
+A transaction $T$ has two clocks associated - a read vector clock, $T\!.\mathit{rc}$, and a commit clock, $T\!.\mathit{cc}$ (single scalar).
 The former represents the snapshot to be read by the transaction, while the latter is the snapshot that will be generated by the transaction's updates on commit.
-Applying a local commit only advances $S_j$'s entry in a vector clock, hence why a single scalar is enough for $T.cc$.
-Updates are only applied when a transaction is commited. 
+Applying a local commit only advances $S_j$'s entry in a vector clock, hence why a single scalar is enough for $T\!.\mathit{cc}$.
+Updates are only applied when a transaction is committed. 
 Reads are applied as soon as they are issued. %This phrase probably belongs in another place.
 
 
 \subsection{Commit protocol}
 %Probably I should write the pseudo-code of this algorithm?
+\carla{Replying to Andre's comment. Yes, an algorithm is needed.}
 We apply a two-phase commit protocol as follows.
 First, a prepare message is sent to all shards in $W_T$.
-Each $sh_i$ replies with the value of $pc$ at the time the message is processed and also stores it in $prep_i$. %Do I need to say it also stores the transaction ID?
-Since $pc$ is monotonically increasing, all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
-We set $T.cc$ equal to the highest returned clock.
+Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$. %Do I need to say it also stores the transaction ID?
+Since $\mathit{pc}$ is monotonically increasing, all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
+We set $T\!.\mathit{cc}$ equal to the highest returned clock.
 A commit message is then sent to all shards in $W_T$.	%I may need to prove how this still converges - I remember me and Carla talked about this and it is not obvious.
 
-A shard $sh_i$ proceeds as follows when it receives a commit message.
+A shard $\mathit{sh}_i$ proceeds as follows when it receives a commit message.
 A commit can only be applied if
 \begin{enumerate*}[label=(\roman*)] 
-	\item all prepared clocks except the one for $T$ are higher than $T.cc$ and
-	\item there is no $T_a.cc$ in $hold_i$ for which $T_a.cc < T.cc$.
+	\item all prepared clocks except the one for $T$ are higher than $T.\mathit{cc}$ and
+	\item there is no $T_a.\mathit{cc}$ in $\mathit{hold}_i$ for which $T_a.\mathit{cc} < T\!.\mathit{cc}$.
 \end{enumerate*}
-If so, the commit and $T$'s updates are applied and $vc_i[S_j]$ is updated to $T.cc$.
-Otherwise, the commit is queued in $hold_i$ to be applied later, as other transactions may commit with a lower $cc$ than $T.cc$.
-In either case, $T$'s prepared clock is removed from $prep_i$ and $sh_i$ replies with a commited message.
+If so, the commit and $T$'s updates are applied and $\mathit{vc}_i[S_j]$ is updated to $T\!.\mathit{cc}$.
+Otherwise, the commit is queued in $\mathit{hold}_i$ to be applied later, as other transactions may commit with a lower $\mathit{cc}$ than $T\!.\mathit{cc}$.
+In either case, $T$'s prepared clock is removed from $\mathit{prep}_i$ and $\mathit{sh}_i$ replies with a committed message.
 
-If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $prep_i$, the transaction with lowest $cc$ in $hold_i$, $T_h$, is verified for appliance, with the same rules as above.
-If the conditions hold, $T_h$ is removed from $hold_i$ and applied as described above, and the verification process repeats for the next lowest in $hold_i$.
-This process loops until $hold_i$ is empty or the lowest commit in $hold_i$ cannot be applied. %Do I need to state that vc is updated?
+If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $\mathit{prep}_i$, 
+the transaction with lowest $\mathit{cc}$ in $\mathit{hold}_i$, $T_h$, is verified for appliance, with the same rules as above.
+If the conditions hold, $T_h$ is removed from $\mathit{hold}_i$ and applied as described above, 
+and the verification process repeats for the next lowest in $\mathit{hold}_i$.
+This process loops until $\mathit{hold}_i$ is empty or the lowest commit in $\mathit{hold}_i$ cannot be applied. %Do I need to state that vc is updated?
 
-A client receives a confirmation of transaction commited, along with $T.cc$, when all shards in $W_T$ send the commited message.
+A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, when all shards in $W_T$ send the committed message.
 This happens even if any of the shards queued the commit.
-On the other hand, $vc_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
-To be precise, assuming the transaction was commited on server $S_j$, we set $vc_G[j] = max(vc_G[j], T.cc)$.
-The max is necessary as transactions accessing disjoins sets of write shards may commit concurrently.
-Note that this does not break consistency as the write sets are disjoint - thus no racing conditions occour to the same object.
+On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
+To be precise, assuming the transaction was committed on server $S_j$, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
+It is necessary to select the maximum, as transactions accessing disjoins sets of write shards may commit concurrently.
+Note that this does not break consistency as the write sets are disjoint -- thus no racing conditions occur to the same object.
 Furthermore, the reading protocol consider this possibility when applying reads.
 
 %Maybe this should be before commit?
@@ -1378,7 +1383,7 @@ Thus, all reads in a transaction observe a consistent view of the database, even
 
 We provide consistent reads as follows.
 Clients' new transaction requests include a clock representing the latest snapshot observed by the client. %Any need to say this is optional? For max read throughput (but with potencial causality loss) we support not including a clock
-This ensures causality is maintaned even if the client changes servers.
+This ensures causality is maintained even if the client changes servers.
 When a transaction $T$ is started, its read clock $T.rc$ is set as $T.rc = max(vc_G, clientClk)$, where $max$ does a pairwise max for each entry.
 If at the time of reading, $\exists i \in S_1, ..., S_n : T.rc[i] > vc_G[i]$, the reads will be put on hold before being sent to the shards. 
 When $\forall i \in S_1, ..., S_n, vc_G[i] \geq T.rc[i]$, i.e., the replica can already provide the snapshot requested by the client's clock, the reads will be sent to the respective shards.
@@ -1386,9 +1391,9 @@ Reads are executed as soon as the client issues them, i.e., does not wait for co
 
 The shards receive $T.rc$ when applying reads.
 If $T.rc$ belongs to the past, the correspondent version of the object is calculated - we achieve this by keeping a list of recent updates of each object and undoing the necessary operations. %Should I mention more details on this mechanism are outside of the scope of this paper?
-If it is the latest, the state is read directly \footnote{On an exceptional scenario, the read may have to be put on hold. This only happens when write transactions with disjoint sets of write shards commit concurrently, and a new snapshot reflecting one of the transaction's $cc$ is issued before the other transaction finishes being applied - in practice, this is a very rare occourence.}.
+If it is the latest, the state is read directly \footnote{On an exceptional scenario, the read may have to be put on hold. This only happens when write transactions with disjoint sets of write shards commit concurrently, and a new snapshot reflecting one of the transaction's $cc$ is issued before the other transaction finishes being applied. In practice, this is a very rare occurrence.}.
 
-Waiting for the snapshot to be available can happen when the client changes servers or if the client recently commited some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be comitted.
+Waiting for the snapshot to be available can happen when the client changes servers or if the client recently committed some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be committed.
 The former is exceptional - we assume clients are sticky, as data has locality.
 The later is uncommon and is still better than forcing the client to wait during the commit - with our solution, the commit will very likely be applied during RTT.
 Even if not, i.e. the next request of the client arrives before the commit is fully applied, our solution is still beneficial -  the client only waits for the commit duration instead of commit duration + RTT.
@@ -1396,7 +1401,7 @@ Even if not, i.e. the next request of the client arrives before the commit is fu
 %Actually on the implementation, we wait on the startTxn() to avoid having to re-read the global clock (which would require locking). But the protocol has no such restriction in my opinion.
 
 %Reads reflect the effect of previous updates in the same transaction.
-%That is, even though updates are not applied until a transaction is commited, reads still reflect the state that would result from applying said updates on $T.rc$'s snapshot.
+%That is, even though updates are not applied until a transaction is committed, reads still reflect the state that would result from applying said updates on $T.rc$'s snapshot.
 Reads reflect the effect of previous updates in the same transaction, despite updates not being applied until the transaction commits.
 PotionDB achieves this by, for a given $read(o)$, calculating the effects of all $update(o) \in T$ that have been issued before said read on top of $T.rc$'s snapshot.
 Then the state of $o$ reflecting such changes is returned.
@@ -1438,10 +1443,10 @@ Finally, we describe how we incorporate non-uniform replication to further reduc
 As described in Section \ref{subsec:datamodel}, objects are uniquely identified by the triple ($key, bucket, type$).
 Buckets are the unit of partitioning - objects with the same bucket value will be replicated by the same subset of servers.
 Each server replicates a subset of buckets.
-The same bucket can be replicated in many servers, potencially all if desired.
+The same bucket can be replicated in many servers, potenTially all if desired.
 In the typical use case, views will be replicated in every server, which can be achieved by associating them to the same bucket and adding that bucket to all servers.
 For ease of usage, PotionDB supports using regular expressions for defining the set of buckets a server replicates.
-This allows, e.g., for a server to replicate any bucket that ends in "europe".
+This allows, e.g., for a server to replicate any bucket that ends in "Europe".
 
 %Consider changing this example with a picture. Also, is this example necessary?
 To exemplify, consider the e-commerce example in Section \ref{sec:overview}.
@@ -1449,7 +1454,7 @@ Let us assume we want to distribute the customer's data according to their home 
 This could be achieved with the following steps:
 
 \begin{compactenum}
-	\item Define one bucket per continent (europe, asia, etc.);
+	\item Define one bucket per continent (Europe, Asia, etc.);
 	\item Configure each server to replicate the continent it is located in + another continent. Do this in such a way that each continent is replicated in, at least, two data centers;
 	\item When adding a new customer to the database, specify the bucket correspondent to the customer's continent.
 \end{compactenum}
@@ -1491,7 +1496,7 @@ If they are not, e.g. if for two transactions $T_1$, $T_2$ from different replic
 Thus, $T_2$ will be applied after $T_1$, maintaining causality. %I do not know if this explanation is generic enough - the idea here is that, for transactions causally related from different replicas, they will be applied with causal order, as their clocks will enforce so (we cannot apply a transaction until the replica's clock reflects all preceding transactions).
 
 In our PotionDB prototype we leverage on RabbitMQ \cite{???} for handling communication between replicas.
-RabbitMQ is a message brooker which allows consumers to register the topics of messages in which they are interested.
+RabbitMQ is a message broker which allows consumers to register the topics of messages in which they are interested.
 We associate a topic to a bucket in order to allow servers to only receives updates for buckets they are replicating.
 
 We use RabbitMQ as follows. We run a RabbitMQ instance alongside each PotionDB instance.
@@ -1646,7 +1651,7 @@ This can happen when executing either local or remote transactions.
 PotionDB supports both situations as follows.
 In the former case, the newly relevant operations are appended to the transaction and will, thus, be replicated normally.
 In the latter case, a new transaction is created that holds the newly relevant operations that were generated by the NuCRDTs that were modified in the remote transaction being applied.
-This new transaction is locally commited but without applying said operations, as they were already applied locally before.
+This new transaction is locally committed but without applying said operations, as they were already applied locally before.
 The transaction is then replicated to other replicas, which apply it normally.
 This new transaction may potencially make more operations relevant.
 However it is ensured the observable states will eventually converge.
@@ -3051,7 +3056,7 @@ Non-formally, we assume there is some mechanism that provides updates for all vi
 
 \subsection{Consistency}
 
-PotionDB supports both Parallel Snapshot Isolation (PSI) \cite{walter} and Read Commited (RC) as its consistency models.
+PotionDB supports both Parallel Snapshot Isolation (PSI) \cite{walter} and Read committed (RC) as its consistency models.
 We now explain precisely which guarantees PotionDB provides under each model.
 
 \subsubsection{Parallel Snapshot Isolation}
@@ -3093,9 +3098,9 @@ In PotionDB, the usage of CRDTs ensures the states of different replicas will ev
 
 \andre{Section \ref{subsec:partialReplicationViews} describes the implications of partial replication in keeping views up-to-date. Do I need to refer that section here?}
 
-\subsubsection{Read Commited}
+\subsubsection{Read committed}
 
-Read Commited (RC) is a consistency model which guarantees that only states resulting from commited transactions can be read.
+Read committed (RC) is a consistency model which guarantees that only states resulting from committed transactions can be read.
 This model is ``weaker'' (less guarantees) when compared to PSI.
 However, PSI has considerable overhead on reads in PotionDB, for scenarios with a high update rate, due to the provisioning of the snapshots.
 Thus, we provide the option to use RC for when high read throughput is a must under a high update rate scenario.
@@ -3103,7 +3108,7 @@ Thus, we provide the option to use RC for when high read throughput is a must un
 For now, consider a single object in the database.
 Under RC, PotionDB ensures that consecutive reads of the object read either the same state or a more recent state.
 That is, for two reads of object $o$, $R_1(o)$ and $R_2(o)$, if $R_1(o) \prec R_2(o)$, then the state returned by $R_2(o)$ is either more recent or the same as in $R_1(o)$.
-Also, no reads of ongoing (uncommited) transactions can ever be read.
+Also, no reads of ongoing (uncommitted) transactions can ever be read.
 In other words, under RC, single-object causality is still ensured.
 
 Consider now multiple objects in the database.
@@ -3120,7 +3125,7 @@ $\forall R_1(o_1), R_2(o_2) : R_1(o_1) \in T \land R_2(o_2) \in T \land o_1 \not
 
 %
 %To be precise, the form of RC provided by PotionDB can be described as follows.
-%Only states resulting from commited transactions can be read.
+%Only states resulting from committed transactions can be read.
 %Furthermore, once a version A is read from an object, any future read will return either version A or a more recent version.
 %However, reads to different objects in the same transaction can read different versions.
 %As such, single-object causality is ensured but cross-object causality is not.
@@ -3150,7 +3155,7 @@ We also describe how transactions refering objects not locally replicated procee
 
 \subsection{Consistency}
 
-PotionDB supports both Parallel Snapshot Isolation (PSI) \cite{walter} and Read Commited (RC) as its consistency models.
+PotionDB supports both Parallel Snapshot Isolation (PSI) \cite{walter} and Read committed (RC) as its consistency models.
 We now detail each of the models, starting by assuming that all objects referred in a transaction are replicated in the same server (which is the intended use case of PotionDB).
 We will drop this assumption later on.
 
@@ -3171,10 +3176,10 @@ We note that causality is still preserved - if server A executed transaction T1 
 %We also ensure causality when considering remote operations - once a client sees the effect of a remote operation, any later read will reflect the effects of said operation.
 
 Providing PSI has considerable overheads due to the isolation guarantee \cite{walter} and provisioning of snapshots.
-Thus, PotionDB can also operate in a quicker, but weaker, consistency model - Read Commited (RC).
+Thus, PotionDB can also operate in a quicker, but weaker, consistency model - Read committed (RC).
 
 To be precise, the form of RC provided by PotionDB can be described as follows.
-Only states resulting from commited transactions can be read.
+Only states resulting from committed transactions can be read.
 Furthermore, once a version A is read from an object, any future read will return either version A or a more recent version.
 However, reads to different objects in the same transaction can read different versions.
 As such, single-object causality is ensured but cross-object causality is not.
@@ -3183,7 +3188,7 @@ The main advantage of RC is the ability to still provide a high read throughput 
 However, when cross-object causality is desired (e.g., when reading an object referred by a view), PSI should be used.
 
 %Due to the isolation required to provide SI, PotionDB also provides the option of doing ``fast reads'' with less guarantees.
-%Namely PotionDB provides the option for read commited.
+%Namely PotionDB provides the option for read committed.
 %With this reads can be executed imediatelly and do not need to wait for any ongoing transaction to finish. 
 %However, causality between objects is not ensured - a client may read object A in one version and then object B in a previous version.
 %Single-object causality is still ensured though - if object A is read in version X, any further read done on object A by that client will be on version X or on a more recent version.
@@ -3215,10 +3220,10 @@ However, under RC, it is possible for different versions to be accessed in the s
 %\item PSI and base data not present: the view is kept updated as view updates from other replicas are received.
 %It is possible that the base data in a remote replica may be in a more recent version than the view in the local replica.
 %However, it is guaranteed that eventually the local replica will receive all view updates from other replicas with relevant base data.
-%\item Read commited and base data present: it is possible to read different versions for object and view even if done in the same transaction.
+%\item Read committed and base data present: it is possible to read different versions for object and view even if done in the same transaction.
 %PSI should be used if it is desired to read both the view and base data consistently.
 %Noteworthy, since single-object causality is ensured, reading just the view will always wield the same version or more recent versions than the prior read's.
-%\item Read commited and base data not present: single-object causality is ensured. 
+%\item Read committed and base data not present: single-object causality is ensured. 
 %The view will receive updates from other replicas and will, eventually, reflect the latest state.
 %\end{itemize}
 
@@ -3249,7 +3254,7 @@ We note that data which may be revelant everywhere can still be replicated in ev
 
 %Garantias
 % Snapshot isolation
-% Read commited
+% Read committed
 %Modelo de Consistencia?
 %Modelo de consistencia no acesso às views (garantias do utilizador)
 
