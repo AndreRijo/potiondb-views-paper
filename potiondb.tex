@@ -173,7 +173,7 @@ Databases that provide weak consistency \cite{eventual,dynamo,cops} allow any re
 client request, leading to lower latency and high availability. As a consequence, these databases expose
 temporary state divergence to clients, making it more difficult to program a system. 
 
-In either case, geo-replicated databases typically rely on a full replication model, where each data 
+Either case, geo-replicated databases usually rely on a full replication model, where each data 
 center replicates the full database, with data being sharded across multiple partitions in each data 
 center. 
 As both the data managed by these systems increases in size and the number of data centers increases,
@@ -337,10 +337,10 @@ Informally, we classify as an object ($o$) any value that is either a base objec
 We distinguish between base objects and views whenever necessary for clarity.
 
 The value of a view is defined as a function of the values of other object(s), i.e., 
-$\forall\, v \in \mathit{Views}, v = \mathit{fun}_v(D_v)$, 
+$\forall\, v \in \mathit{Views} : v = \mathit{fun}_v(D_v)$, 
 where \emph($D_v$) is the set of objects (potentially both base objects and other views) used to compute $v$.
 We assume the computation is non-recursive, i.e., the value of a view is never based on its own value or, formally, 
-$\forall\, v \in \mathit{Views}, v \notin D_v$.
+$\forall\, v \in \mathit{Views} : v \notin D_v$.
 
 Objects are uniquely identified by the triple $\mathit{(key, bucket, type)}$.
 For presentation purposes, we assume the triple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
@@ -439,12 +439,12 @@ If a client's transaction accesses objects not locally replicated, other instanc
 We note this should be an exceptional case, not the norm.
 We leave further details for Section \ref{subsec:operationsNonLocal}.
 
-The internal architecture of PotionDB is inspired by Cure and is split into three main components:
+The internal architecture of PotionDB is inspired by Cure~\cite{cure} and is split into three main components:
 
 %Not sure if I'll need these abbreviations later. Consider removing if unused.
 \begin{compactitem}
 	\item TransactionManager (TM). This component is responsible for receiving and replying to client's requests.
-	It coordinates transactions, implementing a transactional protocol (described in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
+	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
 	\item Materializer: This component stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
 	Garbage collection keeps the amount of metadata in check.
 	\item Replication: This component ensures that commited transactions are replicated asynchronously to other PotionDB instances.
@@ -1147,7 +1147,7 @@ We now detail the guarantees provided by PotionDB under both models.
 %Maybe on Causality I should just use operation "a" and "b" like every other paper does... instead of "op1" and "op2"
 %In VLDB, Paragraph is like another subsection - "10.1.0.1" doesn't look good, so I changed to \emph
 \emph{Causality.} 
-We leverage on the happens-before relationship defined by Lamport \cite{???} to define causality.
+We leverage on the happens-before relationship defined by Lamport~\cite{lamport78} to define causality.
 We represent that $op_1$ happened before $op_2$ as $op_1 \prec op_2$.
 We can say that $op_1 \prec op_2$ iff any of the following conditions is true:
 
@@ -1169,10 +1169,10 @@ As an example, if we assume a set and the operations $add(a)$ $\prec$ $add(b)$ $
 
 If $op_1$ and $op_2$ are concurrent, they can be applied by any order.
 Specifically, they may be executed by different orders in different replicas.
-If both operations are a write for the same object, this could lead to replicas' state diverging forever \cite{cops, cure}, i.e., returning different results for the same read forever.
+If both operations are a write for the same object, this could lead to replicas' state diverging forever \cite{cops, cure}, i.e., returning different results for the same read.
 In this situation we say the writes are conflicting.
 We assume in our model of causal consistency that some mechanism of conflict resolution is provided to solve conflicts in a per-object basis, i.e., that for any two conflicting writes the result is deterministic independently of the execution order.
-In our solution, we leverage on CRDTs to solve these conflits \cite{crdt}.
+In our solution, we leverage CRDTs to solve these conflicts~\cite{crdt}.
 This model of causal consistency with a conflict resolution mechanism is referred by some authors as causal+ consistency \cite{cops, cure, chainreaction}.
 We refer to this simply as causal consistency.
 %I have to introduce CRDTs somewhere and "explain why they are wonderful" (API, automatic conflict resolution in different flavours, etc)
@@ -1192,8 +1192,8 @@ Since the serialization respects the happens-before relationship, $S_n$ is a con
 
 %Try to avoid the repetion below.
 All reads and updates of a transaction execute on top of a consistent snapshot, i.e., reads return the effects of $op_1, ..., op_n$ in $S_n$ and all updates happen after $op_1, ..., op_n$.
-Our transactions are atomic and generate a new consistent snapshot when commited.
-I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_{t1}, ..., op_{tn}$, either $T$ commits and $S_t$ = $op_{tn}(...(op_{t1}(S_n)))$ (all operations on the new snapshot) or it aborts and $\forall (op_{t} \in T : op_t \notin Ops(S_{t})$ (none of the operations are in the new snapshot, i.e., $S_{t}$ = $S_n$), where $Ops(S)$ denotates the list of operations that generated $S$ from $S_{init}$.
+Our transactions are atomic and generate a new consistent snapshot when committed.
+I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_{t1}, ..., op_{tn}$, either $T$ commits and $S_t$ = $op_{tn}(...(op_{t1}(S_n)))$ (all operations on the new snapshot) or it aborts and $\forall\, op_{t} \in T : op_t \notin Ops(S_{t})$ (none of the operations are in the new snapshot, i.e., $S_{t}$ = $S_n$), where $Ops(S)$ denotes the list of operations that generated $S$ from $S_{init}$.
  
 Our PotionDB prototype provides Transactional Causal Consistency (TCC) by default, i.e., our transactions always observe a consistent snapshot of the database.
 Transactions are atomic, i.e., either all the effects of the updates in the transaction are reflected in the next state of the database or none are.
@@ -1202,14 +1202,14 @@ Transactions are atomic, i.e., either all the effects of the updates in the tran
 \label{subsec:readcommited}
 %TODO: Maybe a table with all the symbols we use like in Cure?
 %Note for self:  PotionDB does not provide repeatable reads under the weaker consistency model, because the same read during one transaction can return different values under Rc
-Read Commited (RC) is a consistency model which guarantees that only states resulting from commited transactions can be read.
+Read Commited (RC) is a consistency model which guarantees that only states resulting from committed transactions can be read.
 This model provides weaker guarantees than transactional causal consistency.
-However, on write-heavy scenarios (e.g., 75\%-25\% write-read), the provision of consistent snapshots for TCC is rather expensive.
+However, on write-heavy scenarios (e.g., 75\%-25\% write-read workloads), the provision of consistent snapshots for TCC is expensive.
 This is common problem for systems providing some sort of causal consistency.
-E.g., Cure, Eiger, Gentlerain, COPS \cite{cure, eiger, gentlerain, cops} also have considerable performance drops when update ratios are high.
+E.g., Cure~\cite{cure}, Eiger~\cite{eiger}, GentleRain~\cite{gentlerain}, and COPS~\cite{cops} also have considerable performance drops when update ratios are high.
 Thus, we provide RC for write-heavy scenarios where maintaining a high read throughput is a must.
 
-Intuitively, under RC, PotionDB returns for each object whichever (commited) version is the latest available.
+Intuitively, under RC, PotionDB returns for each object the latest (committed) version available.
 Thus, reads for different objects may return different versions.
 This can be undesirable for some applications.
 For example, if we want to access the data of a customer alongside his list of purchases, and assuming both informations are stored in two different objects, it is desirable to read both under TCC in order to observe a consistent state, as the objects are correlated.
