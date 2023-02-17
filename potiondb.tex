@@ -1443,6 +1443,7 @@ $S_i$ will request from other server(s) the objects needed, on version $T.rc$.
 If needed, the other servers will wait until they can provide the requested version.
 Afterwards, the servers reply to $S_i$ with the requested objects.
 $S_i$ then applies the operations for the requested objects locally, and said operations are committed together with the rest of the transaction and propragated the same way as local operations are.
+Since all operations are executed on version $T.rc$, TCC is provided even for transactions with objects not locally replicated.
 %The request will be forwarded to a server with said object.
 %On transaction commit, said server will also execute the requested operation and return its result.
 %Forwarded requests are executed under RC, thus different versions may be read from the rest of the transaction.
