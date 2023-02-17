@@ -10,6 +10,8 @@
 \usepackage[inline]{enumitem}
 
 \usepackage{booktabs} %added for tables (Andre)
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 
 \definecolor{dkgreen}{rgb}{0,0.6,0}
 \definecolor{gray}{rgb}{0.5,0.5,0.5}
@@ -418,8 +420,10 @@ Without dynamic transactions, we could first read user $B$ as offline, then user
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{potiondb_architecture}
-	\caption{PotionDB Architecture~\carla{wasted space}}
+	\includegraphics[width=\linewidth]{PotionDBArch}
+	\caption{PotionDB Architecture}
+	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
+	%\caption{PotionDB Architecture~\carla{wasted space}}
 	\label{fig:arch}
 \end{figure}
 
@@ -1219,7 +1223,7 @@ This scenario is somewhat common as we expect most complex queries in PotionDB t
 Besides, the application developer can always fall back to TCC whenever necessary.
 
 We now define precisely our guarantees under RC.
-First, consecutive reads of the same object either return the same state, or the second read returns a more recent state, even if under the same transaction.
+First, consecutive reads of the same object either return the same state or a more recent state, whenever in the same transaction of not.
 I.e., consider a transaction T, reads $R_1(o) \in T$ and $R_2(o) \in T$, as well as the states returned by them, respectively, $S_1(o)$ and $S_2(o)$.
 Under RC, we have that $R_1(o) \prec R_2(o) \implies S_1(o) \prec S_2(o)$. \carla{I changed $s_i$ to $S_i$}
 Thus causality on a single object is respected, but isolation from other transactions is not.
@@ -1262,6 +1266,7 @@ This allows multicore CPUs to be efficiently utilized,
 with reads and updates executing in parallel whenever possible.
 Each object $o$ is assigned to only one shard, based on a hash of $o^{\mathit{id}}$.
 For clarity, let $o^{\mathit{shard}}$ be the shard where $o$ is stored.
+Each shard also has a unique id used for clock disambiguation.
 
 Each shard has one dedicated thread.
 This avoids the usage of locks when accessing objects, simplifying the implementation and avoiding other issues such as lock contention.
@@ -1294,30 +1299,26 @@ The scenarios where transactions can safely execute concurrently are as follows:
 \end{compactitem}
 
 In PotionDB, views are defined to answer complex queries directly with a single read.
-Due to the nature of hashing, views are likely to be spread across different shards.
+Due to the nature of hashing, views are likely spread across different shards.
 Thus, we expect most transactions will access few shards, allowing transactions to execute concurrently even in the presence of concurrent updates to unrelated objects. Our practical evaluation shows that sharding improves PotionDB's performance considerably.
-\andre{TODO: I don't actually have any results that demonstrate this}
+\andre{TODO: I don't actually have any results that demonstrate this. (Maybe I can just remove this phrase)}
 
-Other possible solutions to make use of multi-core CPUs are possible, for instance:
-\begin{compactenum}
-	\item \label{item:locks} using locks to protect the same object from being concurrently modified;
-	\item \label{item:multiplePotion} running multiple PotionDB servers in the same computer.
-\end{compactenum}
+%Other possible solutions to make use of multi-core CPUs are possible, for instance:
+%\begin{compactenum}
+%	\item \label{item:locks} using locks to protect the same object from being concurrently modified;
+%	\item \label{item:multiplePotion} running multiple PotionDB servers in the same computer.
+%\end{compactenum}
+%
+%Alternative \ref{item:locks} is difficult to implement efficiently, as the right level of lock granularity is needed.
+%Deadlocking, lock overhead, and fairness are also concerning.
+%Our solution does not need to lock data, thus avoiding lock overhead and deadlocks, while also being easier to implement.
+%
+%Alternative \ref{item:multiplePotion} would imply more replicas running in the system, which increases both replication and storage costs.
+%This would also imply concurrency conflicts even in the same computer. \carla{computer or replica?}
+%Finally, while this solution can allow more clients to be processed in the same period of time, and is rather easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. \andre{Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.}
 
-Alternative \ref{item:locks} is difficult to implement efficiently, as the right level of lock granularity is needed.
-Deadlocking, lock overhead, and fairness are also concerning.
-%Alternative \ref{item:locks} is difficult to implement, as it is required to find the right level of lock granularity and when should locks be obtained/released. 
-%Special care is needed to avoid deadlocking concurrent transactions. 
-%There's also concerns with both fairness and overhead of obtaining locks.
-Our solution does not need to lock data, thus avoiding lock overhead and deadlocks, while also being easier to implement.
-%Our solution does not need to lock data, thus it avoids the overhead from using locks, is easier to implement and does not have deadlocks.
-
-Alternative \ref{item:multiplePotion} would imply more replicas running in the system, which increases both replication and storage costs.
-This would also imply concurrency conflicts even in the same computer. \carla{computer or replica?}
-Finally, while this solution can allow more clients to be processed in the same period of time, and is rather easy to implement, it does not improve the performance of each client, as each transaction must be done in a single replica (and thread) to avoid breaking consistency. \andre{Does this need to be explained? The idea here is that we would lose the "write follows reads/writes" property.}
-
-Many existing solutions shard the data across multiple machines in the same data center \cite{cops, eiger, cure, mdcc, gentlerain}.
-While this implies coordination between machines for executing cross-shard transactions (e.g. with 2PC), it allows to scale the dataset size further than what a single machine can handle.
+Some existing solutions shard data across multiple machines in a data center \cite{cops, eiger, cure, mdcc, gentlerain}.
+While this requires coordination between machines for executing cross-shard transactions (e.g. with 2PC), it allows to scale the dataset size further than what a single machine can handle.
 This is, however, orthogonal to our research, as we focus on scalability of each individual server.
 %Any need to mention we could adapt this to PotionDB if desired?
 
@@ -1331,7 +1332,9 @@ The local vector clock symbolises the latest snapshot available in $sh_i$, which
 Any shard can access the server's physical clock, $\mathit{pc}$.
 Each shard $\mathit{sh}_i$ also keeps a list of prepared vector clocks, $prep_i$, as well as a list of commits on hold, $\mathit{hold}_i$.
 While we leverage on physical clocks for our protocols, the correctness of our protocols is independent of the skew of physical clocks between servers.
-In fact, any monotonically increasing clock would suffice for implementing $\mathit{pc}$.
+We assume $pc$ to be monotonically increasing when accessed sequentially.
+However different shards may concurrently read the same value of $pc$ - in this case, the shard's id is used to break the tie.
+%In fact, any monotonically increasing clock would suffice for implementing $\mathit{pc}$.
 
 A transaction $T$ has two clocks associated - a read vector clock, $T\!.\mathit{rc}$, and a commit clock, $T\!.\mathit{cc}$ (single scalar).
 The former represents the snapshot to be read by the transaction, while the latter is the snapshot that will be generated by the transaction's updates on commit.
@@ -1346,7 +1349,9 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 We apply a two-phase commit protocol as follows.
 First, a prepare message is sent to all shards in $W_T$.
 Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$. %Do I need to say it also stores the transaction ID?
-Since $\mathit{pc}$ is monotonically increasing, all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
+Since the values returned by $\mathit{pc}$ are monotonically increasing and efectively unique (due to $\mathit{sh}$'s id being used for tie breaking), 
+%Since $\mathit{pc}$ is monotonically increasing, 
+all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
 We set $T\!.\mathit{cc}$ equal to the highest returned clock.
 A commit message is then sent to all shards in $W_T$.	%I may need to prove how this still converges - I remember me and Carla talked about this and it is not obvious.
 
@@ -1366,7 +1371,7 @@ If the conditions hold, $T_h$ is removed from $\mathit{hold}_i$ and applied as d
 and the verification process repeats for the next lowest in $\mathit{hold}_i$.
 This process loops until $\mathit{hold}_i$ is empty or the lowest commit in $\mathit{hold}_i$ cannot be applied. %Do I need to state that vc is updated?
 
-A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, when all shards in $W_T$ send the committed message.
+A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, as soon as all shards in $W_T$ receive the commmit message.
 This happens even if any of the shards queued the commit.
 On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
 To be precise, assuming the transaction was committed on server $S_j$, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
@@ -1422,6 +1427,46 @@ These view updates can be provided in different ways - e.g., automatically throu
 How those updates are supplied is agnostic to our protocol, as long as they are included in the same transaction.
 %Should I refer here how we do it in PotionDB? Or mention the Section?
 %Should I mention that automated view updating isn't really a "solved" problem but rather more of a "forgotten" problem?
+
+\subsection{Operations on objects not locally replicated}
+\label{subsec:operationsNonLocal}
+
+PotionDB is a partially replicated database.
+As such, not every object is replicated everywhere.
+%In an optimal scenario, clients only need to access data that is present in a nearby server.
+Ideally, partial replication is done in such a way that data is distributed according to its relevance in the geographical area where each server is located in.
+This is also the scenario for which PotionDB is optimized.
+We do however recognize the need for queries that may involve global data (namely analytic/statistical queries), hence why we provide materialized views of data not locally replicated.
+
+Nevertheless, in case a client sporadically needs to access an object not served by a view and not locally replicated, the client can still request it to his local server $S_i$.
+$S_i$ will request from other server(s) the objects needed, on version $T.rc$.
+If needed, the other servers will wait until they can provide the requested version.
+Afterwards, the servers reply to $S_i$ with the requested objects.
+$S_i$ then applies the operations for the requested objects locally, and said operations are committed together with the rest of the transaction and propragated the same way as local operations are.
+%The request will be forwarded to a server with said object.
+%On transaction commit, said server will also execute the requested operation and return its result.
+%Forwarded requests are executed under RC, thus different versions may be read from the rest of the transaction.
+
+We believe for most use cases, good data locality when doing partial replication, alongside global views, will ensure the mechanism referred above will rarely to never be necessary.
+We note that data which may be revelant everywhere can be fully replicated if so is desired.
+
+%\subsection{Algorithm}
+%
+%%Variables:
+%%txnInfo: txnID -> VectorClk x set(shardID)
+%
+%\begin{algorithm}
+%	\begin{algorithmic}[1]
+%		\State oneday$^{TM}$
+%		\Function{update}{Identifier $\mathit{txId}$, Updates[] $\mathit{upds}$}
+%			\For{$\mathit{upd}$ \textbf{in} $\mathit{upds}$}
+%				 \State $\mathit{txnInfo[txID]}$ = $\mathit{txnInfo[txID]} \cup \mathit{upd^{shard}}$	%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
+%			\EndFor
+%		\EndFunction
+%	\end{algorithmic}
+%	\caption{WIP}
+%	\label{alg:wip}
+%\end{algorithm}
 
 \section{Replication}
 \label{sec:replication}
@@ -1657,22 +1702,6 @@ This new transaction may potencially make more operations relevant.
 However it is ensured the observable states will eventually converge.
 eventually the observable state will converge.
 We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and more details on non-uniform replication.
-
-\subsection{Operations on objects not locally replicated}
-\label{subsec:operationsNonLocal}
-
-In an optimal scenario, clients only need to access data that is present in a nearby server.
-Ideally, partial replication is done in such a way that data is distributed according to its relevance in the geographical area where each server is located in.
-This is also the scenario for which PotionDB is optimized.
-We do however recognize the need for queries that may involve global data (namely analytic/statistical queries), hence why we provide materialized views of data not locally replicated.
-
-Nevertheless, in case a client sporadically needs to access an object not served by a view and not locally replicated, the client can still request it to his local server.
-The request will be forwarded to a server with said object.
-On transaction commit, said server will also execute the requested operation and return its result.
-Forwarded requests are executed under RC, thus different versions may be read from the rest of the transaction.
-
-We believe for most use cases, good data locality when doing partial replication, alongside global views, will ensure forwarded requests will rarely to never be necessary.
-We note that data which may be revelant everywhere can be fully replicated if so is desired.
 
 \section{Designing views for applications}
 \label{sec:views_for_apps}
