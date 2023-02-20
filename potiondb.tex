@@ -11,7 +11,14 @@
 
 \usepackage{booktabs} %added for tables (Andre)
 \usepackage{algorithm}
-\usepackage{algpseudocode}
+\usepackage[noend]{algpseudocode}
+%\algnewcommand{\LeftComment}[1]{\Statex \(\triangleright\) #1}
+
+\usepackage{xparse}
+\makeatletter
+\NewDocumentCommand{\LeftComment}{s m}{%
+	\Statex \IfBooleanF{#1}{\hspace*{\ALG@thistlm}}\(\triangleright\) #2}
+\makeatother
 
 \definecolor{dkgreen}{rgb}{0,0.6,0}
 \definecolor{gray}{rgb}{0.5,0.5,0.5}
@@ -1451,23 +1458,138 @@ Since all operations are executed on version $T.rc$, TCC is provided even for tr
 We believe for most use cases, good data locality when doing partial replication, alongside global views, will ensure the mechanism referred above will rarely to never be necessary.
 We note that data which may be revelant everywhere can be fully replicated if so is desired.
 
-%\subsection{Algorithm}
-%
-%%Variables:
-%%txnInfo: txnID -> VectorClk x set(shardID)
-%
-%\begin{algorithm}
-%	\begin{algorithmic}[1]
-%		\State oneday$^{TM}$
-%		\Function{update}{Identifier $\mathit{txId}$, Updates[] $\mathit{upds}$}
-%			\For{$\mathit{upd}$ \textbf{in} $\mathit{upds}$}
-%				 \State $\mathit{txnInfo[txID]}$ = $\mathit{txnInfo[txID]} \cup \mathit{upd^{shard}}$	%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
-%			\EndFor
-%		\EndFunction
-%	\end{algorithmic}
-%	\caption{WIP}
-%	\label{alg:wip}
-%\end{algorithm}
+\subsection{Algorithm}
+
+%Variables:
+%txnInfo: txnID -> VectorClk x set(shardID)
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{vcG}$ \Comment{global vector clock of $S_i$}
+		\State $\mathit{txInfo}$ \Comment{$\mathit{txID} \to \{\mathit{shID}\}$}
+		\Function{startTransaction}{Clock $\mathit{clientClk}$}
+			\State wait until $\mathit{clientClk} \leq \mathit{vcG}$
+			\State $\mathit{rc} = \mathit{vcG}$
+		\EndFunction
+		\Function{updateOp}{Id $\mathit{txId}$, Update $\mathit{upd}$}
+			\State $\mathit{txnInfo[txId]} = \mathit{txnInfo[txId]} \cup \mathit{upd^{sh}}$	%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
+			\State send \Call{update}{$\mathit{txId}, \mathit{upd}$} to $\mathit{upd^{sh}}$
+		\EndFunction
+		\Function{readOp}{Id $\mathit{txId}$, Clock $\mathit{rc}$, Read $\mathit{read}$}
+			\State send \Call{read}{$\mathit{txId}, \mathit{rc}, \mathit{read}$} to $\mathit{read^{sh}}$
+		\EndFunction
+		\Function{commitTx}{Id $\mathit{txId}$, Clock $\mathit{rc}$}
+			\For{\textbf{each} $\mathit{sh} \in \mathit{txInfo[txId]}$}	\Comment{W\textsubscript{T}}
+				\State send \Call{prepare}{$\mathit{txId}$} to $\mathit{sh}$
+			\EndFor
+			\State $\mathit{maxTs} = \bot$	\Comment{timestamp, not vector clock}
+			\For{\textbf{each} $\mathit{sh} \in \mathit{txInfo[txId]}$}	
+				\State $\mathit{suggestedTs} \gets$ reply of $\mathit{sh}$ to \textsc{prepare}
+				\State $\mathit{maxTs} =$ \Call{max}{$\mathit{maxTs, suggestedTs}$}
+			\EndFor
+			\For{\textbf{each} $\mathit{sh} \in \mathit{txInfo[txId]}$}	
+				\State send \Call{commit}{$\mathit{txId, rc, maxTs}$} to $\mathit{sh}$
+			\EndFor
+		\EndFunction
+		\LeftComment{An always running routine}
+		\Function{globalClockUpdate}{}
+			\ForAll{$T \in $ ongoing transactions}
+				\State wait \textbf{for all} $\mathit{sh} \in \mathit{txInfo[T.txId]}$ to reply
+				\State $\mathit{vcG[i]} =$ \Call{max}{$\mathit{vcG[i]}, T.cc$}
+				%The max is needed because  two transactions (this one, other) on disjoint partitions could commit concurrently (safe) and the other transaction commit first with a higher ts than this one.
+				\State $\mathit{txInfo[T.txId]} = \bot$ 
+			\EndFor
+		\EndFunction
+	\end{algorithmic}
+	\caption{Commit and read protocol on S\textsubscript{i}'s Transaction Manager}
+	\label{alg:commit_tm}
+\end{algorithm}
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{vc_j}$ \Comment{latest applied clock of $\mathit{sh_j}$}
+		\State $\mathit{prep_i}$ \Comment{list of (sorted) prepared timestamps}
+		\State $\mathit{hold_i}$ \Comment{list of (sorted) commits on hold} %commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
+		\State $\mathit{txUpds}$ \Comment{$\mathit{txId} \to \mathit{[updates]}$}
+		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
+		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
+		%More precisely, assume e.g. T1 is about to be prepared on sh1, sh2 and sh3, and T2 is a remote transaction for sh1, sh2. 
+		%We could have the prepare of T1 be before T2 is applied on sh1 but after being applied on sh2. 
+		%Should we ensure T1 is only committed after T2 is applied in both sh1 and sh2? 
+		%Our implementation does that, the algorithm here (and the explanation in the paper) does not. 
+		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
+		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
+		\Function{prepare}{$\mathit{txId}$}
+			\State $\mathit{ts} = \mathit{pc}$
+			\State $\mathit{prep_i}$.\Call{sortedAdd}{$\mathit{ts, txId}$}
+			\State reply to $\mathit{TM}$ with $\mathit{ts}$
+		\EndFunction
+		\Function{commit}{$\mathit{txId, rc, cc}$}
+			\If{\Call{canCommit}{$\mathit{txId, cc}$}}
+				\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
+			\Else
+				\State $\mathit{hold_i}$.\Call{sortedAdd}{$\mathit{cc, txId, rc}$}
+			\EndIf
+			\State \Call{checkHoldCommits}{}()	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now 
+		\EndFunction
+		\Function{canCommit}{$\mathit{txId, maxTs}$}
+			\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}
+			\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{ts} < \mathit{maxTs}$}
+				\State \textbf{return} false
+			\EndIf
+			\If{$\mathit{prep_i}$.\Call{min}{}().$\mathit{ts < maxTs}$ $\|$ ($\mathit{hold_i}$.\Call{notEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{ts < maxTs}$)}
+				\State \textbf{return} false
+			\EndIf
+			\LeftComment{Safe to commit as no $T$ in $\mathit{prepi}$ or $\mathit{holdi}$ is smaller than $\mathit{maxTs}$}
+			\State \textbf{return} true
+		\EndFunction
+		\LeftComment{I don't think we need the pseudo-code for this function.}
+		\Function{checkHoldCommits}{}()
+			%Checks if holdi.min() can be applied (i.e., prepi.min() > holdi.min()). If yes, remove txn from holdi, apply, and repeat process. If not, stop. I don’t think we need the pseudo-code of this.
+			\If{$\mathit{hold_i}$.\Call{isEmpty}{}()}
+				\State \textbf{return}
+			\EndIf
+			\If{$\mathit{prep_i}$.\Call{isEmpty}{}()}
+				\While{$\mathit{hold_i}$.\Call{notEmpty}{}()}
+					\State $\mathit{txId, cc = hold_i}$.\Call{removeMin}{}()
+					\State \Call{applyCommit}{$\mathit{txId, cc}$}
+				\EndWhile
+				\State \textbf{return}
+			\EndIf
+			\State $\mathit{minPrep = prep_i}$.\Call{getMin}{}().$\mathit{ts}$
+			\For{($\mathit{txId, cc}$) in $\mathit{hold_i}$}
+				\If{$\mathit{cc < minPrep}$}
+					\State $\mathit{holdi}$.\Call{removeMin}{}()	\Comment{Same as the currrent value of $\mathit{txId, cc}$}
+					\State \Call{applyCommit}{$\mathit{txId, cc}$}
+				\Else
+					\State \textbf{return}
+				\EndIf
+			\EndFor
+		\EndFunction
+		\Function{applyCommit}{$\mathit{txId, rc, maxTs}$}
+			%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
+			\Statex \hspace*{1.5em}(...) \Comment{Applying the updates to the CRDTs}
+			\State $\mathit{vc_j[i] = maxTs}$
+			\State $\mathit{txUpds[txId] = \bot}$
+			\State reply to $\mathit{TM}$ (for \Call{globalClockRoutine}{})
+		\EndFunction
+		\Function{update}{$\mathit{txId, upd}$}
+			\State $\mathit{txUpds[txId]}$.\Call{append}{$\mathit{upd}$}
+		\EndFunction
+		\Function{applyRead}{$\mathit{txId, rc, read}$}
+			\If{$\mathit{rc \leq vc_j}$ \&\& $\mathit{rc \geq objs[read.id]}$.\Call{lastVersion}{}()}
+				\State \textbf{return} 	$\mathit{objs[read.id]}$.\Call{read}{$\mathit{txUpds[txId]}$}
+			\EndIf
+			\State \textbf{return} $\mathit{objs[read.id]}$.\Call{readInThePast}{$\mathit{txUpds[txId]}$}
+		\EndFunction
+	\end{algorithmic}
+	\caption{Commit and read protocol execution on S\textsubscript{i}'s partition sh\textsubscript{j}}
+	\label{alg:commit_part}
+	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neithe the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
+	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
+	%T2: writes only to shard P2. Assume P2 prepares T2 with clock 2.
+	%Now, assume T2 is committed successfully in P2. Thus, the global clock in Transaction Manager (TM) is updated to 2. Also assume that T1 is prepared in P1 but not committed yet (e.g., because the coordinator thread for T1 is sleeping). Now assume T3 with read clock 2. T3 can process as the read clock (2) is the same as the global clock (2) Now assume a read in T3 is issued for P1. P1 would happily read it unless there is a queue for “future reads” (would need to check prepares on hold/commits on hold)
+\end{algorithm}
 
 \section{Replication}
 \label{sec:replication}
