@@ -1470,6 +1470,9 @@ We note that data which may be revelant everywhere can be fully replicated if so
 		\Function{startTransaction}{Clock $\mathit{clientClk}$}
 			\State wait until $\mathit{clientClk} \leq \mathit{vcG}$
 			\State $\mathit{rc} = \mathit{vcG}$
+			\State $\mathit{txId} = $ new unique id
+			\State $\mathit{txInfo[txId]} = \{\}$
+			\State \textbf{return} $\mathit{txId, rc}$
 		\EndFunction
 		\Function{updateOp}{Id $\mathit{txId}$, Update $\mathit{upd}$}
 			\State $\mathit{txnInfo[txId]} = \mathit{txnInfo[txId]} \cup \mathit{upd^{sh}}$	%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
