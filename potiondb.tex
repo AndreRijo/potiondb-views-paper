@@ -1492,7 +1492,7 @@ We note that data which may be revelant everywhere can be fully replicated if so
 			\EndFor
 		\EndFunction
 		\LeftComment{An always running routine}
-		\Function{globalClockUpdate}{}
+		\Function{globalClockUpdate}{}()
 			\ForAll{$T \in $ ongoing transactions}
 				\State wait \textbf{for all} $\mathit{sh} \in \mathit{txInfo[T.txId]}$ to reply
 				\State $\mathit{vcG[i]} =$ \Call{max}{$\mathit{vcG[i]}, T.cc$}
@@ -1519,12 +1519,12 @@ We note that data which may be revelant everywhere can be fully replicated if so
 		%Our implementation does that, the algorithm here (and the explanation in the paper) does not. 
 		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
 		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
-		\Function{prepare}{$\mathit{txId}$}
+		\Function{prepare}{Id $\mathit{txId}$}
 			\State $\mathit{ts} = \mathit{pc}$
 			\State $\mathit{prep_i}$.\Call{sortedAdd}{$\mathit{ts, txId}$}
 			\State reply to $\mathit{TM}$ with $\mathit{ts}$
 		\EndFunction
-		\Function{commit}{$\mathit{txId, rc, cc}$}
+		\Function{commit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } cc}$}
 			\If{\Call{canCommit}{$\mathit{txId, cc}$}}
 				\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
 			\Else
@@ -1532,12 +1532,12 @@ We note that data which may be revelant everywhere can be fully replicated if so
 			\EndIf
 			\State \Call{checkHoldCommits}{}()	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now 
 		\EndFunction
-		\Function{canCommit}{$\mathit{txId, maxTs}$}
+		\Function{canCommit}{$\mathit{\textrm{Id } txId, \textrm{Timestamp } maxTs}$}
 			\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}
-			\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{ts} < \mathit{maxTs}$}
+			\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc} < \mathit{maxTs}$}
 				\State \textbf{return} false
 			\EndIf
-			\If{$\mathit{prep_i}$.\Call{min}{}().$\mathit{ts < maxTs}$ $\|$ ($\mathit{hold_i}$.\Call{notEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{ts < maxTs}$)}
+			\If{$\mathit{prep_i}$.\Call{min}{}().$\mathit{ts < maxTs}$ $\|$ ($\mathit{hold_i}$.\Call{notEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc < maxTs}$)}
 				\State \textbf{return} false
 			\EndIf
 			\LeftComment{Safe to commit as no $T$ in $\mathit{prepi}$ or $\mathit{holdi}$ is smaller than $\mathit{maxTs}$}
@@ -1551,41 +1551,41 @@ We note that data which may be revelant everywhere can be fully replicated if so
 			\EndIf
 			\If{$\mathit{prep_i}$.\Call{isEmpty}{}()}
 				\While{$\mathit{hold_i}$.\Call{notEmpty}{}()}
-					\State $\mathit{txId, cc = hold_i}$.\Call{removeMin}{}()
-					\State \Call{applyCommit}{$\mathit{txId, cc}$}
+					\State $\mathit{txId, rc, cc = hold_i}$.\Call{removeMin}{}()
+					\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
 				\EndWhile
 				\State \textbf{return}
 			\EndIf
-			\State $\mathit{minPrep = prep_i}$.\Call{getMin}{}().$\mathit{ts}$
-			\For{($\mathit{txId, cc}$) in $\mathit{hold_i}$}
+			\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{ts}$
+			\For{\textbf{each} ($\mathit{txId, rc, cc}$) in $\mathit{hold_i}$}
 				\If{$\mathit{cc < minPrep}$}
-					\State $\mathit{holdi}$.\Call{removeMin}{}()	\Comment{Same as the currrent value of $\mathit{txId, cc}$}
-					\State \Call{applyCommit}{$\mathit{txId, cc}$}
+					\State $\mathit{holdi}$.\Call{removeMin}{}()	\Comment{Same as the current value of $\mathit{txId, rc, cc}$}
+					\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
 				\Else
 					\State \textbf{return}
 				\EndIf
 			\EndFor
 		\EndFunction
-		\Function{applyCommit}{$\mathit{txId, rc, maxTs}$}
+		\Function{applyCommit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } maxTs}$}
 			%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
 			\Statex \hspace*{1.5em}(...) \Comment{Applying the updates to the CRDTs}
 			\State $\mathit{vc_j[i] = maxTs}$
 			\State $\mathit{txUpds[txId] = \bot}$
 			\State reply to $\mathit{TM}$ (for \Call{globalClockRoutine}{})
 		\EndFunction
-		\Function{update}{$\mathit{txId, upd}$}
+		\Function{update}{$\mathit{\textrm{Id } txId, \textrm{Update } upd}$}
 			\State $\mathit{txUpds[txId]}$.\Call{append}{$\mathit{upd}$}
 		\EndFunction
-		\Function{applyRead}{$\mathit{txId, rc, read}$}
+		\Function{applyRead}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Read } read}$}
 			\If{$\mathit{rc \leq vc_j}$ \&\& $\mathit{rc \geq objs[read.id]}$.\Call{lastVersion}{}()}
 				\State \textbf{return} 	$\mathit{objs[read.id]}$.\Call{read}{$\mathit{txUpds[txId]}$}
 			\EndIf
 			\State \textbf{return} $\mathit{objs[read.id]}$.\Call{readInThePast}{$\mathit{txUpds[txId]}$}
 		\EndFunction
 	\end{algorithmic}
-	\caption{Commit and read protocol execution on S\textsubscript{i}'s partition sh\textsubscript{j}}
+	\caption{Commit and read protocol execution on S\textsubscript{i}'s shard sh\textsubscript{j}}
 	\label{alg:commit_part}
-	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neithe the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
+	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neither the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
 	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
 	%T2: writes only to shard P2. Assume P2 prepares T2 with clock 2.
 	%Now, assume T2 is committed successfully in P2. Thus, the global clock in Transaction Manager (TM) is updated to 2. Also assume that T1 is prepared in P1 but not committed yet (e.g., because the coordinator thread for T1 is sleeping). Now assume T3 with read clock 2. T3 can process as the read clock (2) is the same as the global clock (2) Now assume a read in T3 is issued for P1. P1 would happily read it unless there is a queue for “future reads” (would need to check prepares on hold/commits on hold)
@@ -1825,6 +1825,133 @@ This new transaction may potencially make more operations relevant.
 However it is ensured the observable states will eventually converge.
 eventually the observable state will converge.
 We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and more details on non-uniform replication.
+
+\subsection{Algorithm}
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{lastSentClk}$ \Comment{last $T$'s clock that was replicated.}
+		\State $\mathit{receivingTxs}$ \Comment{$\mathit{serverId} \to$ ($\mathit{txId, rc, cc, shardId \to [upds]}$)} %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets.
+		\LeftComment{Executes periodically}
+		\Function{replicate}{}()
+			\ForAll{shards $\mathit{sh}$}
+				\State send \Call{GetTransactions}{$\mathit{lastSentClk}$} to $\mathit{sh}$	%I didn't write the pseudo-code for this one
+			\EndFor
+			\State $\mathit{txCache = [(shardId \to T)]}$
+			\State $\mathit{safeClk = \top}$	\Comment{Clock that all partitions already committed.}
+			\ForAll{shards $\mathit{sh}$}
+				\State $\mathit{txns, shClk} \gets$ reply of $\mathit{sh}$ to \Call{GetTransactions}{}
+				\State $\mathit{safeClk} = $ \Call{min}{$\mathit{safeClk, shClk}$}
+				\State $\mathit{txCache}$.\Call{sortedAdd}{$\mathit{txns}$}
+			\EndFor{}
+			\For{\textbf{each} $\mathit{txShards} \in \mathit{txCache}$ \&\& $\mathit{txShards.cc} \leq \mathit{safeClk}$}
+				\State $\mathit{txPerBucket =}$ \Call{splitTxPerBucket}{$\mathit{txShards}$}
+				\For{\textbf{each} $\mathit{bucket, upds} \in \mathit{txPerBucket}$}
+					\State send ($\mathit{bucket, upds, txShards.rc, txShards.cc}$,   $\mathit{txShards.txId}$) to servers replicating $\mathit{bucket}$	%In our prototype, send this to the RabbitMQ instance of Si.
+				\EndFor
+			\EndFor
+			\State send ($\mathit{CLK, safeClk}$) to all servers
+			\State $\mathit{lastSentClk = safeClk}$
+		\EndFunction
+		\LeftComment{I don't think it's needed for this function's pseudo-code to be here.}
+		\Function{splitTxPerBucket}{shardId$\to$T $\mathit{txShards}$}
+			\State $\mathit{txPerBucket = bucket \to shard \to [upds]}$
+			\For{\textbf{each} $\mathit{sh} \in \mathit{txShards}$}
+				\For{\textbf{each} $\mathit{upd} \in \mathit{txShards.upds}$}
+					\State $\mathit{txPerBucket[upd^{bucket}][sh]}$.\Call{add}{$\mathit{upd}$}
+				\EndFor
+			\EndFor
+			\State \textbf{return} $\mathit{txPerBucket}$
+		\EndFunction
+		\Function{receiveBucket}{$\mathit{\textrm{Bucket } bucket, \textrm{[Update] } upds}$, $\mathit{\textrm{Clock } rc, \textrm{Timestamp } cc, \textrm{Id } txId, \textrm{Id } serverId}$}
+			%Note: the communication layer ensures messages are received in order. I.e., all buckets of a transaction will be received before the next transaction, and CLK will be the last message.
+			%So this means, per server, we have one transaction being received at each moment
+			\If{$\mathit{txId} \neq \mathit{receivingTxns[serverId].txId}$}
+				\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$ \Comment{New tx. Old one is complete.}
+				\State $\mathit{receivingTxns[serverId] = \bot}$
+			\EndIf
+			\State $\mathit{receivingTxns[serverId].txId, .rc, .cc = txId, rc, cc}$
+			\State $\mathit{receivingTxns[serverId].upds}$.\Call{addAll}{$\mathit{upds}$}
+		\EndFunction
+		\Function{receiveClock}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
+			\If{$\mathit{receivingTxns[serverId] \neq \bot}$}
+				\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$
+				\State $\mathit{receivingTxns[serverId] = \bot}$
+			\EndIf
+			\State send \Call{remoteClk}{$\mathit{ts, serverId}$} to $\mathit{TM}$
+		\EndFunction
+	\end{algorithmic}
+	\caption{Replication protocol on S\textsubscript{i}'s Replicator}
+	\label{alg:replication_repl}
+\end{algorithm}
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{queued}$ \Comment{$serverId \to [T | CLK]$}	%Since for each server the transactions arrive by T.cc order, they are also stored by T.cc order.
+		%\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc, \textrm{Id\to[Update] }updsPerShard, \textrm{Id }serverId}$}
+		\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc}$, Id$\to$[Update] $\mathit{updsPerShard}$, Id $\mathit{serverId}$}
+			\If{$\mathit{rr \leq vc_G}$}
+				\For{\textbf{each} $\mathit{sh, upds} \in \mathit{updsPerShard}$}
+					\State send \Call{applyRemoteTx}{$\mathit{cc, upds, serverId}$ to $\mathit{sh}$}
+				\EndFor
+				\ForAll{$\mathit{sh} \in \mathit{updsPerShard}$}
+					\State wait to finish
+				\EndFor
+				\State $\mathit{vc_G[serverId]} = \mathit{cc}$
+				\State \Call{checkPendingRemote}{}()
+			\Else
+				\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{cc, txId, rr, updsPerShard}$}
+			\EndIf
+		\EndFunction
+		\Function{remoteClk}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
+			\If{$\mathit{queued[serverId]}$.\Call{isEmpty}{}()}
+				\State send \Call{applyRemoteClk}{$\mathit{ts, serverId}$ to all shards}
+				\State wait for all shards to finish
+				\State $\mathit{vc_G[serverId]} = \mathit{ts}$
+				\State \Call{checkPendingRemote}{}()
+			\Else
+				\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{ts}$}
+			\EndIf
+		\EndFunction
+		\Function{checkPendingRemote}{}()
+			\State $\mathit{finished = false}$
+			\While{$\mathit{!finished}$}
+				\State $\mathit{finished = true}$
+				\For{\textbf{each} ($\mathit{serverId, txs} \in \mathit{queued}$)}
+					\For{\textbf{each} ($\mathit{sh, upds} \in \mathit{txs[0].updsPerShard}$)}
+						\State send \Call{applyRemoteTx}{$\mathit{txs[0].cc, upds}$, $\mathit{serverId}$} to $\mathit{sh}$
+					\EndFor
+					\ForAll{$\mathit{sh} \in \mathit{txs[0].updsPerShard}$}
+						\State wait to finish
+					\EndFor
+					\State $\mathit{vc_G[serverId] = txs[0].cc}$
+					\State $\mathit{finished = false}$
+					\State $\mathit{txs}$.\Call{removeFirst}{}()
+				\EndFor
+				\LeftComment{Note: when a $\mathit{CLK}$ is popped from the queue, we send \Call{applyRemoteClk}{}() to all shards and update vc\textsubscript{G}.}
+			\EndWhile
+		\EndFunction
+		%IMPORTANT NOTE: I skipped the code related with NuCRDTs. Namely, when applying remote transactions (and only those), each partition has to check if any of the NuCRDTs generated new operations – if so, those are sent to the TM. The TM collects all those operations and issues a new transaction to be committed – all partitions that generated NuCRDT ops are involved in the commit. After commit, the transaction is sent to replication like any other transaction. The only special caveat is that this transaction’s updates are not locally applied, only on remote, as the local NuCRDTs already know of these operations.
+		%Should I include this in the pseudo-code?
+	\end{algorithmic}
+	\caption{Remote transactions on S\textsubscript{i}'s Transaction Manager}
+	\label{alg:replication_tm}
+\end{algorithm}
+
+\begin{algorithm}
+	%Note: Likely not necessary I suppose...
+	\begin{algorithmic}[1]
+		\Function{applyRemoteTx}{$\mathit{\textrm{Timestamp }cc, \textrm{[Update] }upds}$, Id $\mathit{serverId}$}
+			\Statex \hspace*{1.5em} (...)	\Comment{Applying the updates to the CRDTs}
+			\State $\mathit{vc_j[serverId] = cc}$
+		\EndFunction
+		\Function{applyRemoteClk}{$\mathit{\textrm{Timestamp }cc, \textrm{Id }serverId}$}
+			\State $\mathit{vc_j[serverId] = cc}$
+		\EndFunction
+	\end{algorithmic}
+	\caption{Remote transactions execution on S\textsubscript{i}'s shard sh\textsubscript{j}}
+	\label{alg:replication_mat}
+\end{algorithm}
 
 \section{Designing views for applications}
 \label{sec:views_for_apps}
