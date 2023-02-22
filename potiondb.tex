@@ -1459,7 +1459,7 @@ We believe for most use cases, good data locality when doing partial replication
 We note that data which may be revelant everywhere can be fully replicated if so is desired.
 
 \subsection{Algorithm}
-
+ 
 %Variables:
 %txnInfo: txnID -> VectorClk x set(shardID)
 
@@ -1467,7 +1467,7 @@ We note that data which may be revelant everywhere can be fully replicated if so
 	\begin{algorithmic}[1]
 		\Statex svID,  shID  \Comment{server and shard identifiers}
 		\Statex \textbf{input}
-		\Statex $\quad$ globalVC: vClock  \Comment{global vector clock of $S_i$}
+		\Statex $\quad$ globalVC: vClock  \Comment{global vector clock of $S_j$}
 		\Statex $\quad$ txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
 		\Statex $\quad$ ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
 		
@@ -1488,16 +1488,16 @@ We note that data which may be revelant everywhere can be fully replicated if so
 		\EndFunction
 		\Function{commitTx}{txId: ID, readVC: vClock}
 			\ForAll{sh \textbf{in} txInfo[txId]	} \Comment{all shards written by txId}
-				\State \textbf{send} \Call{prepare}{txId} \textbf{to} sh
+				\State \textbf{send} \Call{prepare}{txId} \textbf{to} sh	\label{alg_line:prepare}
 			\EndFor
 			\State maxTs = $\bot$	\Comment{initialize timestamp}
 			\ForAll{sh \textbf{in} txInfo[txId]}	
 				%\State suggestedTs $\gets$ \textbf{reply of} sh \textbf{from}  \textsc{prepare}
 				\State  \textbf{receive} suggestedTs \textbf{from} sh
-				\State maxTs $\leftarrow$ \Call{max}{maxTs, suggestedTs}
+				\State maxTs $\leftarrow$ \Call{max}{maxTs, suggestedTs} \label{alg_line:maxTs}
 			\EndFor
 			\ForAll{sh \textbf{in} txInfo[txId]}	
-				\State \textbf{send} \Call{commit}{txId, readVc, maxTs} \textbf{to} sh
+				\State \textbf{send} \Call{commit}{txId, readVc, maxTs} \textbf{to} sh \label{alg_line:commitSend}
 			\EndFor
 		\EndFunction
 		\LeftComment{An always running routine}
@@ -1505,20 +1505,20 @@ We note that data which may be revelant everywhere can be fully replicated if so
 			\ForAll{T \textbf{in} ongoingTxs}
 				\ForAll{sh \textbf{in} txInfo[T.txId]}
 				\State  \textbf{receive} reply \textbf{from} sh
-				\State vcG[i \begin{color}{red}(what is i?)\end{color}]  $\leftarrow$ \Call{max}{vcG[i], T.cc}
-				%The max is needed because  two transactions (this one, other) on disjoint partitions could commit concurrently (safe) and the other transaction commit first with a higher ts than this one.
-				\State txInfo[T.txId] $\leftarrow$  $\bot$ 
 				\EndFor
+			\State vcG[j \begin{color}{red}(what is j?)\end{color}]  $\leftarrow$ \Call{max}{vcG[j], T.cc}
+			%The max is needed because  two transactions (this one, other) on disjoint partitions could commit concurrently (safe) and the other transaction commit first with a higher ts than this one.
+			\State txInfo[T.txId] $\leftarrow$  $\bot$ 
 			\EndFor
 		\EndFunction
 	\end{algorithmic}
-	\caption{Transaction Manager of $S_i$: commit and read protocol}
+	\caption{Transaction Manager of $S_j$: commit and read protocol}
 	\label{alg:commit_tm}
 \end{algorithm}
 
 \begin{algorithm}
 	\begin{algorithmic}[1]
-		\State $\mathit{vc_j}$ \Comment{latest applied clock of $\mathit{sh_j}$}
+		\State $\mathit{vc_i}$ \Comment{latest applied clock of $\mathit{sh_j}$}
 		\State $\mathit{prep_i}$ \Comment{list of (sorted) prepared timestamps}
 		\State $\mathit{hold_i}$ \Comment{list of (sorted) commits on hold} %commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
 		\State $\mathit{txUpds}$ \Comment{$\mathit{txId} \to \mathit{[updates]}$}
@@ -1530,21 +1530,25 @@ We note that data which may be revelant everywhere can be fully replicated if so
 		%Our implementation does that, the algorithm here (and the explanation in the paper) does not. 
 		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
 		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
-		\Function{prepare}{Id $\mathit{txId}$}
-			\State $\mathit{ts} = \mathit{pc}$
+		\Function{prepare}{Id $\mathit{txId}$} \label{alg_line:prepstart}
+			\State $\mathit{ts} = (\mathit{pc}, i)$
 			\State $\mathit{prep_i}$.\Call{sortedAdd}{$\mathit{ts, txId}$}
-			\State reply to $\mathit{TM}$ with $\mathit{ts}$
+			\State reply to $\mathit{TM}$ with $\mathit{ts}$	\label{alg_line:prepfinish}
 		\EndFunction
 		\Function{commit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } cc}$}
-			\If{\Call{canCommit}{$\mathit{txId, cc}$}}
+			\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{txId}$
+			\If{\Call{canCommit}{$\mathit{txId, cc}$}}	\label{alg_line:call_canCommit}
 				\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
 			\Else
 				\State $\mathit{hold_i}$.\Call{sortedAdd}{$\mathit{cc, txId, rc}$}
 			\EndIf
-			\State \Call{checkHoldCommits}{}()	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now 
+			\If{$\mathit{minPrep \neq prep_i.}$\Call{min}{}().$\mathit{txId}$}	
+			\LeftComment{If $\mathit{txId}$ was the lowest prepare, then possibly the lowest commit in $\mathit{hold_i}$ may be appliable now.}
+				\State \Call{checkHoldCommits}{}() \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
+			\EndIf 
 		\EndFunction
-		\Function{canCommit}{$\mathit{\textrm{Id } txId, \textrm{Timestamp } maxTs}$}
-			\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}
+		\Function{canCommit}{$\mathit{\textrm{Id } txId, \textrm{Timestamp } maxTs}$} \label{alg_line:start_canCommit}
+			\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}	\label{alg_line:removePrep}
 			\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc} < \mathit{maxTs}$}
 				\State \textbf{return} false
 			\EndIf
@@ -1553,9 +1557,9 @@ We note that data which may be revelant everywhere can be fully replicated if so
 			\EndIf
 			\LeftComment{Safe to commit as no $T$ in $\mathit{prepi}$ or $\mathit{holdi}$ is smaller than $\mathit{maxTs}$}
 			\State \textbf{return} true
-		\EndFunction
+		\EndFunction \label{alg_line:finish_canCommit}
 		\LeftComment{I don't think we need the pseudo-code for this function.}
-		\Function{checkHoldCommits}{}()
+		\Function{checkHoldCommits}{}()	\label{alg_line:start_checkHold}
 			%Checks if holdi.min() can be applied (i.e., prepi.min() > holdi.min()). If yes, remove txn from holdi, apply, and repeat process. If not, stop. I don’t think we need the pseudo-code of this.
 			\If{$\mathit{hold_i}$.\Call{isEmpty}{}()}
 				\State \textbf{return}
@@ -1576,11 +1580,11 @@ We note that data which may be revelant everywhere can be fully replicated if so
 					\State \textbf{return}
 				\EndIf
 			\EndFor
-		\EndFunction
+		\EndFunction	\label{alg_line:finish_checkHold}
 		\Function{applyCommit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } maxTs}$}
 			%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
 			\Statex \hspace*{1.5em}(...) \Comment{Applying the updates to the CRDTs}
-			\State $\mathit{vc_j[i] = maxTs}$
+			\State $\mathit{vc_i[j] = maxTs}$
 			\State $\mathit{txUpds[txId] = \bot}$
 			\State reply to $\mathit{TM}$ (for \Call{globalClockRoutine}{})
 		\EndFunction
@@ -1588,19 +1592,49 @@ We note that data which may be revelant everywhere can be fully replicated if so
 			\State $\mathit{txUpds[txId]}$.\Call{append}{$\mathit{upd}$}
 		\EndFunction
 		\Function{applyRead}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Read } read}$}
-			\If{$\mathit{rc \leq vc_j}$ \&\& $\mathit{rc \geq objs[read.id]}$.\Call{lastVersion}{}()}
+			\If{$\mathit{rc \leq vc_i}$ \&\& $\mathit{rc \geq objs[read.id]}$.\Call{lastVersion}{}()}
 				\State \textbf{return} 	$\mathit{objs[read.id]}$.\Call{read}{$\mathit{txUpds[txId]}$}
 			\EndIf
 			\State \textbf{return} $\mathit{objs[read.id]}$.\Call{readInThePast}{$\mathit{txUpds[txId]}$}
 		\EndFunction
 	\end{algorithmic}
-	\caption{Commit and read protocol execution on S\textsubscript{i}'s shard sh\textsubscript{j}}
-	\label{alg:commit_part}
+	\caption{Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
+	\label{alg:commit_shard}
 	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neither the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
 	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
 	%T2: writes only to shard P2. Assume P2 prepares T2 with clock 2.
 	%Now, assume T2 is committed successfully in P2. Thus, the global clock in Transaction Manager (TM) is updated to 2. Also assume that T1 is prepared in P1 but not committed yet (e.g., because the coordinator thread for T1 is sleeping). Now assume T3 with read clock 2. T3 can process as the read clock (2) is the same as the global clock (2) Now assume a read in T3 is issued for P1. P1 would happily read it unless there is a queue for “future reads” (would need to check prepares on hold/commits on hold)
 \end{algorithm}
+
+Algorithms \ref{alg:commit_tm} and \ref{alg:commit_part} contain the commit prrotocol from the point of view of, respectively, the transaction coordinator (Transaction Manager) and the shards.
+First, a prepare message is sent to all shards in $W_T$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:prepare}).
+Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$ (Alg. \ref{alg:commit_shard}, lines \ref{alg_line:prepstart}-\ref{alg_line:prepfinish}).
+Timestamps are unique as $\mathit{pc}$ is monotonically increasing and $\mathit{sh^{id}}$ is used for tie breaking between concurrent accesses to $\mathit{pc}$.
+Thus, all shards in $W_T$ will return different timestamps and no two transactions in $S_j$ will have a proposed value in common.
+T.cc is set equal to the highest returned timestamp (Alg. \ref{alg:commit_tm}, line \ref{alg_line:maxTs}).
+A commit message is then sent to all shards in $W_T$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:commitSend}).
+
+A shard $\mathit{sh}_i$ proceeds as follow when it receives a commit message for transaction $T$.
+First, it checks if the commit can be applied, which can only be if no prepare or commit on hold have a smaller timestamp (Alg. \ref{alg:commit_shard}, lines \ref{alg_line:call_canCommit}, \ref{alg_line:call_startCommit}-\ref{alg_line:call_finishCommit}).
+If so, the commit and $T$'s updates are applied and $\mathit{vc}_i[S_j]$ is updated to $T\!.\mathit{cc}$.
+Otherwise, the commit is queued in $\mathit{hold}_i$ to be applied later, as other transactions may commit with a lower $\mathit{cc}$ than $T\!.\mathit{cc}$.
+In either case, $T$'s prepared clock is removed from $\mathit{prep}_i$ (Alg. \ref{alg:commit_shard}, line \ref{alg_line:removePrep}). 
+If $T$'s value in $prep_i$ was the lowest, then the commits on hold are checked for appliance (???), as now the conditions for commit may be true for the lowest commit on hold (???).
+%If $T$'s value in $prep_i$ was the lowest, then the commits on hold are checked for appliance (???), as $T$'s prepare may have been the only one with a value lower than the $cc$ of the commits on hold.
+
+%If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $\mathit{prep}_i$, 
+%the transaction with lowest $\mathit{cc}$ in $\mathit{hold}_i$, $T_h$, is verified for appliance, with the same rules as above.
+%If the conditions hold, $T_h$ is removed from $\mathit{hold}_i$ and applied as described above, 
+%and the verification process repeats for the next lowest in $\mathit{hold}_i$.
+%This process loops until $\mathit{hold}_i$ is empty or the lowest commit in $\mathit{hold}_i$ cannot be applied. %Do I need to state that vc is updated?
+
+%A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, as soon as all shards in $W_T$ receive the commmit message.
+%This happens even if any of the shards queued the commit.
+%On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
+%To be precise, assuming the transaction was committed on server $S_j$, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
+%It is necessary to select the maximum, as transactions accessing disjoins sets of write shards may commit concurrently.
+%Note that this does not break consistency as the write sets are disjoint -- thus no racing conditions occur to the same object.
+%Furthermore, the reading protocol consider this possibility when applying reads.
 
 \section{Replication}
 \label{sec:replication}
