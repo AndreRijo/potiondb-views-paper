@@ -1713,17 +1713,145 @@ This could be achieved with the following steps:
 
 %I will either need a subsection to talk about publish/subscribe and RabbitMQ, or to talk it here. Consider having a figure showing rabbitMQ + PotionDB and how the communication is done.
 
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{lastSentClk}$ \Comment{last $T$'s clock that was replicated.}
+		\State $\mathit{receivingTxs}$ \Comment{$\mathit{serverId} \to$ ($\mathit{txId, rc, cc, shardId \to [upds]}$)} %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets.
+		\LeftComment{Executes periodically}
+		\Function{replicate}{}()
+		\ForAll{shards $\mathit{sh}$}
+		\State send \Call{GetTransactions}{$\mathit{lastSentClk}$} to $\mathit{sh}$	%I didn't write the pseudo-code for this one
+		\EndFor
+		\State $\mathit{txCache = [(shardId \to T)]}$
+		\State $\mathit{safeClk = \top}$	\Comment{Clock that all partitions already committed.}
+		\ForAll{shards $\mathit{sh}$}
+		\State $\mathit{txns, shClk} \gets$ reply of $\mathit{sh}$ to \Call{GetTransactions}{}
+		\State $\mathit{safeClk} = $ \Call{min}{$\mathit{safeClk, shClk}$}
+		\State $\mathit{txCache}$.\Call{sortedAdd}{$\mathit{txns}$}
+		\EndFor{}
+		\For{\textbf{each} $\mathit{txShards} \in \mathit{txCache}$ \&\& $\mathit{txShards.cc} \leq \mathit{safeClk}$}
+		\State $\mathit{txPerBucket =}$ \Call{splitTxPerBucket}{$\mathit{txShards}$} \label{alg_line:call_splitTxPerBucket}
+		\For{\textbf{each} $\mathit{bucket, upds} \in \mathit{txPerBucket}$}
+		\State send ($\mathit{bucket, upds, txShards.rc, txShards.cc}$,   $\mathit{txShards.txId}$) to servers replicating $\mathit{bucket}$	\label{alg_line:sendTx}	%In our prototype, send this to the RabbitMQ instance of Si.
+		\EndFor
+		\EndFor
+		\State send ($\mathit{CLK, safeClk}$) to all servers
+		\State $\mathit{lastSentClk = safeClk}$
+		\EndFunction
+		\LeftComment{I don't think it's needed for this function's pseudo-code to be here.}
+		\Function{splitTxPerBucket}{shardId$\to$T $\mathit{txShards}$}
+		\State $\mathit{txPerBucket = bucket \to shard \to [upds]}$
+		\For{\textbf{each} $\mathit{sh} \in \mathit{txShards}$}
+		\For{\textbf{each} $\mathit{upd} \in \mathit{txShards.upds}$}
+		\State $\mathit{txPerBucket[upd^{bucket}][sh]}$.\Call{add}{$\mathit{upd}$}
+		\EndFor
+		\EndFor
+		\State \textbf{return} $\mathit{txPerBucket}$
+		\EndFunction
+		\Function{receiveBucket}{$\mathit{\textrm{Bucket } bucket, \textrm{[Update] } upds}$, $\mathit{\textrm{Clock } rc, \textrm{Timestamp } cc, \textrm{Id } txId, \textrm{Id } serverId}$}
+		%Note: the communication layer ensures messages are received in order. I.e., all buckets of a transaction will be received before the next transaction, and CLK will be the last message.
+		%So this means, per server, we have one transaction being received at each moment
+		\If{$\mathit{txId} \neq \mathit{receivingTxns[serverId].txId}$}
+		\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$ \Comment{New tx. Old one is complete.}
+		\State $\mathit{receivingTxns[serverId] = \bot}$
+		\EndIf
+		\State $\mathit{receivingTxns[serverId].txId, .rc, .cc = txId, rc, cc}$
+		\State $\mathit{receivingTxns[serverId].upds}$.\Call{addAll}{$\mathit{upds}$}
+		\EndFunction
+		\Function{receiveClock}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
+		\If{$\mathit{receivingTxns[serverId] \neq \bot}$}
+		\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$
+		\State $\mathit{receivingTxns[serverId] = \bot}$
+		\EndIf
+		\State send \Call{remoteClk}{$\mathit{ts, serverId}$} to $\mathit{TM}$
+		\EndFunction
+	\end{algorithmic}
+	\caption{Replication protocol on S\textsubscript{i}'s Replicator}
+	\label{alg:replication_repl}
+\end{algorithm}
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{queued}$ \Comment{$serverId \to [T | CLK]$}	\label{alg_line:queued}	%Since for each server the transactions arrive by T.cc order, they are also stored by T.cc order.
+		%\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc, \textrm{Id\to[Update] }updsPerShard, \textrm{Id }serverId}$}
+		\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc}$, Id$\to$[Update] $\mathit{updsPerShard}$, Id $\mathit{serverId}$}
+		\If{$\mathit{rr \leq vc_G}$}	\label{alg_line:remoteCheck}
+		\For{\textbf{each} $\mathit{sh, upds} \in \mathit{updsPerShard}$}
+		\State send \Call{applyRemoteTx}{$\mathit{cc, upds, serverId}$ to $\mathit{sh}$}
+		\EndFor
+		\ForAll{$\mathit{sh} \in \mathit{updsPerShard}$}
+		\State wait to finish
+		\EndFor
+		\State $\mathit{vc_G[serverId]} = \mathit{cc}$
+		\State \Call{checkPendingRemote}{}()
+		\Else
+		\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{cc, txId, rr, updsPerShard}$}
+		\EndIf
+		\EndFunction
+		\Function{remoteClk}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
+		\If{$\mathit{queued[serverId]}$.\Call{isEmpty}{}()}
+		\State send \Call{applyRemoteClk}{$\mathit{ts, serverId}$ to all shards}
+		\State wait for all shards to finish
+		\State $\mathit{vc_G[serverId]} = \mathit{ts}$
+		\State \Call{checkPendingRemote}{}()
+		\Else
+		\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{ts}$}
+		\EndIf
+		\EndFunction
+		\Function{checkPendingRemote}{}()
+		\State $\mathit{finished = false}$
+		\While{$\mathit{!finished}$}
+		\State $\mathit{finished = true}$
+		\For{\textbf{each} ($\mathit{serverId, txs} \in \mathit{queued}$)}
+		\For{\textbf{each} ($\mathit{sh, upds} \in \mathit{txs[0].updsPerShard}$)}
+		\State send \Call{applyRemoteTx}{$\mathit{txs[0].cc, upds}$, $\mathit{serverId}$} to $\mathit{sh}$
+		\EndFor
+		\ForAll{$\mathit{sh} \in \mathit{txs[0].updsPerShard}$}
+		\State wait to finish
+		\EndFor
+		\State $\mathit{vc_G[serverId] = txs[0].cc}$
+		\State $\mathit{finished = false}$
+		\State $\mathit{txs}$.\Call{removeFirst}{}()
+		\EndFor
+		\LeftComment{Note: when a $\mathit{CLK}$ is popped from the queue, we send \Call{applyRemoteClk}{}() to all shards and update vc\textsubscript{G}.}
+		\EndWhile
+		\EndFunction
+		%IMPORTANT NOTE: I skipped the code related with NuCRDTs. Namely, when applying remote transactions (and only those), each partition has to check if any of the NuCRDTs generated new operations – if so, those are sent to the TM. The TM collects all those operations and issues a new transaction to be committed – all partitions that generated NuCRDT ops are involved in the commit. After commit, the transaction is sent to replication like any other transaction. The only special caveat is that this transaction’s updates are not locally applied, only on remote, as the local NuCRDTs already know of these operations.
+		%Should I include this in the pseudo-code?
+	\end{algorithmic}
+	\caption{Remote transactions on S\textsubscript{i}'s Transaction Manager}
+	\label{alg:replication_tm}
+\end{algorithm}
+
+\begin{algorithm}
+	%Note: Likely not necessary I suppose...
+	\begin{algorithmic}[1]
+		\Function{applyRemoteTx}{$\mathit{\textrm{Timestamp }cc, \textrm{[Update] }upds}$, Id $\mathit{serverId}$}
+		\Statex \hspace*{1.5em} (...)	\Comment{Applying the updates to the CRDTs}
+		\State $\mathit{vc_j[serverId] = cc}$
+		\EndFunction
+		\Function{applyRemoteClk}{$\mathit{\textrm{Timestamp }cc, \textrm{Id }serverId}$}
+		\State $\mathit{vc_j[serverId] = cc}$
+		\EndFunction
+	\end{algorithmic}
+	\caption{Remote transactions execution on S\textsubscript{i}'s shard sh\textsubscript{j}}
+	\label{alg:replication_shard}
+\end{algorithm}
+
 %I may need to define somewhere that transactions have a commit clock associated to them.
 When a transaction commits locally, it is queued for replication.
 Periodically, our replication algorithm collects queued transactions and sends them asynchronously to other replicas.
+Algoritms \ref{alg:replication_repl}, \ref{alg:replication_tm} and \ref{alg:replication_shard} showcase the roles of, respectively, the Replicator, TransactionManager and Materializer in the replication algorithm.
 
-Given a transaction $T$, we group all updates $u \in T$ according to each update's bucket.
+%Not referred/explained: how we get the list of transactions that are ready to replicate and haven't been replicated already.
+
+Given a transaction $T$, we group all updates $u \in T$ according to each update's bucket (Alg \ref{alg:replication_repl}, line \ref{alg_line:call_splitTxPerBucket}).
 Let $T^{bkt}$ be the sublist of updates of $T$ such that, $\forall u(o) \in T^{bkt}, o^{bucket} = bkt$.
 Note that $T^{bkt}$ maintains the order of updates, that is, for any pair of updates $u_1$, $u_2 \in T^{bkt}$, if $u_1 \prec u_2$ in $T$, then $u_1 \prec u_2$ in $T^{bkt}$.
 This ensures updates for the same object are applied by causal order and, thus, the correct final state is reached in every replica.
 
 %I want to say our algorithm's unit of delivery is T_{bkt}. We demand no order in sending T_{bkt}, but we do demand that T1 \prec T2 => All T1_{bkt} are sent before any T2_{bkt}  gets sent.
-For a given transaction $T$, all of its $T^{bkt}$ can be sent in an arbitrary order.
+For a given transaction $T$, all of its $T^{bkt}$ can be sent in an arbitrary order (Alg \ref{alg:replication_repl}, line \ref{alg_line:sendTx}).
 We do however require that for any $T_1$, $T_2$: $T_1 \prec T_2 \implies$ all $T_1^{bkt}$ is sent before any $T_2^{bkt}$ is.
 Thus, our algorithm sends transactions according to the serialization order.
 We assume an underlying communication mechanism that ensures causal order delivery, ensuring that all servers receive transactions from a given server $S_i$ according to their serialization order in $S_i$.
@@ -1734,13 +1862,13 @@ We also assume some mechanism that allows knowing which buckets each server repl
 
 %Note: This probably belongs to the transaction algorithm description.
 Assume $S_1, ..., S_n$ is the list of PotionDB servers and $S_i \in S_1, ..., S_n$.
-$\forall j \in (1, ..., n \setminus i)$, server $S_i$ has a queue $q_j$ which holds the transactions received from $S_j$ sorted by the order received.
-A transaction $T$ on the head of a queue is only applied if $T.rc \leq S_i$'s $vc_G$.
+$\forall j \in (1, ..., n \setminus i)$, server $S_i$ has a queue $q_j$ which holds the transactions received from $S_j$ sorted by the order received (Alg \ref{alg:replication_tm}, line \ref{alg_line:queued}).
+A transaction $T$ on the head of a queue is only applied if $T.rc \leq S_i$'s $vc_G$ (Alg \ref{alg:replication_tm}, line \ref{alg_line:remoteCheck}).
 Note that transactions from different servers can be applied by any order if they are concurrent. 
 If they are not, e.g. if for two transactions $T_1$, $T_2$ from different replicas we have $T_1 \prec T_2$, then $T_2.rc$ will not be $\leq$ $S_i$'s $vc_G$ until $T_1$ is applied.
 Thus, $T_2$ will be applied after $T_1$, maintaining causality. %I do not know if this explanation is generic enough - the idea here is that, for transactions causally related from different replicas, they will be applied with causal order, as their clocks will enforce so (we cannot apply a transaction until the replica's clock reflects all preceding transactions).
 
-In our PotionDB prototype we leverage on RabbitMQ \cite{???} for handling communication between replicas.
+In our PotionDB prototype we leverage on RabbitMQ \cite{rabbitmq} for handling communication between replicas.
 RabbitMQ is a message broker which allows consumers to register the topics of messages in which they are interested.
 We associate a topic to a bucket in order to allow servers to only receives updates for buckets they are replicating.
 
@@ -1902,133 +2030,6 @@ This new transaction may potencially make more operations relevant.
 However it is ensured the observable states will eventually converge.
 eventually the observable state will converge.
 We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and more details on non-uniform replication.
-
-\subsection{Algorithm}
-
-\begin{algorithm}
-	\begin{algorithmic}[1]
-		\State $\mathit{lastSentClk}$ \Comment{last $T$'s clock that was replicated.}
-		\State $\mathit{receivingTxs}$ \Comment{$\mathit{serverId} \to$ ($\mathit{txId, rc, cc, shardId \to [upds]}$)} %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets.
-		\LeftComment{Executes periodically}
-		\Function{replicate}{}()
-			\ForAll{shards $\mathit{sh}$}
-				\State send \Call{GetTransactions}{$\mathit{lastSentClk}$} to $\mathit{sh}$	%I didn't write the pseudo-code for this one
-			\EndFor
-			\State $\mathit{txCache = [(shardId \to T)]}$
-			\State $\mathit{safeClk = \top}$	\Comment{Clock that all partitions already committed.}
-			\ForAll{shards $\mathit{sh}$}
-				\State $\mathit{txns, shClk} \gets$ reply of $\mathit{sh}$ to \Call{GetTransactions}{}
-				\State $\mathit{safeClk} = $ \Call{min}{$\mathit{safeClk, shClk}$}
-				\State $\mathit{txCache}$.\Call{sortedAdd}{$\mathit{txns}$}
-			\EndFor{}
-			\For{\textbf{each} $\mathit{txShards} \in \mathit{txCache}$ \&\& $\mathit{txShards.cc} \leq \mathit{safeClk}$}
-				\State $\mathit{txPerBucket =}$ \Call{splitTxPerBucket}{$\mathit{txShards}$}
-				\For{\textbf{each} $\mathit{bucket, upds} \in \mathit{txPerBucket}$}
-					\State send ($\mathit{bucket, upds, txShards.rc, txShards.cc}$,   $\mathit{txShards.txId}$) to servers replicating $\mathit{bucket}$	%In our prototype, send this to the RabbitMQ instance of Si.
-				\EndFor
-			\EndFor
-			\State send ($\mathit{CLK, safeClk}$) to all servers
-			\State $\mathit{lastSentClk = safeClk}$
-		\EndFunction
-		\LeftComment{I don't think it's needed for this function's pseudo-code to be here.}
-		\Function{splitTxPerBucket}{shardId$\to$T $\mathit{txShards}$}
-			\State $\mathit{txPerBucket = bucket \to shard \to [upds]}$
-			\For{\textbf{each} $\mathit{sh} \in \mathit{txShards}$}
-				\For{\textbf{each} $\mathit{upd} \in \mathit{txShards.upds}$}
-					\State $\mathit{txPerBucket[upd^{bucket}][sh]}$.\Call{add}{$\mathit{upd}$}
-				\EndFor
-			\EndFor
-			\State \textbf{return} $\mathit{txPerBucket}$
-		\EndFunction
-		\Function{receiveBucket}{$\mathit{\textrm{Bucket } bucket, \textrm{[Update] } upds}$, $\mathit{\textrm{Clock } rc, \textrm{Timestamp } cc, \textrm{Id } txId, \textrm{Id } serverId}$}
-			%Note: the communication layer ensures messages are received in order. I.e., all buckets of a transaction will be received before the next transaction, and CLK will be the last message.
-			%So this means, per server, we have one transaction being received at each moment
-			\If{$\mathit{txId} \neq \mathit{receivingTxns[serverId].txId}$}
-				\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$ \Comment{New tx. Old one is complete.}
-				\State $\mathit{receivingTxns[serverId] = \bot}$
-			\EndIf
-			\State $\mathit{receivingTxns[serverId].txId, .rc, .cc = txId, rc, cc}$
-			\State $\mathit{receivingTxns[serverId].upds}$.\Call{addAll}{$\mathit{upds}$}
-		\EndFunction
-		\Function{receiveClock}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
-			\If{$\mathit{receivingTxns[serverId] \neq \bot}$}
-				\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$
-				\State $\mathit{receivingTxns[serverId] = \bot}$
-			\EndIf
-			\State send \Call{remoteClk}{$\mathit{ts, serverId}$} to $\mathit{TM}$
-		\EndFunction
-	\end{algorithmic}
-	\caption{Replication protocol on S\textsubscript{i}'s Replicator}
-	\label{alg:replication_repl}
-\end{algorithm}
-
-\begin{algorithm}
-	\begin{algorithmic}[1]
-		\State $\mathit{queued}$ \Comment{$serverId \to [T | CLK]$}	%Since for each server the transactions arrive by T.cc order, they are also stored by T.cc order.
-		%\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc, \textrm{Id\to[Update] }updsPerShard, \textrm{Id }serverId}$}
-		\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc}$, Id$\to$[Update] $\mathit{updsPerShard}$, Id $\mathit{serverId}$}
-			\If{$\mathit{rr \leq vc_G}$}
-				\For{\textbf{each} $\mathit{sh, upds} \in \mathit{updsPerShard}$}
-					\State send \Call{applyRemoteTx}{$\mathit{cc, upds, serverId}$ to $\mathit{sh}$}
-				\EndFor
-				\ForAll{$\mathit{sh} \in \mathit{updsPerShard}$}
-					\State wait to finish
-				\EndFor
-				\State $\mathit{vc_G[serverId]} = \mathit{cc}$
-				\State \Call{checkPendingRemote}{}()
-			\Else
-				\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{cc, txId, rr, updsPerShard}$}
-			\EndIf
-		\EndFunction
-		\Function{remoteClk}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
-			\If{$\mathit{queued[serverId]}$.\Call{isEmpty}{}()}
-				\State send \Call{applyRemoteClk}{$\mathit{ts, serverId}$ to all shards}
-				\State wait for all shards to finish
-				\State $\mathit{vc_G[serverId]} = \mathit{ts}$
-				\State \Call{checkPendingRemote}{}()
-			\Else
-				\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{ts}$}
-			\EndIf
-		\EndFunction
-		\Function{checkPendingRemote}{}()
-			\State $\mathit{finished = false}$
-			\While{$\mathit{!finished}$}
-				\State $\mathit{finished = true}$
-				\For{\textbf{each} ($\mathit{serverId, txs} \in \mathit{queued}$)}
-					\For{\textbf{each} ($\mathit{sh, upds} \in \mathit{txs[0].updsPerShard}$)}
-						\State send \Call{applyRemoteTx}{$\mathit{txs[0].cc, upds}$, $\mathit{serverId}$} to $\mathit{sh}$
-					\EndFor
-					\ForAll{$\mathit{sh} \in \mathit{txs[0].updsPerShard}$}
-						\State wait to finish
-					\EndFor
-					\State $\mathit{vc_G[serverId] = txs[0].cc}$
-					\State $\mathit{finished = false}$
-					\State $\mathit{txs}$.\Call{removeFirst}{}()
-				\EndFor
-				\LeftComment{Note: when a $\mathit{CLK}$ is popped from the queue, we send \Call{applyRemoteClk}{}() to all shards and update vc\textsubscript{G}.}
-			\EndWhile
-		\EndFunction
-		%IMPORTANT NOTE: I skipped the code related with NuCRDTs. Namely, when applying remote transactions (and only those), each partition has to check if any of the NuCRDTs generated new operations – if so, those are sent to the TM. The TM collects all those operations and issues a new transaction to be committed – all partitions that generated NuCRDT ops are involved in the commit. After commit, the transaction is sent to replication like any other transaction. The only special caveat is that this transaction’s updates are not locally applied, only on remote, as the local NuCRDTs already know of these operations.
-		%Should I include this in the pseudo-code?
-	\end{algorithmic}
-	\caption{Remote transactions on S\textsubscript{i}'s Transaction Manager}
-	\label{alg:replication_tm}
-\end{algorithm}
-
-\begin{algorithm}
-	%Note: Likely not necessary I suppose...
-	\begin{algorithmic}[1]
-		\Function{applyRemoteTx}{$\mathit{\textrm{Timestamp }cc, \textrm{[Update] }upds}$, Id $\mathit{serverId}$}
-			\Statex \hspace*{1.5em} (...)	\Comment{Applying the updates to the CRDTs}
-			\State $\mathit{vc_j[serverId] = cc}$
-		\EndFunction
-		\Function{applyRemoteClk}{$\mathit{\textrm{Timestamp }cc, \textrm{Id }serverId}$}
-			\State $\mathit{vc_j[serverId] = cc}$
-		\EndFunction
-	\end{algorithmic}
-	\caption{Remote transactions execution on S\textsubscript{i}'s shard sh\textsubscript{j}}
-	\label{alg:replication_mat}
-\end{algorithm}
 
 \section{Designing views for applications}
 \label{sec:views_for_apps}
