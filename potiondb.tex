@@ -1274,6 +1274,7 @@ with reads and updates executing in parallel whenever possible.
 Each object $o$ is assigned to only one shard, based on a hash of $o^{\mathit{id}}$.
 For clarity, let $o^{\mathit{shard}}$ be the shard where $o$ is stored.
 Each shard also has a unique id used for clock disambiguation.
+For simplicity, it is also possible to obtain the shard of $o$ from its $id$, or from any read/update operation regarding $o$.
 
 Each shard has one dedicated thread.
 This avoids the usage of locks when accessing objects, simplifying the implementation and avoiding other issues such as lock contention.
@@ -1349,74 +1350,283 @@ Applying a local commit only advances $S_j$'s entry in a vector clock, hence why
 Updates are only applied when a transaction is committed. 
 Reads are applied as soon as they are issued. %This phrase probably belongs in another place.
 
-
 \subsection{Commit protocol}
-%Probably I should write the pseudo-code of this algorithm?
-\carla{Replying to Andre's comment. Yes, an algorithm is needed.}
-We apply a two-phase commit protocol as follows.
-First, a prepare message is sent to all shards in $W_T$.
-Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$. %Do I need to say it also stores the transaction ID?
-Since the values returned by $\mathit{pc}$ are monotonically increasing and efectively unique (due to $\mathit{sh}$'s id being used for tie breaking), 
-%Since $\mathit{pc}$ is monotonically increasing, 
-all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
-We set $T\!.\mathit{cc}$ equal to the highest returned clock.
-A commit message is then sent to all shards in $W_T$.	%I may need to prove how this still converges - I remember me and Carla talked about this and it is not obvious.
 
-A shard $\mathit{sh}_i$ proceeds as follows when it receives a commit message.
-A commit can only be applied if
-\begin{enumerate*}[label=(\roman*)] 
-	\item all prepared clocks except the one for $T$ are higher than $T.\mathit{cc}$ and
-	\item there is no $T_a.\mathit{cc}$ in $\mathit{hold}_i$ for which $T_a.\mathit{cc} < T\!.\mathit{cc}$.
-\end{enumerate*}
-If so, the commit and $T$'s updates are applied and $\mathit{vc}_i[S_j]$ is updated to $T\!.\mathit{cc}$.
+%Variables:
+%txnInfo: txnID -> VectorClk x set(shardID)
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\Statex svID,  shID  \Comment{server and shard identifiers}
+		\Statex \textbf{input}
+		\Statex $\quad$ globalVC: vClock  \Comment{global vector clock of $S_j$}
+		\Statex $\quad$ txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
+		\Statex $\quad$ ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
+		
+		\Function{startTransaction}{clientVC: vClock} \label{alg_line:startTransaction}
+		\State \textbf{wait until} clientVC $\leq$ globalVC	\label{alg_line:waitClientClk}
+		\State readVC $\leftarrow$ globalVC
+		\State txId $\leftarrow$ \Call{generateUniqueId}{ }
+		\State txInfo[txId] $\leftarrow \emptyset$ 
+		\State \textbf{return} txId, readVC
+		\EndFunction
+		\Function{updateOp}{txId: ID, objId: (key, bucket, type), op: Update}
+		\State txInfo[txId] $\leftarrow$ txnInfo[txId] $\cup$ op$^{\mathit{shard}}$	
+		%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
+		\State \textbf{send} \Call{update}{txId, objId, op} \textbf{to} op$^{\mathit{shard}}$
+		\EndFunction
+		\Function{readOp}{txId: ID, readVC: vClock, objId: (key, bucket, type), op: Read} \label{alg_line:readTM}
+		\State \textbf{send} \Call{read}{txId, readVC, objId, op} \textbf{to} op$^{\mathit{shard}}$
+		\EndFunction
+		\Function{commitTx}{txId: ID, readVC: vClock}
+		\ForAll{sh \textbf{in} txInfo[txId]	} \Comment{all shards written by txId}
+		\State \textbf{send} \Call{prepare}{txId} \textbf{to} sh	\label{alg_line:prepare}
+		\EndFor
+		\State maxTs = $\bot$	\Comment{initialize timestamp}
+		\ForAll{sh \textbf{in} txInfo[txId]}	
+		%\State suggestedTs $\gets$ \textbf{reply of} sh \textbf{from}  \textsc{prepare}
+		\State  \textbf{receive} suggestedTs \textbf{from} sh
+		\State maxTs $\leftarrow$ \Call{max}{maxTs, suggestedTs} \label{alg_line:maxTs}
+		\EndFor
+		\ForAll{sh \textbf{in} txInfo[txId]}	
+		\State \textbf{send} \Call{commit}{txId, readVc, maxTs} \textbf{to} sh \label{alg_line:commitSend}
+		\EndFor
+		\EndFunction
+		\LeftComment{An always running routine}
+		\Function{globalClockUpdate}{ } \label{alg_line:globalClockUpdate}
+		\ForAll{T \textbf{in} ongoingTxs}
+		\ForAll{sh \textbf{in} txInfo[T.txId]}
+		\State  \textbf{receive} reply \textbf{from} sh
+		\EndFor
+		\State vcG[j]  $\leftarrow$ \Call{max}{vcG[j], T.cc}
+		%The max is needed because  two transactions (this one, other) on disjoint partitions could commit concurrently (safe) and the other transaction commit first with a higher ts than this one.
+		\State txInfo[T.txId] $\leftarrow$  $\bot$ 
+		\EndFor
+		\EndFunction
+	\end{algorithmic}
+	\caption{Transaction Manager of $S_j$: commit and read protocol}
+	\label{alg:commit_tm}
+\end{algorithm}
+
+\begin{algorithm}
+	\begin{algorithmic}[1]
+		\State $\mathit{vc_i}$ \Comment{latest applied clock of $\mathit{sh_j}$}
+		\State $\mathit{prep_i}$ \Comment{list of (sorted) prepared timestamps}
+		\State $\mathit{hold_i}$ \Comment{list of (sorted) commits on hold} %commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
+		\State $\mathit{txUpds}$ \Comment{$\mathit{txId} \to \mathit{[updates]}$}
+		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
+		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
+		%More precisely, assume e.g. T1 is about to be prepared on sh1, sh2 and sh3, and T2 is a remote transaction for sh1, sh2. 
+		%We could have the prepare of T1 be before T2 is applied on sh1 but after being applied on sh2. 
+		%Should we ensure T1 is only committed after T2 is applied in both sh1 and sh2? 
+		%Our implementation does that, the algorithm here (and the explanation in the paper) does not. 
+		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
+		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
+		\Function{prepare}{Id $\mathit{txId}$} \label{alg_line:prepstart}
+		\State $\mathit{ts} = (\mathit{pc}, i)$
+		\State $\mathit{prep_i}$.\Call{sortedAdd}{$\mathit{ts, txId}$}
+		\State reply to $\mathit{TM}$ with $\mathit{ts}$	\label{alg_line:prepfinish}
+		\EndFunction
+		\Function{commit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } cc}$}
+		\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{txId}$
+		\If{\Call{canCommit}{$\mathit{txId, cc}$}}	\label{alg_line:call_canCommit}
+		\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
+		\Else
+		\State $\mathit{hold_i}$.\Call{sortedAdd}{$\mathit{cc, txId, rc}$}
+		\EndIf
+		\If{$\mathit{minPrep \neq prep_i.}$\Call{min}{}().$\mathit{txId}$}	
+		\LeftComment{If $\mathit{txId}$ was the lowest prepare, then possibly the lowest commit in $\mathit{hold_i}$ may be appliable now.}
+		\State \Call{checkHoldCommits}{}() \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
+		\EndIf 
+		\EndFunction
+		\Function{canCommit}{$\mathit{\textrm{Id } txId, \textrm{Timestamp } maxTs}$} \label{alg_line:start_canCommit}
+		\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}	\label{alg_line:removePrep}
+		\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc} < \mathit{maxTs}$}
+		\State \textbf{return} false
+		\EndIf
+		\If{$\mathit{prep_i}$.\Call{min}{}().$\mathit{ts < maxTs}$ $\|$ ($\mathit{hold_i}$.\Call{notEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc < maxTs}$)}
+		\State \textbf{return} false
+		\EndIf
+		\LeftComment{Safe to commit as no $T$ in $\mathit{prepi}$ or $\mathit{holdi}$ is smaller than $\mathit{maxTs}$}
+		\State \textbf{return} true
+		\EndFunction \label{alg_line:finish_canCommit}
+		\LeftComment{I don't think we need the pseudo-code for this function.}
+		\Function{checkHoldCommits}{}()	\label{alg_line:start_checkHold}
+		%Checks if holdi.min() can be applied (i.e., prepi.min() > holdi.min()). If yes, remove txn from holdi, apply, and repeat process. If not, stop. I don’t think we need the pseudo-code of this.
+		\If{$\mathit{hold_i}$.\Call{isEmpty}{}()}
+		\State \textbf{return}
+		\EndIf
+		\If{$\mathit{prep_i}$.\Call{isEmpty}{}()}
+		\While{$\mathit{hold_i}$.\Call{notEmpty}{}()}
+		\State $\mathit{txId, rc, cc = hold_i}$.\Call{removeMin}{}()
+		\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
+		\EndWhile
+		\State \textbf{return}
+		\EndIf
+		\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{ts}$
+		\For{\textbf{each} ($\mathit{txId, rc, cc}$) in $\mathit{hold_i}$}
+		\If{$\mathit{cc < minPrep}$}
+		\State $\mathit{holdi}$.\Call{removeMin}{}()	\Comment{Same as the current value of $\mathit{txId, rc, cc}$}
+		\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
+		\Else
+		\State \textbf{return}
+		\EndIf
+		\EndFor
+		\EndFunction	\label{alg_line:finish_checkHold}
+		\Function{applyCommit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } maxTs}$}
+		%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
+		\Statex \hspace*{1.5em}(...) \Comment{Applying the updates to the CRDTs}
+		\State $\mathit{vc_i[j] = maxTs}$
+		\State $\mathit{txUpds[txId] = \bot}$
+		\State reply to $\mathit{TM}$ (for \Call{globalClockRoutine}{}) \label{alg_line:applyCommitReply}
+		\EndFunction
+		\Function{update}{$\mathit{\textrm{Id } txId, \textrm{(key, bucket, type) } objId, \textrm{Update } op}$}
+		\State $\mathit{txUpds[txId]}$.\Call{append}{$\mathit{op}$}
+		\EndFunction
+		\Function{applyRead}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{(key, bucket, type) } objId}$, Read  $\mathit{op}$}	\label{alg_line:readShard}
+		\If{$\mathit{rc \geq objs[objId]}$.\Call{lastVersion}{}()}
+		\State \textbf{return} 	$\mathit{objs[objId]}$.\Call{read}{$\mathit{txUpds[txId]}$}	\label{alg_line:read}
+		\EndIf
+		\State \textbf{return} $\mathit{objs[objId]}$.\Call{readInThePast}{$\mathit{txUpds[txId]}$}	\label{alg_line:readInThePast}
+		\EndFunction
+	\end{algorithmic}
+	\caption{Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
+	\label{alg:commit_shard}
+	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neither the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
+	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
+	%T2: writes only to shard P2. Assume P2 prepares T2 with clock 2.
+	%Now, assume T2 is committed successfully in P2. Thus, the global clock in Transaction Manager (TM) is updated to 2. Also assume that T1 is prepared in P1 but not committed yet (e.g., because the coordinator thread for T1 is sleeping). Now assume T3 with read clock 2. T3 can process as the read clock (2) is the same as the global clock (2) Now assume a read in T3 is issued for P1. P1 would happily read it unless there is a queue for “future reads” (would need to check prepares on hold/commits on hold)
+\end{algorithm}
+
+Algorithms \ref{alg:commit_tm} and \ref{alg:commit_shard} contain the commit protocol from the point of view of, respectively, the transaction coordinator (Transaction Manager) and the shards.
+First, a prepare message is sent to all shards in $W_T$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:prepare}).
+Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$ (Alg. \ref{alg:commit_shard}, lines \ref{alg_line:prepstart}-\ref{alg_line:prepfinish}).
+Timestamps are unique as $\mathit{pc}$ is monotonically increasing and $\mathit{sh^{id}}$ is used for tie breaking between concurrent accesses to $\mathit{pc}$.
+Thus, all shards in $W_T$ will return different timestamps and no two transactions in $S_j$ will have a proposed value in common.
+$\mathit{T.cc}$ is set equal to the highest returned timestamp (Alg. \ref{alg:commit_tm}, line \ref{alg_line:maxTs}).
+A commit message is then sent to all shards in $W_T$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:commitSend}).
+
+A shard $\mathit{sh}_i$ in server $\mathit{S_j}$ proceeds as follow when a commit message for transaction $T$ is received.
+First, it checks if the commit can be applied, which can only be if no prepare or commit on hold has a smaller timestamp (Alg. \ref{alg:commit_shard}, lines \ref{alg_line:call_canCommit}, \ref{alg_line:start_canCommit}-\ref{alg_line:finish_canCommit}).
+If so, the commit and $T$'s updates are applied and $\mathit{vc}_i[j]$ is updated to $T\!.\mathit{cc}$.
 Otherwise, the commit is queued in $\mathit{hold}_i$ to be applied later, as other transactions may commit with a lower $\mathit{cc}$ than $T\!.\mathit{cc}$.
-In either case, $T$'s prepared clock is removed from $\mathit{prep}_i$ and $\mathit{sh}_i$ replies with a committed message.
+In either case, $T$'s prepared clock is removed from $\mathit{prep}_i$ (Alg. \ref{alg:commit_shard}, line \ref{alg_line:removePrep}). 
+If $T$'s value in $prep_i$ was the lowest, then the commits on hold are checked for appliance (Alg. \ref{alg:commit_shard}, line \ref{alg_line:call_checkHold}), as now the conditions for commit may be true for the lowest commit on hold.
+%If $T$'s value in $prep_i$ was the lowest, then the commits on hold are checked for appliance (???), as $T$'s prepare may have been the only one with a value lower than the $cc$ of the commits on hold.
 
-If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $\mathit{prep}_i$, 
-the transaction with lowest $\mathit{cc}$ in $\mathit{hold}_i$, $T_h$, is verified for appliance, with the same rules as above.
-If the conditions hold, $T_h$ is removed from $\mathit{hold}_i$ and applied as described above, 
-and the verification process repeats for the next lowest in $\mathit{hold}_i$.
-This process loops until $\mathit{hold}_i$ is empty or the lowest commit in $\mathit{hold}_i$ cannot be applied. %Do I need to state that vc is updated?
-
-A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, as soon as all shards in $W_T$ receive the commmit message.
-This happens even if any of the shards queued the commit.
-On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
-To be precise, assuming the transaction was committed on server $S_j$, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
-It is necessary to select the maximum, as transactions accessing disjoins sets of write shards may commit concurrently.
+The client is informed of the commit as soon as all shards in $W_T$ receive the commit message, even if some shards queued the commit.
+On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish applying the commit (Alg. \ref{alg:commit_shard}, line \ref{alg_line:applyCommitReply}).
+This is achieved with the help of a routine that is responsible for receiving commit replies of shards and updating $\mathit{vc_G}$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:globalClockUpdate}).
+To be precise, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
+It is necessary to select the maximum as transactions accessing disjoins sets of write shards may commit concurrently.
 Note that this does not break consistency as the write sets are disjoint -- thus no racing conditions occur to the same object.
-Furthermore, the reading protocol consider this possibility when applying reads.
+Furthermore, the read protocol considers this possibility when applying reads. \andre{Actually, at the moment our read protocol/algorithm does not consider this, as it would imply a reading queue in the shards... and having to check for queued reads whenever a commit is applied...}
+%Maybe the part above could be shortened as we have the algorithm.
 
 %Maybe this should be before commit?
 \subsection{Consistent reads}
-\label{subsec:consistentReads}
+
 PotionDB provides transactional causal consistency as described in Section \ref{subsec:transactionalcausal}.
 Thus, all reads in a transaction observe a consistent view of the database, even when accessing multiple shards.
 %Intro may be unecessary given the Transactions section's intro
 
-We provide consistent reads as follows.
-Clients' new transaction requests include a clock representing the latest snapshot observed by the client. %Any need to say this is optional? For max read throughput (but with potencial causality loss) we support not including a clock
+Algorithms \ref{alg:commit_tm} and \ref{alg:commit_shard} showcase how we provide consistent reads.
+Clients' new transaction requests include a clock representing the latest snapshot observed by the client (Alg \ref{alg:commit_tm}, line \ref{alg_line:startTransaction}). %Any need to say this is optional? For max read throughput (but with potencial causality loss) we support not including a clock
 This ensures causality is maintained even if the client changes servers.
-When a transaction $T$ is started, its read clock $T.rc$ is set as $T.rc = max(vc_G, clientClk)$, where $max$ does a pairwise max for each entry.
-If at the time of reading, $\exists i \in S_1, ..., S_n : T.rc[i] > vc_G[i]$, the reads will be put on hold before being sent to the shards. 
-When $\forall i \in S_1, ..., S_n, vc_G[i] \geq T.rc[i]$, i.e., the replica can already provide the snapshot requested by the client's clock, the reads will be sent to the respective shards.
-Reads are executed as soon as the client issues them, i.e., does not wait for commit. %Do I need to justify? I would assume this is fairly standard behaviour.
+When a transaction $T$ is started, $T$ is put on hold until $\mathit{clientVC} \leq vc_G$ for all positions in the vector clocks (Alg \ref{alg:commit_tm}, line \ref{alg_line:waitClientClk}).
+This ensures $T$ only effectively starts when $S_j$ is capable of serving a snapshot equal or newer than the one requested by the client.
+Reads are sent (Alg \ref{alg:commit_tm}, line \ref{alg_line:readTM}) to the shards and executed (Alg \ref{alg:commit_shard}, line \ref{alg_line:readShard}) as soon as the client issues them, i.e., reads do not wait for commit.
+
+%This is the paragraph that was used before putting the algorithm, instead of the paragraph above. I feel like this one is still better/more precise but does not match easily the pseudo-code.
+%When a transaction $T$ is started, its read clock $T.rc$ is set as $T.rc = max(vc_G, clientClk)$, where $max$ does a pairwise max for each entry.
+%If at the time of reading, $\exists i \in S_1, ..., S_n : T.rc[i] > vc_G[i]$, the reads will be put on hold before being sent to the shards. 
+%When $\forall i \in S_1, ..., S_n, vc_G[i] \geq T.rc[i]$, i.e., the replica can already provide the snapshot requested by the client's clock, the reads will be sent to the respective shards.
+%Reads are executed as soon as the client issues them, i.e., does not wait for commit. %Do I need to justify? I would assume this is fairly standard behaviour.
 
 The shards receive $T.rc$ when applying reads.
-If $T.rc$ belongs to the past, the correspondent version of the object is calculated - we achieve this by keeping a list of recent updates of each object and undoing the necessary operations. %Should I mention more details on this mechanism are outside of the scope of this paper?
-If it is the latest, the state is read directly \footnote{On an exceptional scenario, the read may have to be put on hold. This only happens when write transactions with disjoint sets of write shards commit concurrently, and a new snapshot reflecting one of the transaction's $cc$ is issued before the other transaction finishes being applied. In practice, this is a very rare occurrence.}.
+If $T.rc$ belongs to the past, the correspondent version of the object is calculated - we achieve this by keeping a list of recent updates of each object and undoing the necessary operations (Alg \ref{alg:commit_shard}, line \ref{alg_line:readInThePast}). %Should I mention more details on this mechanism are outside of the scope of this paper?
+%Maybe I should change the applyR
+If it is the latest, the state is read directly (Alg \ref{alg:commit_shard}, line \ref{alg_line:read})\footnote{On an exceptional scenario, the read may have to be put on hold. This only happens when write transactions with disjoint sets of write shards commit concurrently, and a new snapshot reflecting one of the transaction's $cc$ is issued before the other transaction finishes being applied. In practice, this is a very rare occurrence. For simplicity, this is not included in Alg. \ref{alg:commit_shard}.}.
 
-Waiting for the snapshot to be available can happen when the client changes servers or if the client recently committed some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be committed.
+On the Transaction Manager, waiting for the snapshot to be available can happen when the client changes servers or if the client recently committed some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be committed.
 The former is exceptional - we assume clients are sticky, as data has locality.
 The later is uncommon and is still better than forcing the client to wait during the commit - with our solution, the commit will very likely be applied during RTT.
 Even if not, i.e. the next request of the client arrives before the commit is fully applied, our solution is still beneficial -  the client only waits for the commit duration instead of commit duration + RTT.
 %The above maybe should be discussed somewhere else. Maybe like a section of discussion of our protocols trade-offs?
-%Actually on the implementation, we wait on the startTxn() to avoid having to re-read the global clock (which would require locking). But the protocol has no such restriction in my opinion.
 
 %Reads reflect the effect of previous updates in the same transaction.
 %That is, even though updates are not applied until a transaction is committed, reads still reflect the state that would result from applying said updates on $T.rc$'s snapshot.
 Reads reflect the effect of previous updates in the same transaction, despite updates not being applied until the transaction commits.
-PotionDB achieves this by, for a given $read(o)$, calculating the effects of all $update(o) \in T$ that have been issued before said read on top of $T.rc$'s snapshot.
+PotionDB achieves this by, for a given $\mathit{read(o)}$, calculating the effects of all $\mathit{update(o)} \in T$ that have been issued before said read on top of $T.rc$'s snapshot ($\mathit{txUpds[txId]}$ in Alg. \ref{alg:commit_shard}, lines \ref{alg_line:read}-\ref{alg_line:readInThePast}).
 Then the state of $o$ reflecting such changes is returned.
+
+%\subsection{Commit protocol}
+%%Probably I should write the pseudo-code of this algorithm?
+%\carla{Replying to Andre's comment. Yes, an algorithm is needed.}
+%We apply a two-phase commit protocol as follows.
+%First, a prepare message is sent to all shards in $W_T$.
+%Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$. %Do I need to say it also stores the transaction ID?
+%Since the values returned by $\mathit{pc}$ are monotonically increasing and efectively unique (due to $\mathit{sh}$'s id being used for tie breaking), 
+%%Since $\mathit{pc}$ is monotonically increasing, 
+%all shards in $W_T$ will return different values and no two transactions in $S_j$ will have a proposed value in common.
+%We set $T\!.\mathit{cc}$ equal to the highest returned clock.
+%A commit message is then sent to all shards in $W_T$.	%I may need to prove how this still converges - I remember me and Carla talked about this and it is not obvious.
+%
+%A shard $\mathit{sh}_i$ proceeds as follows when it receives a commit message.
+%A commit can only be applied if
+%\begin{enumerate*}[label=(\roman*)] 
+%	\item all prepared clocks except the one for $T$ are higher than $T.\mathit{cc}$ and
+%	\item there is no $T_a.\mathit{cc}$ in $\mathit{hold}_i$ for which $T_a.\mathit{cc} < T\!.\mathit{cc}$.
+%\end{enumerate*}
+%If so, the commit and $T$'s updates are applied and $\mathit{vc}_i[S_j]$ is updated to $T\!.\mathit{cc}$.
+%Otherwise, the commit is queued in $\mathit{hold}_i$ to be applied later, as other transactions may commit with a lower $\mathit{cc}$ than $T\!.\mathit{cc}$.
+%In either case, $T$'s prepared clock is removed from $\mathit{prep}_i$ and $\mathit{sh}_i$ replies with a committed message.
+%
+%If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $\mathit{prep}_i$, 
+%the transaction with lowest $\mathit{cc}$ in $\mathit{hold}_i$, $T_h$, is verified for appliance, with the same rules as above.
+%If the conditions hold, $T_h$ is removed from $\mathit{hold}_i$ and applied as described above, 
+%and the verification process repeats for the next lowest in $\mathit{hold}_i$.
+%This process loops until $\mathit{hold}_i$ is empty or the lowest commit in $\mathit{hold}_i$ cannot be applied. %Do I need to state that vc is updated?
+%
+%A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, as soon as all shards in $W_T$ receive the commmit message.
+%This happens even if any of the shards queued the commit.
+%On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
+%To be precise, assuming the transaction was committed on server $S_j$, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
+%It is necessary to select the maximum, as transactions accessing disjoins sets of write shards may commit concurrently.
+%Note that this does not break consistency as the write sets are disjoint -- thus no racing conditions occur to the same object.
+%Furthermore, the reading protocol consider this possibility when applying reads.
+
+%Maybe this should be before commit?
+%\subsection{Consistent reads}
+%\label{subsec:consistentReads}
+%PotionDB provides transactional causal consistency as described in Section \ref{subsec:transactionalcausal}.
+%Thus, all reads in a transaction observe a consistent view of the database, even when accessing multiple shards.
+%%Intro may be unecessary given the Transactions section's intro
+%
+%We provide consistent reads as follows.
+%Clients' new transaction requests include a clock representing the latest snapshot observed by the client. %Any need to say this is optional? For max read throughput (but with potencial causality loss) we support not including a clock
+%This ensures causality is maintained even if the client changes servers.
+%When a transaction $T$ is started, its read clock $T.rc$ is set as $T.rc = max(vc_G, clientClk)$, where $max$ does a pairwise max for each entry.
+%If at the time of reading, $\exists i \in S_1, ..., S_n : T.rc[i] > vc_G[i]$, the reads will be put on hold before being sent to the shards. 
+%When $\forall i \in S_1, ..., S_n, vc_G[i] \geq T.rc[i]$, i.e., the replica can already provide the snapshot requested by the client's clock, the reads will be sent to the respective shards.
+%Reads are executed as soon as the client issues them, i.e., does not wait for commit. %Do I need to justify? I would assume this is fairly standard behaviour.
+%
+%The shards receive $T.rc$ when applying reads.
+%If $T.rc$ belongs to the past, the correspondent version of the object is calculated - we achieve this by keeping a list of recent updates of each object and undoing the necessary operations. %Should I mention more details on this mechanism are outside of the scope of this paper?
+%If it is the latest, the state is read directly \footnote{On an exceptional scenario, the read may have to be put on hold. This only happens when write transactions with disjoint sets of write shards commit concurrently, and a new snapshot reflecting one of the transaction's $cc$ is issued before the other transaction finishes being applied. In practice, this is a very rare occurrence.}.
+%
+%Waiting for the snapshot to be available can happen when the client changes servers or if the client recently committed some writes and the server is lagging behind, as PotionDB replies to the client as soon as it is known that a transaction will be committed.
+%The former is exceptional - we assume clients are sticky, as data has locality.
+%The later is uncommon and is still better than forcing the client to wait during the commit - with our solution, the commit will very likely be applied during RTT.
+%Even if not, i.e. the next request of the client arrives before the commit is fully applied, our solution is still beneficial -  the client only waits for the commit duration instead of commit duration + RTT.
+%%The above maybe should be discussed somewhere else. Maybe like a section of discussion of our protocols trade-offs?
+%%Actually on the implementation, we wait on the startTxn() to avoid having to re-read the global clock (which would require locking). But the protocol has no such restriction in my opinion.
+%
+%%Reads reflect the effect of previous updates in the same transaction.
+%%That is, even though updates are not applied until a transaction is committed, reads still reflect the state that would result from applying said updates on $T.rc$'s snapshot.
+%Reads reflect the effect of previous updates in the same transaction, despite updates not being applied until the transaction commits.
+%PotionDB achieves this by, for a given $read(o)$, calculating the effects of all $update(o) \in T$ that have been issued before said read on top of $T.rc$'s snapshot.
+%Then the state of $o$ reflecting such changes is returned.
 
 \subsection{Views}
 \label{subsec:viewsTransaction}
@@ -1457,184 +1667,6 @@ Since all operations are executed on version $T.rc$, TCC is provided even for tr
 
 We believe for most use cases, good data locality when doing partial replication, alongside global views, will ensure the mechanism referred above will rarely to never be necessary.
 We note that data which may be revelant everywhere can be fully replicated if so is desired.
-
-\subsection{Algorithm}
- 
-%Variables:
-%txnInfo: txnID -> VectorClk x set(shardID)
-
-\begin{algorithm}
-	\begin{algorithmic}[1]
-		\Statex svID,  shID  \Comment{server and shard identifiers}
-		\Statex \textbf{input}
-		\Statex $\quad$ globalVC: vClock  \Comment{global vector clock of $S_j$}
-		\Statex $\quad$ txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
-		\Statex $\quad$ ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
-		
-		\Function{startTransaction}{clientVC: vClock}
-			\State \textbf{wait until} clientVC $\leq$ globalVC
-			\State readVC $\leftarrow$ globalVC
-			\State txId $\leftarrow$ \Call{generateUniqueId}{ }
-			\State txInfo[txId] $\leftarrow \emptyset$ 
-			\State \textbf{return} txId, readVC
-		\EndFunction
-		\Function{updateOp}{txId: ID, o: ???}
-			\State txInfo[txId] $\leftarrow$ txnInfo[txId] $\cup$ o$^{\mathit{shard}}$	
-		%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
-			\State \textbf{send} \Call{update}{txId, o} \textbf{to} o$^{\mathit{shard}}$
-		\EndFunction
-		\Function{readOp}{txId: ID, readVC: vClock, o: ???}
-			\State \textbf{send} \Call{read}{txId, readVC, o} \textbf{to} o$^{\mathit{shard}}$
-		\EndFunction
-		\Function{commitTx}{txId: ID, readVC: vClock}
-			\ForAll{sh \textbf{in} txInfo[txId]	} \Comment{all shards written by txId}
-				\State \textbf{send} \Call{prepare}{txId} \textbf{to} sh	\label{alg_line:prepare}
-			\EndFor
-			\State maxTs = $\bot$	\Comment{initialize timestamp}
-			\ForAll{sh \textbf{in} txInfo[txId]}	
-				%\State suggestedTs $\gets$ \textbf{reply of} sh \textbf{from}  \textsc{prepare}
-				\State  \textbf{receive} suggestedTs \textbf{from} sh
-				\State maxTs $\leftarrow$ \Call{max}{maxTs, suggestedTs} \label{alg_line:maxTs}
-			\EndFor
-			\ForAll{sh \textbf{in} txInfo[txId]}	
-				\State \textbf{send} \Call{commit}{txId, readVc, maxTs} \textbf{to} sh \label{alg_line:commitSend}
-			\EndFor
-		\EndFunction
-		\LeftComment{An always running routine}
-		\Function{globalClockUpdate}{ }
-			\ForAll{T \textbf{in} ongoingTxs}
-				\ForAll{sh \textbf{in} txInfo[T.txId]}
-				\State  \textbf{receive} reply \textbf{from} sh
-				\EndFor
-			\State vcG[j \begin{color}{red}(what is j?)\end{color}]  $\leftarrow$ \Call{max}{vcG[j], T.cc}
-			%The max is needed because  two transactions (this one, other) on disjoint partitions could commit concurrently (safe) and the other transaction commit first with a higher ts than this one.
-			\State txInfo[T.txId] $\leftarrow$  $\bot$ 
-			\EndFor
-		\EndFunction
-	\end{algorithmic}
-	\caption{Transaction Manager of $S_j$: commit and read protocol}
-	\label{alg:commit_tm}
-\end{algorithm}
-
-\begin{algorithm}
-	\begin{algorithmic}[1]
-		\State $\mathit{vc_i}$ \Comment{latest applied clock of $\mathit{sh_j}$}
-		\State $\mathit{prep_i}$ \Comment{list of (sorted) prepared timestamps}
-		\State $\mathit{hold_i}$ \Comment{list of (sorted) commits on hold} %commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
-		\State $\mathit{txUpds}$ \Comment{$\mathit{txId} \to \mathit{[updates]}$}
-		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
-		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
-		%More precisely, assume e.g. T1 is about to be prepared on sh1, sh2 and sh3, and T2 is a remote transaction for sh1, sh2. 
-		%We could have the prepare of T1 be before T2 is applied on sh1 but after being applied on sh2. 
-		%Should we ensure T1 is only committed after T2 is applied in both sh1 and sh2? 
-		%Our implementation does that, the algorithm here (and the explanation in the paper) does not. 
-		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
-		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
-		\Function{prepare}{Id $\mathit{txId}$} \label{alg_line:prepstart}
-			\State $\mathit{ts} = (\mathit{pc}, i)$
-			\State $\mathit{prep_i}$.\Call{sortedAdd}{$\mathit{ts, txId}$}
-			\State reply to $\mathit{TM}$ with $\mathit{ts}$	\label{alg_line:prepfinish}
-		\EndFunction
-		\Function{commit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } cc}$}
-			\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{txId}$
-			\If{\Call{canCommit}{$\mathit{txId, cc}$}}	\label{alg_line:call_canCommit}
-				\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
-			\Else
-				\State $\mathit{hold_i}$.\Call{sortedAdd}{$\mathit{cc, txId, rc}$}
-			\EndIf
-			\If{$\mathit{minPrep \neq prep_i.}$\Call{min}{}().$\mathit{txId}$}	
-			\LeftComment{If $\mathit{txId}$ was the lowest prepare, then possibly the lowest commit in $\mathit{hold_i}$ may be appliable now.}
-				\State \Call{checkHoldCommits}{}() \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
-			\EndIf 
-		\EndFunction
-		\Function{canCommit}{$\mathit{\textrm{Id } txId, \textrm{Timestamp } maxTs}$} \label{alg_line:start_canCommit}
-			\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}	\label{alg_line:removePrep}
-			\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc} < \mathit{maxTs}$}
-				\State \textbf{return} false
-			\EndIf
-			\If{$\mathit{prep_i}$.\Call{min}{}().$\mathit{ts < maxTs}$ $\|$ ($\mathit{hold_i}$.\Call{notEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc < maxTs}$)}
-				\State \textbf{return} false
-			\EndIf
-			\LeftComment{Safe to commit as no $T$ in $\mathit{prepi}$ or $\mathit{holdi}$ is smaller than $\mathit{maxTs}$}
-			\State \textbf{return} true
-		\EndFunction \label{alg_line:finish_canCommit}
-		\LeftComment{I don't think we need the pseudo-code for this function.}
-		\Function{checkHoldCommits}{}()	\label{alg_line:start_checkHold}
-			%Checks if holdi.min() can be applied (i.e., prepi.min() > holdi.min()). If yes, remove txn from holdi, apply, and repeat process. If not, stop. I don’t think we need the pseudo-code of this.
-			\If{$\mathit{hold_i}$.\Call{isEmpty}{}()}
-				\State \textbf{return}
-			\EndIf
-			\If{$\mathit{prep_i}$.\Call{isEmpty}{}()}
-				\While{$\mathit{hold_i}$.\Call{notEmpty}{}()}
-					\State $\mathit{txId, rc, cc = hold_i}$.\Call{removeMin}{}()
-					\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
-				\EndWhile
-				\State \textbf{return}
-			\EndIf
-			\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{ts}$
-			\For{\textbf{each} ($\mathit{txId, rc, cc}$) in $\mathit{hold_i}$}
-				\If{$\mathit{cc < minPrep}$}
-					\State $\mathit{holdi}$.\Call{removeMin}{}()	\Comment{Same as the current value of $\mathit{txId, rc, cc}$}
-					\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
-				\Else
-					\State \textbf{return}
-				\EndIf
-			\EndFor
-		\EndFunction	\label{alg_line:finish_checkHold}
-		\Function{applyCommit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } maxTs}$}
-			%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
-			\Statex \hspace*{1.5em}(...) \Comment{Applying the updates to the CRDTs}
-			\State $\mathit{vc_i[j] = maxTs}$
-			\State $\mathit{txUpds[txId] = \bot}$
-			\State reply to $\mathit{TM}$ (for \Call{globalClockRoutine}{})
-		\EndFunction
-		\Function{update}{$\mathit{\textrm{Id } txId, \textrm{Update } upd}$}
-			\State $\mathit{txUpds[txId]}$.\Call{append}{$\mathit{upd}$}
-		\EndFunction
-		\Function{applyRead}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Read } read}$}
-			\If{$\mathit{rc \leq vc_i}$ \&\& $\mathit{rc \geq objs[read.id]}$.\Call{lastVersion}{}()}
-				\State \textbf{return} 	$\mathit{objs[read.id]}$.\Call{read}{$\mathit{txUpds[txId]}$}
-			\EndIf
-			\State \textbf{return} $\mathit{objs[read.id]}$.\Call{readInThePast}{$\mathit{txUpds[txId]}$}
-		\EndFunction
-	\end{algorithmic}
-	\caption{Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
-	\label{alg:commit_shard}
-	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neither the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
-	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
-	%T2: writes only to shard P2. Assume P2 prepares T2 with clock 2.
-	%Now, assume T2 is committed successfully in P2. Thus, the global clock in Transaction Manager (TM) is updated to 2. Also assume that T1 is prepared in P1 but not committed yet (e.g., because the coordinator thread for T1 is sleeping). Now assume T3 with read clock 2. T3 can process as the read clock (2) is the same as the global clock (2) Now assume a read in T3 is issued for P1. P1 would happily read it unless there is a queue for “future reads” (would need to check prepares on hold/commits on hold)
-\end{algorithm}
-
-Algorithms \ref{alg:commit_tm} and \ref{alg:commit_part} contain the commit prrotocol from the point of view of, respectively, the transaction coordinator (Transaction Manager) and the shards.
-First, a prepare message is sent to all shards in $W_T$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:prepare}).
-Each $\mathit{sh}_i$ replies with the value of $\mathit{pc}$ at the time the message is processed and also stores it in $\mathit{prep}_i$ (Alg. \ref{alg:commit_shard}, lines \ref{alg_line:prepstart}-\ref{alg_line:prepfinish}).
-Timestamps are unique as $\mathit{pc}$ is monotonically increasing and $\mathit{sh^{id}}$ is used for tie breaking between concurrent accesses to $\mathit{pc}$.
-Thus, all shards in $W_T$ will return different timestamps and no two transactions in $S_j$ will have a proposed value in common.
-T.cc is set equal to the highest returned timestamp (Alg. \ref{alg:commit_tm}, line \ref{alg_line:maxTs}).
-A commit message is then sent to all shards in $W_T$ (Alg. \ref{alg:commit_tm}, line \ref{alg_line:commitSend}).
-
-A shard $\mathit{sh}_i$ proceeds as follow when it receives a commit message for transaction $T$.
-First, it checks if the commit can be applied, which can only be if no prepare or commit on hold have a smaller timestamp (Alg. \ref{alg:commit_shard}, lines \ref{alg_line:call_canCommit}, \ref{alg_line:call_startCommit}-\ref{alg_line:call_finishCommit}).
-If so, the commit and $T$'s updates are applied and $\mathit{vc}_i[S_j]$ is updated to $T\!.\mathit{cc}$.
-Otherwise, the commit is queued in $\mathit{hold}_i$ to be applied later, as other transactions may commit with a lower $\mathit{cc}$ than $T\!.\mathit{cc}$.
-In either case, $T$'s prepared clock is removed from $\mathit{prep}_i$ (Alg. \ref{alg:commit_shard}, line \ref{alg_line:removePrep}). 
-If $T$'s value in $prep_i$ was the lowest, then the commits on hold are checked for appliance (???), as now the conditions for commit may be true for the lowest commit on hold (???).
-%If $T$'s value in $prep_i$ was the lowest, then the commits on hold are checked for appliance (???), as $T$'s prepare may have been the only one with a value lower than the $cc$ of the commits on hold.
-
-%If $T$'s commit was applied in shard $i$, or $T$'s prepare clock was the lowest value in $\mathit{prep}_i$, 
-%the transaction with lowest $\mathit{cc}$ in $\mathit{hold}_i$, $T_h$, is verified for appliance, with the same rules as above.
-%If the conditions hold, $T_h$ is removed from $\mathit{hold}_i$ and applied as described above, 
-%and the verification process repeats for the next lowest in $\mathit{hold}_i$.
-%This process loops until $\mathit{hold}_i$ is empty or the lowest commit in $\mathit{hold}_i$ cannot be applied. %Do I need to state that vc is updated?
-
-%A client receives a confirmation of transaction committed, along with $T\!.\mathit{cc}$, as soon as all shards in $W_T$ receive the commmit message.
-%This happens even if any of the shards queued the commit.
-%On the other hand, $\mathit{vc}_G$ is updated only when all shards in $W_T$ actually finish executing the transaction.
-%To be precise, assuming the transaction was committed on server $S_j$, we set $\mathit{vc}_G[j] = \mathit{max}(\mathit{vc}_G[j], T\!.\mathit{cc})$.
-%It is necessary to select the maximum, as transactions accessing disjoins sets of write shards may commit concurrently.
-%Note that this does not break consistency as the write sets are disjoint -- thus no racing conditions occur to the same object.
-%Furthermore, the reading protocol consider this possibility when applying reads.
 
 \section{Replication}
 \label{sec:replication}
