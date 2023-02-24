@@ -12,6 +12,7 @@
 \usepackage{booktabs} %added for tables (Andre)
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
+\usepackage{svg}
 %\algnewcommand{\LeftComment}[1]{\Statex \(\triangleright\) #1}
 
 \usepackage{xparse}
@@ -2439,13 +2440,13 @@ Mainly, we try to assess how much each configuration scales in terms of throughp
 	\centering
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{clientScale_cut}
+		\includegraphics[width=.9\linewidth]{clientScale_cut}
 		\caption{All queries}
 		\label{fig:global_local_single}
 	\end{subfigure}%
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.95\linewidth]{Q3vsQ5_cut}
+		\includegraphics[width=.9\linewidth]{Q3vsQ5_cut}
 		\caption{Single query type}
 		\label{fig:q3q5}
 	\end{subfigure}
@@ -2473,7 +2474,7 @@ The single version has, as expected, about 1/5th of PotionDB's performance.
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{clientScale_tc_cut}
+	\includegraphics[width=.75\linewidth]{clientScale_tc_cut}
 	\caption{PotionDB's performance executing all queries with added latency. Both axes have a log(10) scale.}
 	\label{fig:global_local_single_tc}
 \end{figure}
@@ -2504,21 +2505,21 @@ Finally, it is worth noting that even though some updates will execute in multip
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{updRate_global_cut}
-	\caption{PotionDB performance with varying update rate.}
+	\includegraphics[width=.8\linewidth]{updRate_global_cut}
+	\caption{PotionDB's performance with varying update rate.}
 	\label{fig:update_rates}
 \end{figure}
 \begin{figure}
 	\centering
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.97\linewidth]{updRate_queryLatency_cut}
+		\includegraphics[width=.99\linewidth]{updRate_queryLatency_cut}
 		\caption{Query-latency}
 		\label{fig:update_rates_query}
 	\end{subfigure}%
 	\begin{subfigure}{.5\linewidth}
 		\centering
-		\includegraphics[width=.97\linewidth]{updRate_updateLatency_cut}
+		\includegraphics[width=.99\linewidth]{updRate_updateLatency_cut}
 		\caption{Update-latency}
 		\label{fig:update_rates_update}
 	\end{subfigure}
@@ -2546,7 +2547,7 @@ The abrupt spike observed at the end in the update latency graph happens as many
 \begin{figure}
 	\centering
 	\includegraphics[width=.95\linewidth]{updRate_localvsglobal_cut}
-	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate.}
+	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate, with latency added.}
 	\label{fig:update_rates_normal_vs_local}
 \end{figure}
 
