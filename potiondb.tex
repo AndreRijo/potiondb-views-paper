@@ -1418,7 +1418,8 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 	\begin{algorithmic}[1]
 		\Statex vc$_i$: VC \Comment{latest applied clock of sh$_j$}
 		\Statex prep$_i$: TS \Comment{list of (sorted) prepared timestamps\carla{or transactions}}
-		\Statex hold$_i$ \Comment{list of (sorted) commits on hold} \carla{list of what? transactions?}%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
+		\Statex hold$_i$: \code{list}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{list of (sorted) commits on hold} 
+		%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
 		\Statex txUpds: tID $\to$ \code{list}$\langle$Upds$\rangle$ \Comment{Transaction updates}
 		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
 		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
@@ -1429,7 +1430,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
 		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
 		\Function{prepare}{txId: tID} \label{alg_line:prepstart}
-		\State ts  $\leftarrow$ (pc, j) \carla{what is pc?} \Comment{}
+		\State ts  $\leftarrow$ (pc, j)  \Comment{current physical clock of sh$_j$}
 		\State prep$_i$.\Call{sortedAdd}{ts, txId}
 		\State \textbf{send} ts \textbf{to} TM 	\label{alg_line:prepfinish} \Comment{reply to transaction manager}
 		\EndFunction
@@ -1491,7 +1492,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\EndFunction
 		\Function{applyRead}{txId: tID, rc: VC, objId: oID, op: OP}	\label{alg_line:readShard}
 		\If{rc $\geq$ objs[objId].\Call{lastVersion}{ }}
-		\State \textbf{return} 	$\mathit{objs[objId]}$.\Call{read}{txUpds[txId]}	\label{alg_line:read}
+		\State \textbf{return} 	objs[objId].\Call{read}{txUpds[txId]}	\label{alg_line:read}
 		\Else
 		\ \textbf{return} objs[objId].\Call{readInThePast}{txUpds[txId]}	\label{alg_line:readInThePast}
 		\EndIf
