@@ -9,6 +9,9 @@
 \usepackage{listings}
 \usepackage[inline]{enumitem}
 
+\usepackage{microtype} % character spacing
+
+
 \usepackage{booktabs} %added for tables (Andre)
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
@@ -1358,28 +1361,30 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 
 \begin{algorithm}
 	\begin{algorithmic}[1]
-		\Statex svID,  shID  \Comment{server and shard identifiers}
-		\Statex \textbf{input}
-		\Statex $\quad$ globalVC: vClock  \Comment{global vector clock of $S_j$}
-		\Statex $\quad$ txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
-		\Statex $\quad$ ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
+		\Statex tID, svID,  shID  \Comment{transaction, server, and shard identifiers}
+		\Statex OP = $\{$\code{read}, \code{update}$\}$  \Comment{operations}
+		\Statex oID = Key$\times$Bucket$\times$Type \Comment{object identifier}
+		\Statex \textbf{global}
+		\Statex \quad globalVC: VC  \Comment{global vector clock of $S_j$}
+		\Statex \quad txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
+		\Statex \quad ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
 		
-		\Function{startTransaction}{clientVC: vClock} \label{alg_line:startTransaction}
+		\Function{startTransaction}{clientVC: VC} \label{alg_line:startTransaction}
 		\State \textbf{wait until} clientVC $\leq$ globalVC	\label{alg_line:waitClientClk}
 		\State readVC $\leftarrow$ globalVC
 		\State txId $\leftarrow$ \Call{generateUniqueId}{ }
 		\State txInfo[txId] $\leftarrow \emptyset$ 
 		\State \textbf{return} txId, readVC
 		\EndFunction
-		\Function{updateOp}{txId: ID, objId: (key, bucket, type), op: Update}
-		\State txInfo[txId] $\leftarrow$ txnInfo[txId] $\cup$ op$^{\mathit{shard}}$	
+		\Function{updateOp}{txId: tID, objId: oID, op: OP}
+		\State txInfo[txId] $\leftarrow$ txnInfo[txId] $\cup$ objId$^{\mathit{shard}}$	
 		%Maybe on Sharding subsection I should mention we can get the shard of any object, update or read by doing ^{shard} (instead of just saying of any object)
-		\State \textbf{send} \Call{update}{txId, objId, op} \textbf{to} op$^{\mathit{shard}}$
+		\State \textbf{send} \Call{update}{txId, objId, op} \textbf{to} objId$^{\mathit{shard}}$
 		\EndFunction
-		\Function{readOp}{txId: ID, readVC: vClock, objId: (key, bucket, type), op: Read} \label{alg_line:readTM}
-		\State \textbf{send} \Call{read}{txId, readVC, objId, op} \textbf{to} op$^{\mathit{shard}}$
+		\Function{\textls[-20]{readOp}}{txId: tID, readVC: VC, objId: oID, op: OP} \label{alg_line:readTM}
+		\State \textbf{send} \Call{read}{txId, readVC, objId, op} \textbf{to} objId$^{\mathit{shard}}$
 		\EndFunction
-		\Function{commitTx}{txId: ID, readVC: vClock}
+		\Function{commitTx}{txId: tID, readVC: VC}
 		\ForAll{sh \textbf{in} txInfo[txId]	} \Comment{all shards written by txId}
 		\State \textbf{send} \Call{prepare}{txId} \textbf{to} sh	\label{alg_line:prepare}
 		\EndFor
@@ -1399,22 +1404,24 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\ForAll{sh \textbf{in} txInfo[T.txId]}
 		\State  \textbf{receive} reply \textbf{from} sh
 		\EndFor
-		\State vcG[j]  $\leftarrow$ \Call{max}{vcG[j], T.cc}
+		\State globalVC[j]  $\leftarrow$ \Call{max}{globalVC[j], T.cc}
 		%The max is needed because  two transactions (this one, other) on disjoint partitions could commit concurrently (safe) and the other transaction commit first with a higher ts than this one.
 		\State txInfo[T.txId] $\leftarrow$  $\bot$ 
 		\EndFor
 		\EndFunction
 	\end{algorithmic}
-	\caption{Transaction Manager of $S_j$: commit and read protocol}
+	\caption{Transaction manager of $S_j$: commit and read protocol}
 	\label{alg:commit_tm}
 \end{algorithm}
 
 \begin{algorithm}
 	\begin{algorithmic}[1]
-		\State $\mathit{vc_i}$ \Comment{latest applied clock of $\mathit{sh_j}$}
-		\State $\mathit{prep_i}$ \Comment{list of (sorted) prepared timestamps}
-		\State $\mathit{hold_i}$ \Comment{list of (sorted) commits on hold} %commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
-		\State $\mathit{txUpds}$ \Comment{$\mathit{txId} \to \mathit{[updates]}$}
+		\Statex \textbf{global}
+		\Statex \quad vc$_i$: VC \Comment{latest applied clock of sh$_j$}
+		\Statex\quad  prep$_i$: \code{heap}$\langle$TS$\rangle$ \Comment{list of (sorted) prepared timestamps}
+		\Statex \quad hold$_i$: \code{heap}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
+		%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
+		\Statex \quad txUpds: tID $\to$ \code{list}$\langle$Upds$\rangle$ \Comment{Transaction updates}
 		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
 		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
 		%More precisely, assume e.g. T1 is about to be prepared on sh1, sh2 and sh3, and T2 is a remote transaction for sh1, sh2. 
@@ -1423,72 +1430,73 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		%Our implementation does that, the algorithm here (and the explanation in the paper) does not. 
 		%The change to the algorithm to support that is to make sure the whole vector clock is considered when deciding and applying the commit, instead of only a timestamp.
 		%Or maybe all of this doesn't matter because T1 and T2 are supposed to be concurrent anyway.
-		\Function{prepare}{Id $\mathit{txId}$} \label{alg_line:prepstart}
-		\State $\mathit{ts} = (\mathit{pc}, i)$
-		\State $\mathit{prep_i}$.\Call{sortedAdd}{$\mathit{ts, txId}$}
-		\State reply to $\mathit{TM}$ with $\mathit{ts}$	\label{alg_line:prepfinish}
+		\Function{prepare}{txId: tID} \label{alg_line:prepstart}
+		\State ts  $\leftarrow$ (pc, j)  \Comment{current physical clock of sh$_j$}
+		\State prep$_i$.\Call{sortedAdd}{ts, txId}
+		\State \textbf{send} ts \textbf{to} TM 	\label{alg_line:prepfinish} \Comment{reply to transaction manager}
 		\EndFunction
-		\Function{commit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } cc}$}
-		\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{txId}$
-		\If{\Call{canCommit}{$\mathit{txId, cc}$}}	\label{alg_line:call_canCommit}
-		\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
-		\Else
-		\State $\mathit{hold_i}$.\Call{sortedAdd}{$\mathit{cc, txId, rc}$}
+		\Function{commit}{txId: tID, rc: VC, cc: TC}
+		\State minPrep $\leftarrow$  prep$_i$.\Call{min}{ }.txId
+		\If{\Call{canCommit}{txId, cc}} \label{alg_line:call_canCommit}
+		 \Call{applyCommit}{txId, rc, cc}
+		\Else \
+		hold$_i$.\Call{sortedAdd}{cc, txId, rc}
 		\EndIf
-		\If{$\mathit{minPrep \neq prep_i.}$\Call{min}{}().$\mathit{txId}$}	
-		\LeftComment{If $\mathit{txId}$ was the lowest prepare, then possibly the lowest commit in $\mathit{hold_i}$ may be appliable now.}
-		\State \Call{checkHoldCommits}{}() \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
+		\LeftComment{if txId was lowest prep$_i$, then lowest commit in $\mathit{hold_i}$ may be applicable}
+		\carla{assignment in line 6, makes the condition false}
+		\If{minPrep $\neq$ prep$_i.$\Call{min}{ }.txId}		
+		\State \Call{applyHoldCommits}{ } \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
 		\EndIf 
 		\EndFunction
-		\Function{canCommit}{$\mathit{\textrm{Id } txId, \textrm{Timestamp } maxTs}$} \label{alg_line:start_canCommit}
-		\State $\mathit{prep_i}$.\Call{remove}{$\mathit{txId}$}	\label{alg_line:removePrep}
-		\If{$\mathit{prep_i}$.\Call{isEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc} < \mathit{maxTs}$}
+		\Function{canCommit}{txId: tID, maxTs: TS} \label{alg_line:start_canCommit}
+		\State prep$_i$.\Call{remove}{txId}	\label{alg_line:removePrep}
+		\If{prep$_i$.\Call{isEmpty}{ } $\wedge$ hold$_i$.\Call{min}{ }.cc $<$ maxTs $\vee$ \\ 
+			\qquad \ prep$_i$.\Call{min}{ }.ts $<$ maxTs $\vee$ \\ 
+			\qquad \  hold$_i$.\Call{notEmpty}{ } $\wedge$ 
+				hold$_i$.\Call{min}{ }.cc $<$ maxTs}
 		\State \textbf{return} false
 		\EndIf
-		\If{$\mathit{prep_i}$.\Call{min}{}().$\mathit{ts < maxTs}$ $\|$ ($\mathit{hold_i}$.\Call{notEmpty}{}() \&\& $\mathit{hold_i}$.\Call{min}{}().$\mathit{cc < maxTs}$)}
-		\State \textbf{return} false
-		\EndIf
-		\LeftComment{Safe to commit as no $T$ in $\mathit{prepi}$ or $\mathit{holdi}$ is smaller than $\mathit{maxTs}$}
+		\LeftComment{safe to commit, as for all $T$ in prep$_i$ or hold$_i$ T.ts $>$ maxTs}
 		\State \textbf{return} true
 		\EndFunction \label{alg_line:finish_canCommit}
 		\LeftComment{I don't think we need the pseudo-code for this function.}
-		\Function{checkHoldCommits}{}()	\label{alg_line:start_checkHold}
+		\Function{applyHoldCommits}{}()	\label{alg_line:start_checkHold}
 		%Checks if holdi.min() can be applied (i.e., prepi.min() > holdi.min()). If yes, remove txn from holdi, apply, and repeat process. If not, stop. I don’t think we need the pseudo-code of this.
-		\If{$\mathit{hold_i}$.\Call{isEmpty}{}()}
-		\State \textbf{return}
+		\If{hold$_i$.\Call{isEmpty}{}()} \textbf{return}
 		\EndIf
-		\If{$\mathit{prep_i}$.\Call{isEmpty}{}()}
-		\While{$\mathit{hold_i}$.\Call{notEmpty}{}()}
-		\State $\mathit{txId, rc, cc = hold_i}$.\Call{removeMin}{}()
-		\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
+		\If{prep$_i$.\Call{isEmpty}{ }}
+		\While{hold$_i$.\Call{notEmpty}{ }}
+		\State txId, rc, cc $\leftarrow$ hold$_i$.\Call{removeMin}{ }
+		\State \Call{applyCommit}{txId, rc, cc}
 		\EndWhile
 		\State \textbf{return}
 		\EndIf
-		\State $\mathit{minPrep = prep_i}$.\Call{min}{}().$\mathit{ts}$
-		\For{\textbf{each} ($\mathit{txId, rc, cc}$) in $\mathit{hold_i}$}
-		\If{$\mathit{cc < minPrep}$}
-		\State $\mathit{holdi}$.\Call{removeMin}{}()	\Comment{Same as the current value of $\mathit{txId, rc, cc}$}
-		\State \Call{applyCommit}{$\mathit{txId, rc, cc}$}
-		\Else
-		\State \textbf{return}
+		\State minPrep $\leftarrow$ prep$_i$.\Call{min}{ }.ts
+		\For{\textbf{all} (txId, rc, cc) \textbf{in} hold$_i$}
+		\If{cc $<$ minPrep}
+		\State hold$_i$.\Call{removeMin}{ }	\Comment{same as (txId, rc, cc)}
+		\State \Call{applyCommit}{txId, rc, cc}
+		\Else \ \textbf{return}
 		\EndIf
 		\EndFor
 		\EndFunction	\label{alg_line:finish_checkHold}
-		\Function{applyCommit}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{Timestamp } maxTs}$}
+		\Function{applyCommit}{txId: tID, rc: VC, maxTs: TS}
 		%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
-		\Statex \hspace*{1.5em}(...) \Comment{Applying the updates to the CRDTs}
-		\State $\mathit{vc_i[j] = maxTs}$
-		\State $\mathit{txUpds[txId] = \bot}$
-		\State reply to $\mathit{TM}$ (for \Call{globalClockRoutine}{}) \label{alg_line:applyCommitReply}
+		\Statex \hspace*{1.5em} $\cdots$ \Comment{apply the updates to the CRDTs}
+		\State vc$_i$[j]  $\leftarrow$  maxTs
+		\State txUpds[txId] $\leftarrow$  $\bot$
+		\State \textbf{send} reply \textbf{to} TM \label{alg_line:applyCommitReply} 
+		\Comment{received by \Call{\textls[-30]{globalClockUpdate}}{}}
 		\EndFunction
-		\Function{update}{$\mathit{\textrm{Id } txId, \textrm{(key, bucket, type) } objId, \textrm{Update } op}$}
-		\State $\mathit{txUpds[txId]}$.\Call{append}{$\mathit{op}$}
+		\Function{update}{txId: tID, objId: oID, op: OP}
+		\State txUpds[txId].\Call{append}{op}
 		\EndFunction
-		\Function{applyRead}{$\mathit{\textrm{Id } txId, \textrm{Clock } rc, \textrm{(key, bucket, type) } objId}$, Read  $\mathit{op}$}	\label{alg_line:readShard}
-		\If{$\mathit{rc \geq objs[objId]}$.\Call{lastVersion}{}()}
-		\State \textbf{return} 	$\mathit{objs[objId]}$.\Call{read}{$\mathit{txUpds[txId]}$}	\label{alg_line:read}
+		\Function{applyRead}{txId: tID, rc: VC, objId: oID, op: OP}	\label{alg_line:readShard}
+		\If{rc $\geq$ objs[objId].\Call{lastVersion}{ }}
+		\State \textbf{return} 	objs[objId].\Call{read}{txUpds[txId]}	\label{alg_line:read}
+		\Else
+		\ \textbf{return} objs[objId].\Call{readInThePast}{txUpds[txId]}	\label{alg_line:readInThePast}
 		\EndIf
-		\State \textbf{return} $\mathit{objs[objId]}$.\Call{readInThePast}{$\mathit{txUpds[txId]}$}	\label{alg_line:readInThePast}
 		\EndFunction
 	\end{algorithmic}
 	\caption{Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
