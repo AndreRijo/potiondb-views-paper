@@ -2505,7 +2505,7 @@ Finally, it is worth noting that even though some updates will execute in multip
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.8\linewidth]{updRate_global_cut}
+	\includegraphics[width=.75\linewidth]{updRate_global_cut}
 	\caption{PotionDB's performance with varying update rate.}
 	\label{fig:update_rates}
 \end{figure}
@@ -2546,8 +2546,8 @@ The abrupt spike observed at the end in the update latency graph happens as many
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{updRate_localvsglobal_cut}
-	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate, with latency added.}
+	\includegraphics[width=.7\linewidth]{updRate_localvsglobal_cut}
+	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate.}
 	\label{fig:update_rates_normal_vs_local}
 \end{figure}
 
@@ -2569,8 +2569,8 @@ They would, however, take longer to see the effects of updates done on views tha
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{updRate_tc_cut}
-	\caption{PotionDB's performance with varying update rate.}
+	\includegraphics[width=.7\linewidth]{updRate_tc_cut}
+	\caption{Local PotionDB's performance with varying update rate, with latency added.}
 	\label{fig:update_rates_tc}
 \end{figure}
 
@@ -2606,8 +2606,8 @@ The number of operations per transaction is the same as in the TPC-H scenario. \
 %TOPK test max throughputs: 11.3M, 10.3M, 3.1M, 0.37M
 \begin{figure}
 	\centering
-	\includegraphics[width=.95\linewidth]{TopKTopSize0upd_cut}
-	\caption{TopK query performance with a varying top size. Both axis are on a logarithmic scale.}
+	\includegraphics[width=.7\linewidth]{TopKTopSize0upd_cut}
+	\caption{TopK query performance with a varying top size.}
 	\label{fig:TopkSize0upd}
 \end{figure}
 
@@ -2633,7 +2633,7 @@ We expect that after 1000, increasing linearly the number of elements on top wil
 		\caption{TopK with 100\% updates}
 		\label{fig:TopkSize100upd}
 	\end{subfigure}
-	\caption{TopK operations (query + update) performance with varying top size. Both axis are on a logarithmic scale.}
+	\caption{TopK operations (query + update) performance with varying top size.}
 	\label{fig:TopkSize25_100upd}
 \end{figure}
 
