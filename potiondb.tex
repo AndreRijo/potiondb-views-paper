@@ -1365,9 +1365,9 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\Statex OP = $\{$\code{read}, \code{update}$\}$  \Comment{operations}
 		\Statex oID = Key$\times$Bucket$\times$Type \Comment{object identifier}
 		\Statex \textbf{global}
-		\Statex $\quad$ globalVC: VC  \Comment{global vector clock of $S_j$}
-		\Statex $\quad$ txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
-		\Statex $\quad$ ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
+		\Statex \quad globalVC: VC  \Comment{global vector clock of $S_j$}
+		\Statex \quad txInfo: svID $\to$ \textsf{set}$\langle$shID$\rangle$ \Comment{shards written by each server}
+		\Statex \quad ongoingTxs: \textsf{set}$\langle$Txs$\rangle$ \Comment{ongoing transactions}
 		
 		\Function{startTransaction}{clientVC: VC} \label{alg_line:startTransaction}
 		\State \textbf{wait until} clientVC $\leq$ globalVC	\label{alg_line:waitClientClk}
@@ -1416,11 +1416,12 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 
 \begin{algorithm}
 	\begin{algorithmic}[1]
-		\Statex vc$_i$: VC \Comment{latest applied clock of sh$_j$}
-		\Statex prep$_i$: \code{heap}$\langle$TS$\rangle$ \Comment{list of (sorted) prepared timestamps\carla{or transactions}}
-		\Statex hold$_i$: \code{heap}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
+		\Statex \textbf{global}
+		\Statex \quad vc$_i$: VC \Comment{latest applied clock of sh$_j$}
+		\Statex\quad  prep$_i$: \code{heap}$\langle$TS$\rangle$ \Comment{list of (sorted) prepared timestamps}
+		\Statex \quad hold$_i$: \code{heap}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
 		%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
-		\Statex txUpds: tID $\to$ \code{list}$\langle$Upds$\rangle$ \Comment{Transaction updates}
+		\Statex \quad txUpds: tID $\to$ \code{list}$\langle$Upds$\rangle$ \Comment{Transaction updates}
 		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
 		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
 		%More precisely, assume e.g. T1 is about to be prepared on sh1, sh2 and sh3, and T2 is a remote transaction for sh1, sh2. 
@@ -1485,7 +1486,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\State vc$_i$[j]  $\leftarrow$  maxTs
 		\State txUpds[txId] $\leftarrow$  $\bot$
 		\State \textbf{send} reply \textbf{to} TM \label{alg_line:applyCommitReply} 
-		\Comment{received by \Call{\textls[-30]{globalClockRoutine}}{}}
+		\Comment{received by \Call{\textls[-30]{globalClockUpdate}}{}}
 		\EndFunction
 		\Function{update}{txId: tID, objId: oID, op: OP}
 		\State txUpds[txId].\Call{append}{op}
