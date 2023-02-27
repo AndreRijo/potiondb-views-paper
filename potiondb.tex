@@ -1417,8 +1417,8 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 \begin{algorithm}
 	\begin{algorithmic}[1]
 		\Statex vc$_i$: VC \Comment{latest applied clock of sh$_j$}
-		\Statex prep$_i$: TS \Comment{list of (sorted) prepared timestamps\carla{or transactions}}
-		\Statex hold$_i$: \code{list}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{list of (sorted) commits on hold} 
+		\Statex prep$_i$: \code{heap}$\langle$TS$\rangle$ \Comment{list of (sorted) prepared timestamps\carla{or transactions}}
+		\Statex hold$_i$: \code{heap}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
 		%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
 		\Statex txUpds: tID $\to$ \code{list}$\langle$Upds$\rangle$ \Comment{Transaction updates}
 		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
