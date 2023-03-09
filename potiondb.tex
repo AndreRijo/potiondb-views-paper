@@ -1410,7 +1410,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\EndFor
 		\EndFunction
 	\end{algorithmic}
-	\caption{Transaction manager of $S_j$: commit and read protocol}
+	\caption{Transaction manager of S\textsubscript{j}: commit and read protocol}
 	\label{alg:commit_tm}
 \end{algorithm}
 
@@ -1775,7 +1775,7 @@ This could be achieved with the following steps:
 		\State send \Call{remoteClk}{$\mathit{ts, serverId}$} to $\mathit{TM}$
 		\EndFunction
 	\end{algorithmic}
-	\caption{Replication protocol on S\textsubscript{i}'s Replicator}
+	\caption{Replication protocol on S\textsubscript{j}'s Replicator}
 	\label{alg:replication_repl}
 \end{algorithm}
 
@@ -1828,7 +1828,7 @@ This could be achieved with the following steps:
 		%IMPORTANT NOTE: I skipped the code related with NuCRDTs. Namely, when applying remote transactions (and only those), each partition has to check if any of the NuCRDTs generated new operations – if so, those are sent to the TM. The TM collects all those operations and issues a new transaction to be committed – all partitions that generated NuCRDT ops are involved in the commit. After commit, the transaction is sent to replication like any other transaction. The only special caveat is that this transaction’s updates are not locally applied, only on remote, as the local NuCRDTs already know of these operations.
 		%Should I include this in the pseudo-code?
 	\end{algorithmic}
-	\caption{Remote transactions on S\textsubscript{i}'s Transaction Manager}
+	\caption{Remote transactions on S\textsubscript{j}'s Transaction Manager}
 	\label{alg:replication_tm}
 \end{algorithm}
 
@@ -1842,8 +1842,21 @@ This could be achieved with the following steps:
 		\Function{applyRemoteClk}{$\mathit{\textrm{Timestamp }cc, \textrm{Id }serverId}$}
 		\State $\mathit{vc_j[serverId] = cc}$
 		\EndFunction
+		\Function{getTransactions}{lastClk: VC}
+			\State txns $\leftarrow$ list of transactions after VC
+			\State safeClk $\leftarrow \bot$
+			%Any suggestion to compact the two lines inside the if and the two lines inside the else into one each?
+			\If{minPrep.\Call{nonEmpty}{ }}
+				\State safeClk $\leftarrow $ minPrep.\Call{min}{ }.clk
+				\State safeClk[j] $\leftarrow$ safeClk[j] - 1	%Note: j = Server j. Not sure if a comment here is needed, but the explanation is: no upcoming commit will have a clock for Sj that is <= minPrep.min().clk[j]-1
+			\Else
+				\State safeClk $\leftarrow$ vc$_i$
+				\State safeClk[j] $\leftarrow$ pc
+			\EndIf
+			\State \textbf{send} (txns, safeClk) \textbf{to} Replicator
+		\EndFunction
 	\end{algorithmic}
-	\caption{Remote transactions execution on S\textsubscript{i}'s shard sh\textsubscript{j}}
+	\caption{Remote transactions execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
 	\label{alg:replication_shard}
 \end{algorithm}
 
