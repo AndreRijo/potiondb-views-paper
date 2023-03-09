@@ -1437,19 +1437,19 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\EndFunction
 		\Function{commit}{txId: tID, rc: VC, cc: TC}
 		\State minPrep $\leftarrow$  prep$_i$.\Call{min}{ }.txId
+		\State prep$_i$.\Call{remove}{txId}	\label{alg_line:removePrep}
 		\If{\Call{canCommit}{txId, cc}} \label{alg_line:call_canCommit}
-		 \Call{applyCommit}{txId, rc, cc}
+		\Call{applyCommit}{txId, rc, cc}
 		\Else \
 		hold$_i$.\Call{sortedAdd}{cc, txId, rc}
 		\EndIf
 		\LeftComment{if txId was lowest prep$_i$, then lowest commit in $\mathit{hold_i}$ may be applicable}
-		\carla{assignment in line 6, makes the condition false}
 		\If{minPrep $\neq$ prep$_i.$\Call{min}{ }.txId}		
 		\State \Call{applyHoldCommits}{ } \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
 		\EndIf 
 		\EndFunction
 		\Function{canCommit}{txId: tID, maxTs: TS} \label{alg_line:start_canCommit}
-		\State prep$_i$.\Call{remove}{txId}	\label{alg_line:removePrep}
+		
 		\If{prep$_i$.\Call{isEmpty}{ } $\wedge$ hold$_i$.\Call{min}{ }.cc $<$ maxTs $\vee$ \\ 
 			\qquad \ prep$_i$.\Call{min}{ }.ts $<$ maxTs $\vee$ \\ 
 			\qquad \  hold$_i$.\Call{notEmpty}{ } $\wedge$ 
@@ -2838,8 +2838,9 @@ Transactional causal consistency, alongside our rich library of data types, view
 Our evaluation shows that PotionDB can answer complex queries with very low latency and high throughput, even under scenarios with considerable update ratios.
 Our implementation and analysis of TPC-H benchmark showcases both the expressivity and efficiency of PotionDB.
 
-\paragraph{Acknowledgements:} This work was partially funded by FCT, Fundação para a Ciência e Tecnologia - Portugal, through SAMOA, Project PTDC/CCI-INF/32662/2017, and PhD scolarship SFRH/BD/143401/2019.
-Experiments presented in this paper were carried out using the Grid'5000 testbed, supported by a scientific interest group hosted by Inria and including CNRS, RENATER and several Universities as well as other organizations (see https://www.grid5000.fr).
+\textbf{Acknowledgements:} 
+%This work was partially funded by FCT, Fundação para a Ciência e Tecnologia - Portugal, through SAMOA, Project PTDC/CCI-INF/32662/2017, and PhD scolarship SFRH/BD/143401/2019.
+Experiments presented in this paper were carried out using the Grid'5000 testbed, supported by a scientific interest group hosted by INRIA and including CNRS, RENATER and several Universities as well as other organizations (see https://www.grid5000.fr).
 
 %Anything else I should mention? Like the replication/transaction algorithms?
 
