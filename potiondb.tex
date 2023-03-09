@@ -414,6 +414,7 @@ PotionDB provides the following API, also summarized in Table \ref{table:PotionD
 	\item \code{readTx(clk, read$^+$) $\rightarrow$ clk, values...}: executes a read-only transaction with one or more reads; \carla{Is the read a sequence of read operations?}
 	\item \code{updateTx(clk, update$^+$) $\rightarrow$ clk}: executes a write-only transaction with one or more updates.
 \end{compactitem}
+\carla{Explain why we don't need op arguments}
 
 We provide ``static'' read-only (\code{readTx}) and write-only (\code{updateTx}) transactions, 
 as well as dynamic transactions (\code{begin}, \code{commit}, \code{abort}) where both reads and writes can be mixed.
@@ -1419,9 +1420,9 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\Statex \textbf{global}
 		\Statex \quad vc$_i$: VC \Comment{latest applied clock of sh$_j$}
 		\Statex\quad  prep$_i$: \code{heap}$\langle$TS$\rangle$ \Comment{list of (sorted) prepared timestamps}
-		\Statex \quad hold$_i$: \code{heap}$\langle$tID$\times$TC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
+		\Statex \quad hold$_i$: \code{heap}$\langle$tID$\times$VC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
 		%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
-		\Statex \quad txUpds: tID $\to$ \code{list}$\langle$Upds$\rangle$ \Comment{Transaction updates}
+		\Statex \quad txUpds: tID $\to$ \code{list}$\langle$OP$\rangle$ \Comment{Transaction updates}
 		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
 		%IMPORTANT NOTE FOR THE CORRECTNESS OF THE ALGORITHM: I think rremote transactions may affect the correctness of this protocol if we only use a single scalar for the commit timestamp. 
 		%More precisely, assume e.g. T1 is about to be prepared on sh1, sh2 and sh3, and T2 is a remote transaction for sh1, sh2. 
@@ -1482,7 +1483,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\EndFunction	\label{alg_line:finish_checkHold}
 		\Function{applyCommit}{txId: tID, rc: VC, maxTs: TS}
 		%Applies the updates. I omitted the details of applying updates as I believe they are unnecessary
-		\Statex \hspace*{1.5em} $\cdots$ \Comment{apply the updates to the CRDTs}
+		\Statex \hspace*{1.5em} $\cdots$ \Comment{apply updates to the CRDTs}
 		\State vc$_i$[j]  $\leftarrow$  maxTs
 		\State txUpds[txId] $\leftarrow$  $\bot$
 		\State \textbf{send} reply \textbf{to} TM \label{alg_line:applyCommitReply} 
@@ -1731,13 +1732,14 @@ This could be achieved with the following steps:
 		\ForAll{shards $\mathit{sh}$}
 		\State send \Call{GetTransactions}{$\mathit{lastSentClk}$} to $\mathit{sh}$	%I didn't write the pseudo-code for this one
 		\EndFor
-		\State $\mathit{txCache = [(shardId \to T)]}$
+		\State $\mathit{txCache = [(shardId \to T)]}$ just the type
 		\State $\mathit{safeClk = \top}$	\Comment{Clock that all partitions already committed.}
 		\ForAll{shards $\mathit{sh}$}
 		\State $\mathit{txns, shClk} \gets$ reply of $\mathit{sh}$ to \Call{GetTransactions}{}
 		\State $\mathit{safeClk} = $ \Call{min}{$\mathit{safeClk, shClk}$}
-		\State $\mathit{txCache}$.\Call{sortedAdd}{$\mathit{txns}$}
+		\State $\mathit{txCache}$.\Call{sortedAdd}{shardId,$\mathit{txns}$} adds to the list of pairs sorted by t.cc and shardID
 		\EndFor{}
+		\Comment{Iterate over all pairs (shard, trx) for each transaction}
 		\For{\textbf{each} $\mathit{txShards} \in \mathit{txCache}$ \&\& $\mathit{txShards.cc} \leq \mathit{safeClk}$}
 		\State $\mathit{txPerBucket =}$ \Call{splitTxPerBucket}{$\mathit{txShards}$} \label{alg_line:call_splitTxPerBucket}
 		\For{\textbf{each} $\mathit{bucket, upds} \in \mathit{txPerBucket}$}
@@ -1748,6 +1750,7 @@ This could be achieved with the following steps:
 		\State $\mathit{lastSentClk = safeClk}$
 		\EndFunction
 		\LeftComment{I don't think it's needed for this function's pseudo-code to be here.}
+		\Comment{parameter is a set}
 		\Function{splitTxPerBucket}{shardId$\to$T $\mathit{txShards}$}
 		\State $\mathit{txPerBucket = bucket \to shard \to [upds]}$
 		\For{\textbf{each} $\mathit{sh} \in \mathit{txShards}$}
@@ -1757,6 +1760,7 @@ This could be achieved with the following steps:
 		\EndFor
 		\State \textbf{return} $\mathit{txPerBucket}$
 		\EndFunction
+		\LeftComment{Executed when message is received}
 		\Function{receiveBucket}{$\mathit{\textrm{Bucket } bucket, \textrm{[Update] } upds}$, $\mathit{\textrm{Clock } rc, \textrm{Timestamp } cc, \textrm{Id } txId, \textrm{Id } serverId}$}
 		%Note: the communication layer ensures messages are received in order. I.e., all buckets of a transaction will be received before the next transaction, and CLK will be the last message.
 		%So this means, per server, we have one transaction being received at each moment
@@ -1783,13 +1787,13 @@ This could be achieved with the following steps:
 	\begin{algorithmic}[1]
 		\State $\mathit{queued}$ \Comment{$serverId \to [T | CLK]$}	\label{alg_line:queued}	%Since for each server the transactions arrive by T.cc order, they are also stored by T.cc order.
 		%\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc, \textrm{Id\to[Update] }updsPerShard, \textrm{Id }serverId}$}
-		\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc}$, Id$\to$[Update] $\mathit{updsPerShard}$, Id $\mathit{serverId}$}
-		\If{$\mathit{rr \leq vc_G}$}	\label{alg_line:remoteCheck}
+		\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rc, \textrm{Timestamp }cc}$, Id$\to$[Update] $\mathit{updsPerShard}$, Id $\mathit{serverId}$}
+		\If{$\mathit{rc \leq vc_G}$}	\label{alg_line:remoteCheck}
 		\For{\textbf{each} $\mathit{sh, upds} \in \mathit{updsPerShard}$}
 		\State send \Call{applyRemoteTx}{$\mathit{cc, upds, serverId}$ to $\mathit{sh}$}
 		\EndFor
 		\ForAll{$\mathit{sh} \in \mathit{updsPerShard}$}
-		\State wait to finish
+		\State wait for sh to finish or sh confirmation or sh to reply
 		\EndFor
 		\State $\mathit{vc_G[serverId]} = \mathit{cc}$
 		\State \Call{checkPendingRemote}{}()
