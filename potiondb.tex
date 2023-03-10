@@ -43,9 +43,9 @@
 \definecolor{gray}{rgb}{0.5,0.5,0.5}
 \definecolor{mauve}{rgb}{0.58,0,0.82}
 \lstset{language=SQL,
-  basicstyle={\small\ttfamily},
+  basicstyle={\footnotesize\ttfamily},
   deletekeywords={key}, %not working
-  belowskip=3mm,
+  belowskip=0mm,
   breakatwhitespace=true,
   breaklines=true,
   classoffset=0,
@@ -602,7 +602,7 @@ Generated views are read in the same way as any other object (check Table \ref{t
 			\multicolumn{1}{|l|}{Charlie}   & \multicolumn{1}{l|}{80}      & \multicolumn{1}{l|}{1}        \\ \hline
 		\end{tabular}
 		\vspace{1em}
-		\captionof{table}{\textit{TopSales} materialized view for February. This view builds upon \textit{Sales} objects.}
+		\captionof{table}{\textit{TopSales} materialized view for February build upon \textit{Sales} objects.}
 		\label{table:topSales}
 	\end{minipage} \hfill
 	\begin{minipage}{0.27\textwidth}
@@ -620,6 +620,7 @@ WHERE condition(s)
 \end{figure}
 
 \begin{figure}[t]
+\small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (TopSales, views) AS 
 SELECT ProdName sum(Price - Cost) AS SumProfit
@@ -628,7 +629,7 @@ FROM sales
 WHERE SaleDate.Month == [MONTH] and SaleDate.Year == 2023
 ORDER BY SumProfit DESC, NumSales DESC 
 LIMIT 10
-\end{lstlisting}
+\end{lstlisting}}
 	\caption{Specification of the view \emph{TopSales}.}
 	\label{fig:topSalesSQL}
 \end{figure}
@@ -1400,7 +1401,9 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 %Variables:
 %txnInfo: txnID -> VectorClk x set(shardID)
 
+
 \begin{algorithm}
+\small{
 	\begin{algorithmic}[1]
 		\Statex tID, svID,  shID  \Comment{transaction, server, and shard identifiers}
 		\Statex OP = $\{$\code{read}, \code{update}$\}$  \Comment{operations}
@@ -1453,9 +1456,11 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 	\end{algorithmic}
 	\caption{Transaction manager of S\textsubscript{j}: commit and read protocol}
 	\label{alg:commit_tm}
+	}
 \end{algorithm}
 
 \begin{algorithm}
+\small{
 	\begin{algorithmic}[1]
 		\Statex \textbf{global}
 		\Statex \quad vc$_i$: VC \Comment{latest applied clock of sh$_j$}
@@ -1540,7 +1545,8 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\EndIf
 		\EndFunction
 	\end{algorithmic}
-	\caption{Materializer: Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
+	}
+	\caption{Materializer for S\textsubscript{j}'s shard sh\textsubscript{i}: \textls[-20]{commit and read protocol}}
 	\label{alg:commit_shard}
 	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neither the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
 	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
@@ -1765,12 +1771,13 @@ This could be achieved with the following steps:
 
 \begin{algorithm}
 	\begin{algorithmic}[1]
-		\State $\mathit{lastSentClk}$ \Comment{last $T$'s clock that was replicated.}
-		\State $\mathit{receivingTxs}$ \Comment{$\mathit{serverId} \to$ ($\mathit{txId, rc, cc, shardId \to [upds]}$)} %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets.
-		\LeftComment{Executes periodically}
-		\Function{replicate}{}()
-		\ForAll{shards $\mathit{sh}$}
-		\State send \Call{GetTransactions}{$\mathit{lastSentClk}$} to $\mathit{sh}$	%I didn't write the pseudo-code for this one
+		\State {lastSentClk}:  VC \Comment{last transactions clock that was replicated}
+		\State {receivingTxs}: sID $\to$ tID$\times$VC$\times$VC$\times$(sID $\to$ \textsf{list}$\langle$OP$\rangle$) %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets.
+		\LeftComment{executes periodically}
+		\Function{replicate}{ }
+		\ForAll{sh \textbf{in} sID}
+		\State \textbf{send} \Call{GetTransactions}{{lastSentClk}} \textbf{to} {sh}	
+		%I didn't write the pseudo-code for this one
 		\EndFor
 		\State $\mathit{txCache = [(shardId \to T)]}$ just the type
 		\State $\mathit{safeClk = \top}$	\Comment{Clock that all partitions already committed.}
@@ -1819,7 +1826,7 @@ This could be achieved with the following steps:
 		\State send \Call{remoteClk}{$\mathit{ts, serverId}$} to $\mathit{TM}$
 		\EndFunction
 	\end{algorithmic}
-	\caption{Replication protocol on S\textsubscript{j}'s Replicator}
+	\caption{Replicator S\textsubscript{j}'s: replication protocol}
 	\label{alg:replication_repl}
 \end{algorithm}
 
