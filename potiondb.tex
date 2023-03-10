@@ -1485,7 +1485,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		hold$_i$.\Call{sortedAdd}{cc, txId, rc}
 		\EndIf
 		\LeftComment{if txId was lowest prep$_i$, then lowest commit in $\mathit{hold_i}$ may be applicable}
-		\If{minPrep $\neq$ prep$_i.$\Call{min}{ }.txId}		
+		\If{minPrep = txId}		
 		\State \Call{applyHoldCommits}{ } \label{alg_line:call_checkHold}	%Even if txID’s was put on hold, it may have been the lowest prepare and, thus, another commit on hold may be OK to be applied now
 		\EndIf 
 		\EndFunction
