@@ -1,4 +1,21 @@
-\documentclass{vldb}
+\documentclass[sigconf, nonacm]{acmart}
+
+%% The following content must be adapted for the final version
+% paper-specific
+\newcommand\vldbdoi{XX.XX/XXX.XX}
+\newcommand\vldbpages{XXX-XXX}
+% issue-specific
+\newcommand\vldbvolume{14}
+\newcommand\vldbissue{1}
+\newcommand\vldbyear{2020}
+% should be fine as it is
+\newcommand\vldbauthors{\authors}
+\newcommand\vldbtitle{\shorttitle} 
+% leave empty if no availability url should be set
+\newcommand\vldbavailabilityurl{URL_TO_YOUR_ARTIFACTS}
+% whether page numbers should be shown or not, use 'plain' for review versions, 'empty' for camera ready
+\newcommand\vldbpagestyle{plain}
+
 
 \usepackage[utf8]{inputenc}
 \usepackage{times}
@@ -11,12 +28,10 @@
 
 \usepackage{microtype} % character spacing
 
-
 \usepackage{booktabs} %added for tables (Andre)
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
 \usepackage{svg}
-%\algnewcommand{\LeftComment}[1]{\Statex \(\triangleright\) #1}
 
 \usepackage{xparse}
 \makeatletter
@@ -89,13 +104,6 @@
         morekeywords={fun}
         }
 
-\vldbTitle{}
-\vldbAuthors{}
-\vldbVolume{12}
-\vldbNumber{xxx}
-\vldbYear{2020}
-\vldbDOI{https://doi.org/TBD}
-
 \definecolor{red}{RGB}{200,0,0}
 \definecolor{green}{RGB}{0,200,0}
 \definecolor{blue}{RGB}{0,0,200}
@@ -122,24 +130,26 @@
 \begin{document}
 
 \title{Global Views on Partially Geo-Replicated Data}
-\numberofauthors{3} %  in this sample file, there are a *total*
-% of EIGHT authors. SIX appear on the 'first-page' (for formatting
-% reasons) and the remaining two appear in the \additionalauthors section.
 
-\author{\alignauthor André Rijo\\
-       \affaddr{NOVA LINCS, FCT, Universidade NOVA de Lisboa}\\
-%       \email{v.sousa@campus.fct.unl.pt}
-\alignauthor Carla Ferreira\\
-       \affaddr{NOVA LINCS, FCT, Universidade NOVA de Lisboa}\\
-%       \email{carla.ferreira@fct.unl.pt}
-\alignauthor
-Nuno Preguiça\\
-       \affaddr{NOVA LINCS, FCT, Universidade NOVA de Lisboa}\\
-%       \email{nuno.preguica@fct.unl.pt}
+%%
+%% The "author" command and its associated commands are used to define the authors and their affiliations.
+
+\author{André Rijo, Carla Ferreira, Nuno Preguiça}
+\affiliation{
+\institution{NOVA LINCS, FCT, Universidade NOVA de Lisboa}
+\country{Portugal}
 }
+%\email{a.rijo@campus.fct.unl.pt}
+%\author{Carla Ferreira}
+%\affiliation{NOVA LINCS, FCT, Universidade NOVA de Lisboa}
+%\email{carla.ferreira@fct.unl.pt}
+%\author{Nuno Preguiça}
+%\affiliation{NOVA LINCS, FCT, Universidade NOVA de Lisboa}
+%\email{nuno.preguica@fct.unl.pt}
 
 
-\maketitle
+
+
 
 \begin{abstract}
 
@@ -157,6 +167,36 @@ Our evaluation shows that queries concerning global data can be completed in les
 
 \end{abstract}
 
+
+\maketitle
+
+
+%%% do not modify the following VLDB block %%
+%%% VLDB block start %%%
+\pagestyle{\vldbpagestyle}
+\begingroup\small\noindent\raggedright\textbf{PVLDB Reference Format:}\\
+\vldbauthors. \vldbtitle. PVLDB, \vldbvolume(\vldbissue): \vldbpages, \vldbyear.\\
+\href{https://doi.org/\vldbdoi}{doi:\vldbdoi}
+\endgroup
+\begingroup
+\renewcommand\thefootnote{}\footnote{\noindent
+This work is licensed under the Creative Commons BY-NC-ND 4.0 International License. Visit \url{https://creativecommons.org/licenses/by-nc-nd/4.0/} to view a copy of this license. For any use beyond those covered by this license, obtain permission by emailing \href{mailto:info@vldb.org}{info@vldb.org}. Copyright is held by the owner/author(s). Publication rights licensed to the VLDB Endowment. \\
+\raggedright Proceedings of the VLDB Endowment, Vol. \vldbvolume, No. \vldbissue\ %
+ISSN 2150-8097. \\
+\href{https://doi.org/\vldbdoi}{doi:\vldbdoi} \\
+}\addtocounter{footnote}{-1}\endgroup
+%%% VLDB block end %%%
+
+%%% do not modify the following VLDB block %%
+%%% VLDB block start %%%
+\ifdefempty{\vldbavailabilityurl}{}{
+\vspace{.3cm}
+\begingroup\small\noindent\raggedright\textbf{PVLDB Artifact Availability:}\\
+The source code, data, and/or other artifacts have been made available at \url{\vldbavailabilityurl}.
+\endgroup
+}
+%%% VLDB block end %%%
+
 \section{Introduction}
 \label{sec:introduction}
 
@@ -164,7 +204,7 @@ Our evaluation shows that queries concerning global data can be completed in les
 
 The increasing reliance on web services in many domains of activity, from e-commerce to business applications
 and entertainment, leads to stringent requirements regarding latency, availability,
-and fault tolerance \cite{Schurman2009latency,gomez}.
+and fault tolerance~\cite{Schurman2009latency,gomez}.
 To address these requirements, cloud platforms have been adding new data centers at different geographic 
 locations. By allowing users to access a service by contacting the closest data center, a global service can
 provide low latency to users spread across the globe. The increasing number of data centers also contributes
@@ -175,7 +215,7 @@ available data center.
 % Replicar totalmente tem problemas
 
 The database is a key component of any web service, storing the service's data. For supporting global
-services running at multiple geographic locations, it is necessary to rely on a geo-replicated database \cite{dynamo},
+services running at multiple geographic locations, it is necessary to rely on a geo-replicated database~\cite{dynamo},
 which maintains replicas of the data at the data centers where the service is running.
 A number of geo-replicated databases have been proposed, providing different consistency semantics.
 Databases that provide strong consistency \cite{spanner,cockroachdb,mdcc} intend to give  the illusion that 
@@ -1420,7 +1460,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\Statex \textbf{global}
 		\Statex \quad vc$_i$: VC \Comment{latest applied clock of sh$_j$}
 		\Statex\quad  prep$_i$: \code{heap}$\langle$TS$\rangle$ \Comment{list of (sorted) prepared timestamps}
-		\Statex \quad hold$_i$: \code{heap}$\langle$tID$\times$VC$\times$TC$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
+		\Statex \quad hold$_i$: \code{heap}$\langle$tID$\times$VC$\times$TS$\rangle$ \Comment{commits on hold (txId, rc, cc)} 
 		%commits that have been confirmed but not yet applied (due to some timestamp in prepi that is smaller or another timestamp in holdi with a smaller value)
 		\Statex \quad txUpds: tID $\to$ \code{list}$\langle$OP$\rangle$ \Comment{Transaction updates}
 		%Note: implementation-wise, prepi and holdi are heaps. Is that more appropriate to say than list/queue? The important part for the algorithm is to be sorted by timestamp.
@@ -1500,7 +1540,7 @@ Reads are applied as soon as they are issued. %This phrase probably belongs in a
 		\EndIf
 		\EndFunction
 	\end{algorithmic}
-	\caption{Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
+	\caption{Materializer: Commit and read protocol execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
 	\label{alg:commit_shard}
 	%IMPORTANT NOTE: There’s a situation @ applyRead that is not addressed in neither the pseudo-code nor the last version of the code (it is addressed in the one that was used for the paper’s evaluation however. Also addressed in the text description in the paper). To more easily explain this, consider:
 	%T1: writes only to shard P1. Assume P1 prepares T1 with clock 1.
@@ -1847,7 +1887,7 @@ This could be achieved with the following steps:
 		\State $\mathit{vc_j[serverId] = cc}$
 		\EndFunction
 		\Function{getTransactions}{lastClk: VC}
-			\State txns $\leftarrow$ list of transactions after VC
+			\State txns $\leftarrow$ list of transactions after VC in log
 			\State safeClk $\leftarrow \bot$
 			%Any suggestion to compact the two lines inside the if and the two lines inside the else into one each?
 			\If{minPrep.\Call{nonEmpty}{ }}
@@ -1860,7 +1900,7 @@ This could be achieved with the following steps:
 			\State \textbf{send} (txns, safeClk) \textbf{to} Replicator
 		\EndFunction
 	\end{algorithmic}
-	\caption{Remote transactions execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
+	\caption{Materializer: Remote transactions execution on S\textsubscript{j}'s shard sh\textsubscript{i}}
 	\label{alg:replication_shard}
 \end{algorithm}
 
@@ -2860,6 +2900,8 @@ Our implementation and analysis of TPC-H benchmark showcases both the expressivi
 Experiments presented in this paper were carried out using the Grid'5000 testbed, supported by a scientific interest group hosted by INRIA and including CNRS, RENATER and several Universities as well as other organizations (see https://www.grid5000.fr).
 
 %Anything else I should mention? Like the replication/transaction algorithms?
+
+\balance
 
 \bibliographystyle{abbrv}
 \bibliography{bib}
