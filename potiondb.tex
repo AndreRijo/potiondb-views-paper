@@ -2677,7 +2677,10 @@ However, as expected, as the value of K increases, adding or removing elements t
 Figure \ref{fig:TopkVSTopsum} shows how the TopSum compares to the TopK CRDT in similar scenarios.
 When only executing queries, the performance is very similar. 
 However for high update rates, TopSum handles updates better than TopK.
-\andre{TODO: I have to check why this is happening... some guesses: 1- TopSum doesn't have removes but rather incs/subs, so less elements being removed/created from each set (but still, some should when moved between top and not-top) ; 2 - topK has tombstones, topSum does not (but should be okay as it is only 1 timestamp per element) ; 3 - TopSum uses pointers to structures for the elements while TopK uses structures ; 4 - some other reason? Like different behaviour? I don't know. Maybe I need to test with a Map or Set CRDT. But even so it is odd...}
+This is because TopSum does not have adds and removes but rather increments and decrements - when testing TopK with only adds and TopSum with only increments, both CRDTs perform similarly.
+%When we test TopK with only adds and TopSum with only increments, both CRDTs have very approximate throughputs (4.8M and 5M ops/s with 100% update rate for, respectively, TopK and TopSum).
+%I am not sure what causes the high overhead when removals are considered in TopK that doesn't affect decrements in TopSum. There's some ideas below
+%1- TopSum doesn't have removes but rather incs/subs, so less elements being removed/created from each set (but still, some should when moved between top and not-top) ; 2 - topK has tombstones, topSum does not (but should be okay as it is only 1 timestamp per element) ; 3 - TopSum uses pointers to structures for the elements while TopK uses structures ; 4 - some other reason? Like different behaviour? I don't know. Maybe I need to test with a Map or Set CRDT. But even so it is odd...}
 
 \begin{figure}
 	\centering
