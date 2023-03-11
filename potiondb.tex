@@ -574,14 +574,14 @@ Generated views are read in the same way as any other object (check Table \ref{t
 		\begin{tabular}{llllll}
 			\multicolumn{6}{c}{\textbf{Sales}} \vspace{0.4em} \\%\hline
 					\hline
-			\multicolumn{1}{|l|}{ID} & \multicolumn{1}{l|}{ProdName} & \multicolumn{1}{l|}{Customer} & \multicolumn{1}{l|}{Price} & \multicolumn{1}{l|}{Cost} & \multicolumn{1}{l|}{SaleDate} \\ \hline
-			\multicolumn{1}{|l|}{1}  & \multicolumn{1}{l|}{Laptop}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{1200}       & \multicolumn{1}{l|}{500} & \multicolumn{1}{l|}{28/01/23} \\
-			\multicolumn{1}{|l|}{2}  & \multicolumn{1}{l|}{Phone}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{350}       & \multicolumn{1}{l|}{100} & \multicolumn{1}{l|}{07/02/23} \\
-			\multicolumn{1}{|l|}{3}  & \multicolumn{1}{l|}{Laptop}      & \multicolumn{1}{l|}{Alice}      & \multicolumn{1}{l|}{1200}      & \multicolumn{1}{l|}{500} & \multicolumn{1}{l|}{10/02/23} \\
-			\multicolumn{1}{|l|}{4}  & \multicolumn{1}{l|}{Phone}      & \multicolumn{1}{l|}{Alice}      & \multicolumn{1}{l|}{350}       & \multicolumn{1}{l|}{100} & \multicolumn{1}{l|}{13/02/23} \\
-			\multicolumn{1}{|l|}{5}  & \multicolumn{1}{l|}{Disk}      & \multicolumn{1}{l|}{Charlie}      & \multicolumn{1}{l|}{100}        & \multicolumn{1}{l|}{20} & \multicolumn{1}{l|}{15/02/23} \\ 
-			\multicolumn{1}{|l|}{6}  & \multicolumn{1}{l|}{Phone}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{350}       & \multicolumn{1}{l|}{100} & \multicolumn{1}{l|}{16/02/23} \\
-			\multicolumn{1}{|l|}{7}  & \multicolumn{1}{l|}{Disk}      & \multicolumn{1}{l|}{Bob}      & \multicolumn{1}{l|}{100}       & \multicolumn{1}{l|}{20} & \multicolumn{1}{l|}{16/02/23} \\ \hline
+			\textbf{ID} & \textbf{ProdName} & \textbf{Customer} & \textbf{Price} & \textbf{Cost} & \textbf{SaleDate} \\ \hline
+			1  & Laptop      & Bob      & 1200       & 500 & 28/01/23 \\
+			2  & Phone      & Bob      & 350       & 100 & 07/02/23 \\
+			3  & Laptop      & Alice      & 1200      & 500 & 10/02/23 \\
+			4  & Phone      & Alice      & 350       & 100 & 13/02/23 \\
+			5  & Disk      & Charlie      & 100        & 20 & 15/02/23 \\ 
+			6  & Phone      & Bob      & 350       & 100 & 16/02/23 \\
+			7  & Disk      & Bob      & 100       & 20 & 16/02/23 \\ \hline
 		\end{tabular}
 		\vspace{1em}
 		\captionof{table}{\textit{Sales} table.}
@@ -596,10 +596,10 @@ Generated views are read in the same way as any other object (check Table \ref{t
 		\begin{tabular}{lll}
 			\multicolumn{3}{c}{\textbf{TopSales}} \vspace{0.4em}        \\
 			\hline                                               
-			\multicolumn{1}{|l|}{Customer}   & \multicolumn{1}{l|}{Profit} & \multicolumn{1}{l|}{NSales} \\ \hline
-			\multicolumn{1}{|l|}{Alice} & \multicolumn{1}{l|}{950}     & \multicolumn{1}{l|}{2}        \\
-			\multicolumn{1}{|l|}{Bob}  & \multicolumn{1}{l|}{580}      & \multicolumn{1}{l|}{3}        \\
-			\multicolumn{1}{|l|}{Charlie}   & \multicolumn{1}{l|}{80}      & \multicolumn{1}{l|}{1}        \\ \hline
+			\textbf{Customer}   & \textbf{Profit} & \textbf{NSales} \\ \hline
+			Alice & 950     & 2        \\
+			Bob  & 580      & 3        \\
+			Charlie   & 80      & 1        \\ \hline
 		\end{tabular}
 		\vspace{1em}
 		\captionof{table}{\textit{TopSales} materialized view for February build upon \textit{Sales} objects.}
@@ -2164,12 +2164,13 @@ Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
 
 \begin{figure}[h]
 	Return the first 10 rows: \\
-	SELECT orderkey, sum(price*(1-discount)) AS renevue, \\
-	\hphantom{SELECT }orderdate, shippriority \\
-	FROM lineitem \\
-	WHERE mktsegment = [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE]\\
-	GROUP BY orderkey, orderdate, shippriority \\
-	ORDER BY revenue DESC, orderdate \\
+	\begin{lstlisting}[language=SQL]
+	SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+	FROM lineitem
+	WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE]
+	GROUP BY orderkey, orderdate, shippriority
+	ORDER BY revenue DESC, orderdate
+	\end{lstlisting}
 \caption{SQL of TPC-H's Query 3}
 \label{fig:q3}
 \end{figure}
@@ -2200,13 +2201,14 @@ Finally, the group by cause is not used in PotionDB.
 The final materialized view can be specified as follows:
 
 \begin{figure}[h]
-	CREATE view (Q3, views) AS \\
-	SELECT orderkey, sum(price*(1-discount)) AS renevue, \\
-	\hphantom{SELECT }orderdate, shippriority \\
-	FROM lineitem \\
-	WHERE mktsegment = [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31\\
-	ORDER BY revenue DESC, orderdate \\
-	LIMIT 10 \\
+	\begin{lstlisting}[language=SQL]
+CREATE view (Q3, views) AS
+SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+FROM lineitem
+WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
+ORDER BY revenue DESC, orderdate
+LIMIT 10
+	\end{lstlisting}
 \caption{PotionDB specification of a view for TPC-H's Query 3}
 \label{fig:q3_view}
 \end{figure}
@@ -2279,18 +2281,18 @@ Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectiv
 	\begin{minipage}{0.26\textwidth}
 	\begin{tabular}{lcc}
 		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
-		\multicolumn{1}{|l|}{orderkey}     & \multicolumn{1}{c|}{5}         & \multicolumn{1}{c|}{5}         \\
-		\multicolumn{1}{|l|}{partkey}      & \multicolumn{1}{c|}{20}        & \multicolumn{1}{c|}{10}        \\
-		\multicolumn{1}{|l|}{suppkey}      & \multicolumn{1}{c|}{4}         & \multicolumn{1}{c|}{3}         \\
-		\multicolumn{1}{|l|}{linenumber}   & \multicolumn{1}{c|}{1}         & \multicolumn{1}{c|}{2}         \\
-		\multicolumn{1}{|l|}{quantity}     & \multicolumn{1}{c|}{10}        & \multicolumn{1}{c|}{1}         \\
-		\multicolumn{1}{|l|}{orderdate}    & \multicolumn{1}{c|}{15/03/95}  & \multicolumn{1}{c|}{15/03/95}  \\
-		\multicolumn{1}{|l|}{shipdate}     & \multicolumn{1}{c|}{19/03/95}  & \multicolumn{1}{c|}{17/03/95}  \\
-		\multicolumn{1}{|l|}{shippriority} & \multicolumn{1}{c|}{high}      & \multicolumn{1}{c|}{high}      \\
-		\multicolumn{1}{|l|}{mktsegment}   & \multicolumn{1}{c|}{furniture} & \multicolumn{1}{c|}{furniture} \\
-		\multicolumn{1}{|l|}{price}        & \multicolumn{1}{c|}{50}        & \multicolumn{1}{c|}{100}       \\
-		\multicolumn{1}{|l|}{discount}     & \multicolumn{1}{c|}{10}        & \multicolumn{1}{c|}{0}         \\
-		\multicolumn{1}{|l|}{...}          & \multicolumn{1}{c|}{...}       & \multicolumn{1}{c|}{...}       \\ \hline
+		orderkey     & 5         & 5         \\
+		partkey      & 20        & 10        \\
+		suppkey      & 4         & 3         \\
+		linenumber   & 1         & 2         \\
+		quantity     & 10        & 1         \\
+		orderdate    & 15/03/95  & 15/03/95  \\
+		shipdate     & 19/03/95  & 17/03/95  \\
+		shippriority & high      & high      \\
+		mktsegment   & furniture & furniture \\
+		price        & 50        & 100       \\
+		discount     & 10        & 0         \\
+		...          & ...       & ...       \\ \hline
 	\end{tabular}
 		\vspace{1em}
 		\captionof{table}{New lineitems}
@@ -2299,22 +2301,22 @@ Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectiv
 	\begin{minipage}{0.2\textwidth}
 	\begin{tabular}{lc}
 		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
-		\multicolumn{1}{|l|}{orderkey}     & \multicolumn{1}{c|}{5}        \\
-		\multicolumn{1}{|l|}{revenue}      & \multicolumn{1}{c|}{140}      \\
-		\multicolumn{1}{|l|}{orderdate}    & \multicolumn{1}{c|}{15/03/95} \\
-		\multicolumn{1}{|l|}{shippriority} & \multicolumn{1}{c|}{high}     \\ \hline
-		\multicolumn{1}{}{} & \multicolumn{1}{}{} \vspace*{-0.4em}    \\ 
+		orderkey     & 5        \\
+		revenue      & 140      \\
+		orderdate    & 15/03/95 \\
+		shippriority & high     \\ \hline
+		{} & {} \vspace*{-0.4em}    \\ 
 		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
-		\multicolumn{1}{|l|}{orderkey}     & \multicolumn{1}{c|}{5}        \\
-		\multicolumn{1}{|l|}{revenue}      & \multicolumn{1}{c|}{40}       \\
-		\multicolumn{1}{|l|}{orderdate}    & \multicolumn{1}{c|}{15/03/95} \\
-		\multicolumn{1}{|l|}{shippriority} & \multicolumn{1}{c|}{high}     \\ \hline
-		\multicolumn{1}{}{} & \multicolumn{1}{}{} \vspace*{-0.4em}    \\
+		orderkey     & 5        \\
+		revenue      & 40       \\
+		orderdate    & 15/03/95 \\
+		shippriority & high     \\ \hline
+		{} & {} \vspace*{-0.4em}    \\
 		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
-		\multicolumn{1}{|l|}{orderkey}     & \multicolumn{1}{c|}{5}        \\
-		\multicolumn{1}{|l|}{revenue}      & \multicolumn{1}{c|}{40}       \\
-		\multicolumn{1}{|l|}{orderdate}    & \multicolumn{1}{c|}{15/03/95} \\
-		\multicolumn{1}{|l|}{shippriority} & \multicolumn{1}{c|}{high}     \\ \hline
+		orderkey     & 5        \\
+		revenue      & 40       \\
+		orderdate    & 15/03/95 \\
+		shippriority & high    \\ \hline
 	\end{tabular}
 \vspace{1em}
 \captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
