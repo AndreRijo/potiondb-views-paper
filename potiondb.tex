@@ -1841,46 +1841,46 @@ This could be achieved with the following steps:
 	\begin{algorithmic}[1]
 		\State $\mathit{queued}$ \Comment{$serverId \to [T | CLK]$}	\label{alg_line:queued}	%Since for each server the transactions arrive by T.cc order, they are also stored by T.cc order.
 		%\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc, \textrm{Id\to[Update] }updsPerShard, \textrm{Id }serverId}$}
-		\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rc, \textrm{Timestamp }ct}$, Id$\to$[Update] $\mathit{updsPerShard}$, Id $\mathit{serverId}$}
-		\If{$\mathit{rc \leq vc_G}$}	\label{alg_line:remoteCheck}
-		\For{\textbf{each} $\mathit{sh, upds} \in \mathit{updsPerShard}$}
-		\State send \Call{applyRemoteTx}{$\mathit{ct, upds, serverId}$ to $\mathit{sh}$}
+		\Function{remoteTxn}{txId: tID, rc: VC, ct: TS, serverId: svID, updsPerShard: map[shID][OP]}	%updsPerShard: it's a map whose key is shID and each value is a list of updates. Each update is a pair of (objId, op), but this is irrelevant for the algorithm.
+		\If{rc $\leq$ vc$_G$}	\label{alg_line:remoteCheck}
+		\ForAll{sh, upds \textbf{in} updsPerShard}
+		\State send \Call{applyRemoteTx}{ct, upds, serverId} \textbf{to} sh
 		\EndFor
-		\ForAll{$\mathit{sh} \in \mathit{updsPerShard}$}
+		\ForAll{sh \textbf{in} updsPerShard}
 		\State wait for sh to finish or sh confirmation or sh to reply
 		\EndFor
-		\State $\mathit{vc_G[serverId]} = \mathit{ct}$
-		\State \Call{checkPendingRemote}{}()
+		\State vc$_G$[serverId] $\leftarrow$ ct
+		\State \Call{checkPendingRemote}{ }
 		\Else
-		\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{ct, txId, rr, updsPerShard}$}
+		\State queued[serverId].\Call{append}{ct, txId, rr, updsPerShard}
 		\EndIf
 		\EndFunction
-		\Function{remoteClk}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
-		\If{$\mathit{queued[serverId]}$.\Call{isEmpty}{}()}
-		\State send \Call{applyRemoteClk}{$\mathit{ts, serverId}$ to all shards}
-		\State wait for all shards to finish
-		\State $\mathit{vc_G[serverId]} = \mathit{ts}$
-		\State \Call{checkPendingRemote}{}()
+		\Function{remoteClk}{ts: TS, serverId: svID}
+		\If{queued[serverId].\Call{isEmpty}{ }}
+		\State \textbf{send} \Call{applyRemoteClk}{ts, serverId} \textbf{to} all shards
+		\State \textbf{wait for} all shards to finish
+		\State vc$_G$[serverId] $\leftarrow$ ts
+		\State \Call{checkPendingRemote}{ }
 		\Else
-		\State $\mathit{queued[serverId]}$.\Call{append}{$\mathit{ts}$}
+		\State queued[serverId].\Call{append}{ts}
 		\EndIf
 		\EndFunction
-		\Function{checkPendingRemote}{}()
-		\State $\mathit{finished = false}$
-		\While{$\mathit{!finished}$}
-		\State $\mathit{finished = true}$
-		\For{\textbf{each} ($\mathit{serverId, txs} \in \mathit{queued}$)}
-		\For{\textbf{each} ($\mathit{sh, upds} \in \mathit{txs[0].updsPerShard}$)}
-		\State send \Call{applyRemoteTx}{$\mathit{txs[0].ct, upds}$, $\mathit{serverId}$} to $\mathit{sh}$
+		\Function{checkPendingRemote}{ }
+		\State finished $\leftarrow$ false
+		\While{!finished}
+		\State finished $\leftarrow$ true
+		\ForAll{svId, txs \textbf{in} queued}
+		\ForAll{sh, upds \textbf{in} txs[0].updsPerShard}
+		\State \textbf{send} \Call{applyRemoteTx}{txs[0].ct, upds, svId} \textbf{to} sh
 		\EndFor
-		\ForAll{$\mathit{sh} \in \mathit{txs[0].updsPerShard}$}
-		\State wait to finish
+		\ForAll{sh \textbf{in} txs[0].updsPerShard}
+		\State \textbf{wait to} finish
 		\EndFor
-		\State $\mathit{vc_G[serverId] = txs[0].ct}$
-		\State $\mathit{finished = false}$
-		\State $\mathit{txs}$.\Call{removeFirst}{}()
+		\State vc$_G$[svId] $\leftarrow$ txs[0].ct
+		\State finished $\leftarrow$ false
+		\State txs.\Call{removeFirst}{ }
 		\EndFor
-		\LeftComment{Note: when a $\mathit{CLK}$ is popped from the queue, we send \Call{applyRemoteClk}{}() to all shards and update vc\textsubscript{G}.}
+		\LeftComment{Note: when a $\mathit{CLK}$ is popped from the queue, we send \Call{applyRemoteClk}{ } to all shards and update vc$_G$.}
 		\EndWhile
 		\EndFunction
 		%IMPORTANT NOTE: I skipped the code related with NuCRDTs. Namely, when applying remote transactions (and only those), each partition has to check if any of the NuCRDTs generated new operations – if so, those are sent to the TM. The TM collects all those operations and issues a new transaction to be committed – all partitions that generated NuCRDT ops are involved in the commit. After commit, the transaction is sent to replication like any other transaction. The only special caveat is that this transaction’s updates are not locally applied, only on remote, as the local NuCRDTs already know of these operations.
@@ -1893,15 +1893,15 @@ This could be achieved with the following steps:
 \begin{algorithm}
 	%Note: Likely not necessary I suppose...
 	\begin{algorithmic}[1]
-		\Function{applyRemoteTx}{$\mathit{\textrm{Timestamp }ct, \textrm{[Update] }upds}$, Id $\mathit{serverId}$}
-		\Statex \hspace*{1.5em} (...)	\Comment{Applying the updates to the CRDTs}
-		\State $\mathit{vc_j[serverId] = ct}$
+		\Function{applyRemoteTx}{ct: TS, upds: [OP], serverId: svID}	%upds: list of updates. In theory, in the form of pairs of (objId, upd). But that is irrelevant for the algorithm.
+		\Statex \hspace*{1.4em} (...)	\Comment{Applying the updates to the CRDTs}
+		\State vc$_j$[serverId] $\leftarrow$ ct
 		\EndFunction
-		\Function{applyRemoteClk}{$\mathit{\textrm{Timestamp }ct, \textrm{Id }serverId}$}
-		\State $\mathit{vc_j[serverId] = ct}$
+		\Function{applyRemoteClk}{ct: TS, serverId: svID}
+		\State vc$_j$[serverId] $\leftarrow$ ct
 		\EndFunction
 		\Function{getTransactions}{lastClk: VC}
-			\State txns $\leftarrow$ list of transactions after VC in log
+			\State txns $\leftarrow$ list of transactions after lastClk in log
 			\State safeClk $\leftarrow \bot$
 			%Any suggestion to compact the two lines inside the if and the two lines inside the else into one each?
 			\If{minPrep.\Call{nonEmpty}{ }}
