@@ -1777,67 +1777,83 @@ This could be achieved with the following steps:
 %I will either need a subsection to talk about publish/subscribe and RabbitMQ, or to talk it here. Consider having a figure showing rabbitMQ + PotionDB and how the communication is done.
 
 \begin{algorithm}
+\small{
 	\begin{algorithmic}[1]
 		\State {lastSentClk}:  VC \Comment{last transactions clock that was replicated}
-		\State {receivingTxs}: sID $\to$ tID$\times$VC$\times$VC$\times$(sID $\to$ \textsf{list}$\langle$OP$\rangle$) %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets.
+		\State {receivingTxs}: sID $\to$ tID$\times$VC$\times$VC$\times$(sID $\to$ \textsf{list}$\langle$OP$\rangle$) %For each (remote) server, keeps the data of the transaction being received. This is needed as each transaction is sent split by buckets. Note: This "OP" are only updates, not reads
 		\LeftComment{executes periodically}
 		\Function{replicate}{ }
 		\ForAll{sh \textbf{in} sID}
-		\State \textbf{send} \Call{GetTransactions}{{lastSentClk}} \textbf{to} {sh}	
+		\State \textbf{send} \Call{getTransactions}{{lastSentTs}} \textbf{to} {sh}	
 		%I didn't write the pseudo-code for this one
 		\EndFor
-		\State $\mathit{txCache = [(shardId \to T)]}$ just the type
-		\State $\mathit{safeClk = \top}$	\Comment{Clock that all partitions already committed.}
-		\ForAll{shards $\mathit{sh}$}
-		\State $\mathit{txns, shClk} \gets$ reply of $\mathit{sh}$ to \Call{GetTransactions}{}
-		\State $\mathit{safeClk} = $ \Call{min}{$\mathit{safeClk, shClk}$}
-		\State $\mathit{txCache}$.\Call{sortedAdd}{shardId,$\mathit{txns}$} adds to the list of pairs sorted by t.ct and shardID
+		\State txCache $\leftarrow$ \textsf{list}$\langle$shID $\to$ T$\rangle$ (just the type) %To be precise, this type is a list of pairs (shID, T), sorted by T.cc.
+		\State safeTs $\leftarrow \top$	\Comment{Timestamp that all partitions already committed.}
+		
+		\ForAll{sh \textbf{in} sID}
+		\State txns, shClk $\leftarrow$ \textbf{receive} reply \textbf{from} sh		%To be consistent with previous algorithms, I don't think we need to say the reply is "to \Call{getTransactions}{}"
+		%\State txns, shClk $\leftarrow$ reply of sh to \Call{getTransactions}{}"
+		\State safeClk $\leftarrow$ \Call{min}{safeClk, shClk}
+		\State txCache.\Call{sortedAdd}{sh$^{id}$,txns} adds to the list of pairs sorted by T.ct and shID
 		\EndFor{}
-		\Comment{Iterate over all pairs (shard, trx) for each transaction}
-		\For{\textbf{each} $\mathit{txShards} \in \mathit{txCache}$ \&\& $\mathit{txShards.ct} \leq \mathit{safeClk}$}
-		\State $\mathit{txPerBucket =}$ \Call{splitTxPerBucket}{$\mathit{txShards}$} \label{alg_line:call_splitTxPerBucket}
-		\For{\textbf{each} $\mathit{bucket, upds} \in \mathit{txPerBucket}$}
-		\State send ($\mathit{bucket, upds, txShards.rc, txShards.ct}$,   $\mathit{txShards.txId}$) to servers replicating $\mathit{bucket}$	\label{alg_line:sendTx}	%In our prototype, send this to the RabbitMQ instance of Si.
-		\EndFor
-		\EndFor
-		\State send ($\mathit{CLK, safeClk}$) to all servers
-		\State $\mathit{lastSentClk = safeClk}$
+		\State groupedCache $\leftarrow$ \Call{groupTxs}{txCache}	\Comment{Transforms txCache into a list of (T, shID $\to$ \textsf{list}$\langle$Update$\rangle$), sorted by T.ct.	%The idea is groupedCache has a type of list: [(T, map[shID][upds])]. This allows us to have the updates partitioned by shard. The list is sorted by T.ct.
+		
+%		\LeftComment{Iterate over all pairs (sh, tx) for each transaction}
+%		\For{\textbf{each} $\mathit{txShards} \in \mathit{txCache}$ \&\& $\mathit{txShards.ct} \leq \mathit{safeClk}$}
+%		\State $\mathit{txPerBucket =}$ \Call{splitTxPerBucket}{$\mathit{txShards}$} \label{alg_line:call_splitTxPerBucket}
+%		\For{\textbf{each} $\mathit{bucket, upds} \in \mathit{txPerBucket}$}
+%		\State send ($\mathit{bucket, upds, txShards.rc, txShards.ct}$,   $\mathit{txShards.txId}$) to servers replicating $\mathit{bucket}$	\label{alg_line:sendTx}	%In our prototype, send this to the RabbitMQ instance of Si.
+%		\EndFor
+%		\EndFor
+		\ForAll{T, updsPerShard \textbf{in} groupedCache $\land$ T.ct $\leq$ safeTs}
+			\State txPerBucket $\leftarrow$ \Call{splitTxPerBucket}{updsPerShard} \label{alg_line:call_splitTxPerBucket}
+			\ForAll{bucket, upds \textbf{in} txPerBucket}
+				\State \textbf{send} (bucket, upds, T.rc, T.ct, T.txId, j) \textbf{to servers replicating} bucket		%j: Our serverID (we're Sj)
+			\EndFor{}
+		\EndFor{}
+		\State \textbf{send} (CLK, safeTs) \textbf{to all servers}
+		\State lastSentTs $\leftarrow$ safeTs
 		\EndFunction
 		\LeftComment{I don't think it's needed for this function's pseudo-code to be here.}
-		\Comment{parameter is a set}
-		\Function{splitTxPerBucket}{shardId$\to$T $\mathit{txShards}$}
-		\State $\mathit{txPerBucket = bucket \to shard \to [upds]}$
-		\For{\textbf{each} $\mathit{sh} \in \mathit{txShards}$}
-		\For{\textbf{each} $\mathit{upd} \in \mathit{txShards.upds}$}
-		\State $\mathit{txPerBucket[upd^{bucket}][sh]}$.\Call{add}{$\mathit{upd}$}
+		\LeftComment{parameter is a set}
+		
+		\Function{splitTxPerBucket}{updsPerShard: shID $\to$ \textsf{list}$\langle$Update$\rangle$}
+		\State txPerBucket $\leftarrow$ bucket $\to$ shard $\to$ \textsf{list}$\langle$Update$\rangle$} (just the type)
+		\ForAll{sh, upds \textbf{in} txShards}
+			\ForAll{upd \textbf{in} upds}
+				\State txPerBucket[upd$^{bucket}$][sh].\Call{add}{upd}
+			\EndFor
 		\EndFor
-		\EndFor
-		\State \textbf{return} $\mathit{txPerBucket}$
+		\State \textbf{return} txPerBucket
 		\EndFunction
+		
 		\LeftComment{Executed when message is received}
-		\Function{receiveBucket}{$\mathit{\textrm{Bucket } bucket, \textrm{[Update] } upds}$, $\mathit{\textrm{Clock } rc, \textrm{Timestamp } ct, \textrm{Id } txId, \textrm{Id } serverId}$}
+		\Function{receiveBucket}{bucket: Bucket, updsPerShard: shID $\to$ \textsf{list}$\langle$Update$\rangle$, rc: VC, ct: TS, txId: tID, serverId: svID}
 		%Note: the communication layer ensures messages are received in order. I.e., all buckets of a transaction will be received before the next transaction, and CLK will be the last message.
 		%So this means, per server, we have one transaction being received at each moment
-		\If{$\mathit{txId} \neq \mathit{receivingTxns[serverId].txId}$}
-		\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$ \Comment{New tx. Old one is complete.}
-		\State $\mathit{receivingTxns[serverId] = \bot}$
+		\If{txId $\neq$ receivingTxs[serverId].txId}
+		\State \textbf{send} \Call{remoteTxn}{receivingTxs[serverId], serverId} \textbf{to} TM \Comment{New tx. Old one is complete.}
+		\State receivingTxns[serverId] $\leftarrow \bot$
 		\EndIf
-		\State $\mathit{receivingTxns[serverId].txId, .rc, .ct = txId, rc, ct}$
-		\State $\mathit{receivingTxns[serverId].upds}$.\Call{addAll}{$\mathit{upds}$}
+		\State receivingTxns[serverId].txId, .rc, .ct $\leftarrow$ txId, rc, ct
+		\State receivingTxns[serverId].upds.\Call{addAll}{updsPerShard}
 		\EndFunction
-		\Function{receiveClock}{$\mathit{\textrm{Timestamp }ts, \textrm{Id }serverId}$}
-		\If{$\mathit{receivingTxns[serverId] \neq \bot}$}
-		\State send \Call{remoteTxn}{$\mathit{receivingTxns[serverId], serverId}$} to $\mathit{TM}$
-		\State $\mathit{receivingTxns[serverId] = \bot}$
+		\Function{receiveClock}{ts: TS, serverId: svID}
+		\If{receivingTxns[serverId] $\neq \bot$}
+		\State \textbf{send} \Call{remoteTxn}{receivingTxns[serverId], serverId} \textbf{to} TM
+		\State receivingTxns[serverId] $\leftarrow \bot$
 		\EndIf
-		\State send \Call{remoteClk}{$\mathit{ts, serverId}$} to $\mathit{TM}$
+		\State send \Call{remoteClk}{ts, serverId} \textbf{to} TM
 		\EndFunction
 	\end{algorithmic}
+	%Important note on this algorithm: Maybe we could "hide" the fact that for each transaction the updates are sent and received partitioned by shard. That would hide some complexity from splitTxPerBucket and ReceiveBucket, but would be problematic for RemoteTxn of the TransactionManager.
 	\caption{Replicator S\textsubscript{j}'s: replication protocol}
 	\label{alg:replication_repl}
+}
 \end{algorithm}
 
 \begin{algorithm}
+	\small{
 	\begin{algorithmic}[1]
 		\State $\mathit{queued}$ \Comment{$serverId \to [T | CLK]$}	\label{alg_line:queued}	%Since for each server the transactions arrive by T.cc order, they are also stored by T.cc order.
 		%\Function{remoteTxn}{$\mathit{\textrm{Id }txId, \textrm{Clock }rr, \textrm{Timestamp }cc, \textrm{Id\to[Update] }updsPerShard, \textrm{Id }serverId}$}
@@ -1888,10 +1904,12 @@ This could be achieved with the following steps:
 	\end{algorithmic}
 	\caption{Remote transactions on S\textsubscript{j}'s Transaction Manager}
 	\label{alg:replication_tm}
+	}
 \end{algorithm}
 
 \begin{algorithm}
 	%Note: Likely not necessary I suppose...
+	\small{
 	\begin{algorithmic}[1]
 		\Function{applyRemoteTx}{ct: TS, upds: [OP], serverId: svID}	%upds: list of updates. In theory, in the form of pairs of (objId, upd). But that is irrelevant for the algorithm.
 		\Statex \hspace*{1.4em} (...)	\Comment{Applying the updates to the CRDTs}
@@ -1900,20 +1918,19 @@ This could be achieved with the following steps:
 		\Function{applyRemoteClk}{ct: TS, serverId: svID}
 		\State vc$_j$[serverId] $\leftarrow$ ct
 		\EndFunction
-		\Function{getTransactions}{lastClk: VC}
-			\State txns $\leftarrow$ list of transactions after lastClk in log
-			\State safeClk $\leftarrow \bot$
+		\Function{getTransactions}{lastTs: TS}
+			\State txns $\leftarrow$ list of local transactions after lastTs in log
+			\State safeTs $\leftarrow \bot$
 			%Any suggestion to compact the two lines inside the if and the two lines inside the else into one each?
 			\If{minPrep.\Call{nonEmpty}{ }}
-				\State safeClk $\leftarrow $ minPrep.\Call{min}{ }.clk
-				\State safeClk[j] $\leftarrow$ safeClk[j] - 1	%Note: j = Server j. Not sure if a comment here is needed, but the explanation is: no upcoming commit will have a clock for Sj that is <= minPrep.min().clk[j]-1
+				\State safeTs $\leftarrow $ minPrep.\Call{min}{ }.ts - 1 %Not sure if a comment here is needed, but the explanation is: no upcoming commit will have a clock for Sj that is <= minPrep.min().clk[j]-1
 			\Else
-				\State safeClk $\leftarrow$ vc$_i$
-				\State safeClk[j] $\leftarrow$ pc
+				\State safeTs $\leftarrow$ pc
 			\EndIf
-			\State \textbf{send} (txns, safeClk) \textbf{to} Replicator
+			\State \textbf{send} (txns, safeTs) \textbf{to} Replicator
 		\EndFunction
 	\end{algorithmic}
+}
 	\caption{Materializer: execution of remote transactions on S\textsubscript{j}'s shard sh\textsubscript{i}}
 	\label{alg:replication_shard}
 \end{algorithm}
