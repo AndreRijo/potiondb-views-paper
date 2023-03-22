@@ -2407,6 +2407,296 @@ Even though only 6 of TPC-H’s queries were implemented in PotionDB, all were a
 Our specification language can provide views for most queries - the few that it can not, manually supplying triggers does the trick.
 Thus, PotionDB's data types are expressive enough to fully support TPC-H queries' efficiently, demonstrating PotionDB's expressivety adequaty for OLAP scenarios. %Maybe replace OLAP with analytical.
 
+\section{New Evaluation}
+
+\begin{itemize}
+	\item Say that we evaluate PotionDB's performance
+	\item Give a short summary of what we try to access
+	\item Describe the three modes of PotionDB (normal, "partitioned views/Local PotionDB", "single view server/Single PotionDB")
+\end{itemize}
+
+\subsection{Setup}
+
+(this corresponds to the old "settings" subsection. I noticed most papers mention it as "setup" or "experimental setup")
+
+\begin{itemize}
+	\item List common settings (number of servers, number of client nodes, hardware, etc. Mostly the same as before)
+	\item Alter the way we mention about latency, as now the first tests have latency but the latter not, instead of being something that "changes". Leave clear the clients will always contact the closest server and, for non-global queries, they will request information regarding their server's region.
+	\item Explain how is the data prepared and what are the metrics.
+\end{itemize}
+
+\subsection{Scenarios}
+
+Note: Before this was under the "Settings" (now "Setup") subsection.
+But now it feels weird to put scenarios under setup... I will think if I put both under the same subsection (with different sub-subsections) or separate later.
+
+Describe the scenarios/what we want to answer/evaluate in detail:
+\begin{itemize}
+	\item Benefits of having views of global data replicated everywhere, compared to using views of only locally replicated data (local PotionDB) or a single server with global views; (default scenario, where we just test all our implemented TPC-H queries)
+	\item How do our views perform for both world-wide queries and region-wide (i.e., local data) queries? (here we compare separately a query that requires global data with a query that can be served with local data)
+	\item Are our views still beneficial when updates are factored in? (or alternatively) What is the effect on PotionDB's performance of executing updates, namely as the write/read ratio increases?
+	\item How does the type of view affect the performance of a query/view? (I am unsure how to make the question for this one. The intention is: how does the view implementation (topk vs counter vs average vs etc.) affect the throughput?. This will include both read-only and read+update scenarios, with no updates to the base objects).
+	\item (Note: the last graph for the question above also showcases how the number of replicas affects the aggregated throughput.)
+\end{itemize}
+
+%\begin{itemize}
+%	\item Graph with latency of all queries
+%	\item Graph with latency of Q3; Q5
+%	\item Two graphs with updates, side by side: one for PotionDB, one for Local PotionDB. Consider including single PotionDB albeit likely not needed (it is obvious this will not scale well as all transactions need to communicate with the view server).
+%	\item (Keep explanations short on the ones above, as there is not much to comment - local has terrible latency (except for Q5), single is 1/5th of PotionDB with highly variable latency due to some clients being close and others faraway.)
+%	\item Explain that latency benefits our solution (our solution is even more advantageous with latency than without latency when compared to Local and Single versions)
+%	\item Graph without latency of all queries
+%	\item Graph without latency of Q3; Q5
+%	\item Graph with updates without latency (likely two graphs again)
+%	\item (The three above is when we can give explanations on why local and single are always worse, even in their ideal scenarios.)
+%	\item Before I used to have query and update latency graphs - are they still needed? These graphs show two things: (1), updates have higher latency than queries, mainly due to many updates needed to update an order, while to do a full "query trransaction", only 7 reads are needed to implement all 6 queries; (2) update latency spikes easily when the server saturates, due to many commits trying to get locks which enter in conflict.
+%	\item query-only graph with different sizes for the K of TopK. Shows how much the size of the "limit" affects performance.
+%	\item (I think we can cut the two old graphs that showed the performance with updates and different topK sizes)
+%	\item bar graph that shows the "best" throughput for different sizes of K for both TopK and TopSum, and for different update rates. (maybe modify the graph to include the latency too that gives said throughput?)
+%	\item bar graph that compares counter, average and topk for different numbers of replicas and update rates
+%\end{itemize}
+
+\subsection{??? (Beneficio das vistas nas leituras)}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.75\linewidth]{clientScale_tc_cut}
+	\caption{PotionDB's performance executing all queries. Both axes have a log(10) scale.}
+	\label{fig:(new)global_local_single_tc}
+\end{figure}
+
+Note: Figure \ref{fig:(new)global_local_single_tc} will, later on, show the variation of latency for at least the single version.
+\begin{itemize}
+	\item Short introduction (we try to evaluate the benefits of global views replicated everywhere; compare with other two versions; access scalability in throughput and latency)
+	\item Explain how PotionDB is unaffected by latency;
+	\item Explain why Local PotionDB is so heavily affected by latency; also why low throughput (intuition: each global query ends up having to be re-forwarded to every server). Mention how 2/3rd of the queries require global data.
+	\item Explain why Single PotionDB is mildly affected by the latency (throughput dominated by clients close to the server. Faraway clients (i.e., most of the clients) experience low throughput and high latency).
+\end{itemize}
+
+\subsection{Locality of data/Effects of data locality}
+
+I have to do these two graphs (I have the necessary data however).
+Here's what those graphs will show.
+
+Graph one: Q3 (global query). PotionDB will scale fine, up to 4.5m ops/s, unnafected by latency (around 0.8ms at 4.5m ops/s). Local PotionDB will be a disaster, with around 210ms latency and up to 70k ops/s. Single PotionDB will get up to around 900k ops/s (1/5th of PotionDB), with around 3-4ms of latency (some effect from added latency).
+
+Graph two: Q5 (local query). PotionDB and Local PotionDB will scale similarly: respectively, 4.1m ops/s and 3.9m ops/s. Both are unnafected by added latency, Local PotionDB even has slightly lower latency. Single PotionDB will have 1/5th of their performance and around 3-4ms latency (i.e., some effect from added latency).
+
+\begin{itemize}
+	\item executing only global queries (Q3) further exacerbates how poorly Local PotionDB performs, due to having to contact all servers for each query. (similar conclusions to the previous section)
+	\item when executing local-only queries (Q5), local PotionDB performs similarly to PotionDB - no redirection of requests is needed (clients only ask for data of their region), thus local PotionDB can efficiently reply to queries with only its local data views. Our solution "does not lose" to the local view solution.
+\end{itemize}
+
+\subsection{PotionDB scaling with updates}
+
+Two to three graphs: global with updates, local with updates, (optionally) single with updates. I have to modify the graphs to not count with updates for the views.
+
+Note: both graphs below still account for view updates on their throughput. 
+View updates account for around 2/3rd of the update count.
+
+%Graph global: higher update rates mean lower max throughput and a bit higher latency (e.g., 0\% updates starts at 0.3ms, 100\% starts at 0.5ms). The old graph of this one (still counting with view updates) is on Figure \ref{fig:(new)update_rates}.
+%Graph global: Check Figure \ref{fig:(new)update_rates}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.75\linewidth]{updRate_global_cut}
+	\caption{PotionDB's performance with varying update rate.}
+	\label{fig:(new)update_rates}
+\end{figure}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.7\linewidth]{updRate_tc_cut}
+	\caption{Local PotionDB's performance with varying update rate}
+	\label{fig:(new)update_rates_tc}
+\end{figure}
+
+%Graph local: Low max throughput and high latency. Increasing the update ratio decreases latency slightly and increases max throughput con
+
+\begin{itemize}
+	\item Explain what is an update in TPC-H; explain how we do not count with view updates for the throughput;
+	\item Explain why PotionDB is unaffected by the added latency; explain why PotionDB's throughput decreases so heavily. Mention that a lot of the operations are not counted, as there are many view updates.
+	\item Explain why Local PotionDB is affected by the added latency. Explain why Local PotionDB's throughput increases with the higher update ratio and why latency decreases (reason: updates have lower latency than queries because only a subset of the servers need to be contacted, instead of all, so often the highest latency connection can be avoided. Furthermore, updates have more operations per transaction than queries, i.e., more operations per round trip.)
+\end{itemize}
+
+\subsection{PotionDB performance on a single DC}
+
+Note: The idea here is to repeat all the tests before without latency and notice how our solution is still better than local and single PotionDB.
+
+\begin{itemize}
+	\item Explain how latency favours our solution over local and single PotionDB (i.e., our solution is unnafected by latency)
+	\item Explain that is why from here on we will test on a single DC, which benefits local and single
+\end{itemize}
+
+%Need to add graphs, these ones I believe I have on the paper already
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.9\linewidth]{clientScale_cut}
+		\caption{All queries}
+		\label{fig:(new)global_local_single}
+	\end{subfigure}%
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.9\linewidth]{Q3vsQ5_cut}
+		\caption{Single query type}
+		\label{fig:(new)q3q5}
+	\end{subfigure}
+	\caption{Query-only performance of PotionDB and its local and single view versions, without added latency. On the left all queries are executed, while on the right only Q3 or Q5 are.}
+	\label{fig:(new)query_only}
+\end{figure}
+
+\begin{itemize}
+	\item Can confirm that PotionDB's performance is unaffected by added latency - same performance as before.
+	\item Local and single PotionDB still perform much worse than PotionDB when executing all queries.
+	\item Local PotionDB performance for all queries is around 1/6th of PotionDB. This is due to 2/3rd of the queries requiring data from all servers, which means needing to redirect requests and adding extra load on all servers, as well as having to wait for RTT. Furthermore, it implies all transactions need to wait for the slowest server. (Note: these redirected requests do not count for throughput - i.e., if a query only needed a single read in normal PotionDB, we only count as one read even if all servers need to execute said read)
+	\item Local PotionDB works well for Q5, as this query is served totally with data of a region (i.e., local data). For queries of a region, the clients always pick the region of the server they are connected to. Thus, no redirects occurs and its performance is comparable to PotionDB.
+	\item Local PotionDB does not perform well with Q3, a query requiring global data. The performance is only 1/13th of PotionDB's. This is due to the redirected requests, exercing extra pressure on all servers, the extra round-trip and bigger data transfers. (Note: this query is a top 10, thus the data transferred is non-negligible.)
+	\item Single PotionDB's max throughput is about 1/5th of PotionDB's performance for all scenarios considered, as one server gets the full load.
+\end{itemize}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.75\linewidth]{updRate_global_cut}
+	\caption{PotionDB's performance with varying update rate.}
+	\label{fig:(new_2)update_rates}
+\end{figure}
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.99\linewidth]{updRate_queryLatency_cut}
+		\caption{Query-latency}
+		\label{fig:(new)update_rates_query}
+	\end{subfigure}%
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.99\linewidth]{updRate_updateLatency_cut}
+		\caption{Update-latency}
+		\label{fig:(new)update_rates_update}
+	\end{subfigure}
+	\caption{PotionDB's performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, as well as associated items and views, thus having more operations than one query-only transaction.}
+	\label{fig:(new)update_rates_split}
+\end{figure}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.7\linewidth]{updRate_localvsglobal_cut}
+	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate.}
+	\label{fig:(new)update_rates_normal_vs_local}
+\end{figure}
+
+Note: Figure \ref{fig:(new_2)update_rates} is the same one as the one used in the latency section as... there is no visible difference.
+I could however re-run the experiments with latency to have maybe a very slightly difference. I suppose we won't repeat the graph.
+
+Note2: Are the graphs in Figure \ref{fig:(new)update_rates_split} still relevant? The idea is to differentiate how the latency of queries/updates scales. I believe it is.
+
+Note3: All the graphs still include in their throughput the view's updates. I will remove this later.
+
+\begin{itemize}
+	\item Mention how it can be observed that added latency has no effect on PotionDB's throughput with updates;
+	\item It is noticeable that updates have higher latency than queries even with few clients. This is mostly due to transactions with updates having more operations than query-only (due to needing to update order + its items + all views)
+	\item Latency on updates spikes more heavily at the end compared to queries. This is due to many concurrent transactions trying to commit, which makes each transaction having to wait for multiple others to finish before it is successfully committed. (I need suggestions to explain this one. Basically it's the problem of 2PC - too many transactions, they start conflicting and slow down the system. We don't use locks however.)
+	\item Not having latency added benefits local PotionDB. However, overall, its performance is still worse than PotionDB.
+	\item Local PotionDB's throughput increases slightly with the increase of the update ratio. This is because updates are not as hindered by views being split per region as queries. Half of our orders are local to a region, thus all updates of those half will be local-only. Even for orders that are not fully local, usually they only refer a subset of the other regions, thus only a few updates get redirected and to few servers. Furthermore, updates to the views do not need to be replicated and applied everywhere as all views are local.
+\end{itemize}
+
+IMPORTANT NOTE: After I remove the view's updates from the counting, it is possible that Local PotionDB no longer increases throughput with the \% of updates. However, it will still be worse than PotionDB for sure.
+
+\subsection{Types of views (or maybe, Views type benchmarking?}
+
+Note: Suggestions for the title above are welcome
+
+\begin{itemize}
+	\item We now evaluate the performance of CRDTs used to build the views of TPC-H: TopK, TopSum, Counter and Average.
+	\item Describe the new test scenario (as it is not TPC-H).
+\end{itemize}
+
+%TOPK test max throughputs: 11.3M, 10.3M, 3.1M, 0.37M
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.7\linewidth]{TopKTopSize0upd_cut}
+	\caption{TopK query performance with a varying top size.}
+	\label{fig:(new)TopkSize0upd}
+\end{figure}
+
+Describe differences in throughput, and justify. 1 -> 10: 10\% difference, as the amount of data transferred is small compared to communication overhead (latency + metadata transferred + cost of serialization/deserialization of protobufs), as well as the overhead of handling a high amount of clients. 10 -> 100, 10 -> 1000: 70\%, 88\%: the amount of data transferred is what weights the most. After 1000 we expect linear decrease of throughput.
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{TopKTopSize25upd_cut}
+		\caption{TopK with 25\% updates}
+		\label{fig:(new)TopkSize25upd}
+	\end{subfigure}%
+	\begin{subfigure}{.5\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{TopKTopSize100upd_cut}
+		\caption{TopK with 100\% updates}
+		\label{fig:(new)TopkSize100upd}
+	\end{subfigure}
+	\caption{TopK operations (query + update) performance with varying top size.}
+	\label{fig:(new)TopkSize25_100upd}
+\end{figure}
+
+Note: Maybe the two graphs above (Figure \ref{fig:(new)TopkSize25_100upd}) is not needed? Maybe just Figure \ref{fig:(new)TopkVSTopsum} is enough.
+
+The differences between throughputs here is smaller compared to query-only scenarios.
+This is due to the amount of data transferred in updates being independent of the top's size.
+However, as expected, as the value of K increases, adding or removing elements to the top gets more expensive.
+(Possible justification: searching for the next element to put on the top after a remove is expensive, as the "not top" set of elements is unsorted. Higher Ks have this operation happen more often).
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=.7\linewidth]{TopKVSTopSum_cut}
+	\caption{TopK and TopSum performances for different top sizes and update rates.}
+	\label{fig:(new)TopkVSTopsum}
+\end{figure}
+
+Performance is quite similar, except for high update rates, where TopSum performs considerably better.
+This is because TopSum does not have adds and removes but rather increments and decrements - when testing TopK with only adds and TopSum with only decrements, both CRDTs perform similarly.
+
+(Is the explanation above OK?)
+(Should the graph above include the latency? E.g. as a value on top of each bar.)
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{.33\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{CounterAvgTopK0upd_v2_cut}
+		\caption{0\% update rate}
+		\label{fig:(new)CounterAvgTopK0upd}
+	\end{subfigure}%
+	\begin{subfigure}{.33\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{CounterAvgTopK25upd_v2_cut}
+		\caption{25\% update rate}
+		\label{fig:(new)CounterAvgTopK25upd}
+	\end{subfigure}%
+	\begin{subfigure}{.33\linewidth}
+		\centering
+		\includegraphics[width=.97\linewidth]{CounterAvgTopK100upd_v2_cut}
+		\caption{100\% update rate}
+		\label{fig:(new)CounterAvgTopK100upd}
+	\end{subfigure}
+	\caption{Counter, Average and TopK CRDTs performance for different numbers of replicas and update rates.}
+	\label{fig:(new)CounterAvgTopK}
+\end{figure}
+
+\begin{itemize}
+	\item This test not only compares different types of views, it also shows a basic test of scalability of TPC-H with the number of replicas
+	\item The throughput on all three CRDTs is similar (when considering TopK as being Top1) - most of the cost is on communication, context switching (between clients) and 2PC (for updates). Updates for counters, averages and Tops of 1 are trivial.
+	\item For query-only, the performance scales near linearly with the number of servers for the three CRDTs. 5 to 1 server is a 78.8\% decrease.
+	\item With 100\% updates, the performance decreases less linearly: 5 to 4 servers is 17.1\% decrease, 5 to 1 is 67.9\%. This happens due to updates needing to be propagated and applied in every replica.
+	\item PotionDB's effective replication mechanism, namely the replication and appliance of groups of transactions at a time, allow replicated updates to be applied efficiently.
+\end{itemize}
+
+Notes: I do not have an explanation for TopK having slightly better performance than other CRDTs with 25\% updates.
+As for update-only having better throughput than updates+query, I can think of the following two possible reasons: a) updates make queries wait; b) update transactions reply quicker as a reply is sent as soon as a commit is confirmed, even if it is queued, unlike queries which have to wait for the result to be ready.
+
 \section{Evaluation}
 \label{sec:evaluation}
 
@@ -2469,7 +2759,7 @@ In general, our test environment has the following configuration:
 	\item Each client selects one server to execute queries upon and only contacts said server. For local view and single view PotionDBs, if a server cannot satisfy a query with its data, said server contacts other servers in order to reply to the query.
 	\item Clients communicate with a server using Google’s protobufs \cite{Protobufs} to serialize/deserialize data. PotionDB’s protobuf interface is an extension of AntidoteDB’s protobuf interface \cite{AntidoteDB}.
 	\item Unless otherwise specified, each request is a transaction which contains one instance of each query - this implies that, for local view PotionDB, transactions have more operations, as some queries need data from multiple regions.
-	\item In some scenarios, we impose latency between the servers, in order to simulate how PotionDB would perform when distributed accross the globe.
+	\item In some scenarios, we impose latency between the servers, in order to simulate how PotionDB would perform when distributed across the globe.
 	We use as reference the latency between AWS instances, as measured in \cite{AWSLatency} \andre{(Add a date of access?)}.
 	The following regions were selected: EU (Paris), US (N.Virginia), Canada (Central), Asia Pacific (Tokyo), Middle East (Bahrain). The highest latency measured is between Canada and Middle East at 204ms as of the date of measure.
 	\andre{Note: a possible critic here is that we don't have one server per continent, which is the scenario we always describe in the paper.}
