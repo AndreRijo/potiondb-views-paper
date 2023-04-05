@@ -129,6 +129,9 @@
 
 \begin{document}
 
+%\showthe\columnwidth
+%\showthe\textwidth
+%\showthe\linewidth
 \title{Global Views on Partially Geo-Replicated Data}
 
 %%
@@ -2409,6 +2412,21 @@ Thus, PotionDB's data types are expressive enough to fully support TPC-H queries
 
 \section{New Evaluation}
 
+%\begin{figure}[h]
+%	\centering
+%	\includegraphics{test2}
+%\end{figure}
+%
+%\begin{figure}[h]
+%	\centering
+%	\includegraphics{test}
+%\end{figure}
+%
+%\begin{figure}[h]
+%	\centering
+%	\includegraphics{test3}
+%\end{figure}
+
 \begin{itemize}
 	\item Say that we evaluate PotionDB's performance
 	\item Give a short summary of what we try to access
@@ -2456,11 +2474,20 @@ Describe the scenarios/what we want to answer/evaluate in detail:
 %	\item bar graph that compares counter, average and topk for different numbers of replicas and update rates
 %\end{itemize}
 
-\subsection{??? (Beneficio das vistas nas leituras)}
+\subsection{PotionDB performance with geo-replication}
+
+\subsubsection{??? (Beneficio das vistas nas leituras)}
+
+%\begin{figure}[h]
+%	\centering
+%	\includegraphics[width=.75\linewidth]{clientScale_tc_cut}
+%	\caption{PotionDB's performance executing all queries. Both axes have a log(10) scale.}
+%	\label{fig:(new)global_local_single_tc}
+%\end{figure}
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=.75\linewidth]{clientScale_tc_cut}
+	\includegraphics{new/all_queries_tc}
 	\caption{PotionDB's performance executing all queries. Both axes have a log(10) scale.}
 	\label{fig:(new)global_local_single_tc}
 \end{figure}
@@ -2473,7 +2500,7 @@ Note: Figure \ref{fig:(new)global_local_single_tc} will, later on, show the vari
 	\item Explain why Single PotionDB is mildly affected by the latency (throughput dominated by clients close to the server. Faraway clients (i.e., most of the clients) experience low throughput and high latency).
 \end{itemize}
 
-\subsection{Locality of data/Effects of data locality}
+\subsubsection{Locality of data/Effects of data locality}
 
 I have to do these two graphs (I have the necessary data however).
 Here's what those graphs will show.
@@ -2487,7 +2514,7 @@ Graph two: Q5 (local query). PotionDB and Local PotionDB will scale similarly: r
 	\item when executing local-only queries (Q5), local PotionDB performs similarly to PotionDB - no redirection of requests is needed (clients only ask for data of their region), thus local PotionDB can efficiently reply to queries with only its local data views. Our solution "does not lose" to the local view solution.
 \end{itemize}
 
-\subsection{PotionDB scaling with updates}
+\subsubsection{PotionDB scaling with updates}
 
 Two to three graphs: global with updates, local with updates, (optionally) single with updates. I have to modify the graphs to not count with updates for the views.
 
