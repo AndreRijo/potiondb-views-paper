@@ -3,6 +3,7 @@
 %Generated PDF
 *.pdf
 !images/*.pdf
+!images/new/*.pdf
 
 %Latex metadata files
 *.aux
