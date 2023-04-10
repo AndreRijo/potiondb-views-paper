@@ -2434,17 +2434,17 @@ Describe the scenarios/what we want to answer/evaluate in detail:
 
 \subsubsection{??? (Beneficio das vistas nas leituras)}
 
-%\begin{figure}[h]
-%	\centering
-%	\includegraphics[width=.75\linewidth]{clientScale_tc_cut}
-%	\caption{PotionDB's performance executing all queries. Both axes have a log(10) scale.}
-%	\label{fig:(new)global_local_single_tc}
-%\end{figure}
+\begin{figure}[h]
+	\centering
+	\includegraphics{singleQuery/all_queries_tc}
+	\caption{PotionDB's performance executing all queries. (1txn = 1 query)}
+	\label{fig:(new)global_local_single_tc}
+\end{figure}
 
 \begin{figure}[h]
 	\centering
-	\includegraphics{new/all_queries_tc}
-	\caption{PotionDB's performance executing all queries. Both axes have a log(10) scale.}
+	\includegraphics[width=1\linewidth]{clientScale_tc_cut}
+	\caption{[OLD]PotionDB's performance executing all queries. (1txn = all queries (6 queries, 7 reads total)).}
 	\label{fig:(new)global_local_single_tc}
 \end{figure}
 
