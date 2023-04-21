@@ -4,6 +4,7 @@
 *.pdf
 !images/*.pdf
 !images/new/*.pdf
+!images/singleQuery/*.pdf
 
 %Latex metadata files
 *.aux
