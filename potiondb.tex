@@ -370,8 +370,9 @@ Objects are uniquely identified by the triple $\mathit{(key, bucket, type)}$.
 For presentation purposes, we assume the triple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
 Whenever needed, we represent the aforementioned properties for a given object $o$ as
 $o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
-Objects are grouped in $\mathit{buckets}$, which are the unit of replication, as further
-detailed in Section \ref{subsec:buckets}. An object has a $\mathit{key}$ inside the bucket.
+Objects are stored in $\mathit{buckets}$, which are the unit of replication in PotionDB. 
+Buckets are further logically grouped in containers,as further
+detailed in Section \ref{subsec:buckets}. An object has a $\mathit{key}$ inside the container (and bucket).
 
 PotionDB supports objects of different data $\mathit{types}$, including registers, counters, averages, sets, maps
 and top-K ordered sets~\cite{Cabrita17Nonuniform}.
@@ -411,14 +412,14 @@ in the presence of concurrent updates.
 	\label{table:PotionDB_API}
 \end{table}
 
-PotionDB offers a key-value store transactional interface, as summarized in Table \ref{table:PotionDB_API}.
+PotionDB offers a key-value  transactional interface, as summarized in Table \ref{table:PotionDB_API}.
 An application can issue interactive transactions, by starting to execute the \code{begin(clk)} operation,
 where \code{clk} is used to enforce causality between consecutive transactions.
 A transaction proceeds with a sequence of operations: 
 \begin{inparaenum}[(i)] 
 \item \code{get(txId, id)}, which returns the full state of the object;
 \item \code{read(txId, id,op)}, which returns the result of read-only operation \code{op} executed in the object; and
-\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist.
+\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist; an object is deleted by issuing the delete operation.
 \end{inparaenum}
 The operations defined in each object are type-specific - e.g. a set object includes a \code{contains(el)} operation to check
 if value \code{el} belongs to the set, and an \code{add(el)} and \emph{remove(el)} to add or remove \code{el} from the set.
@@ -428,204 +429,119 @@ PotionDB also allows an application to issue an one-shot~\cite{} read-only or wr
 by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}
 for aborting 
 
-PotionDB's materialized views can speed up the execution of queries by aggregating and  summarizing data partitioned across multiple servers, without a single server containing all the information required for the view.
-With a simple read on a view, complex OLAP queries over global data can be quickly served, while still making full usage of data locality to save on replication costs.
-
-Defining materialized views by directly composing PotionDB's data types, while possible, can be quite complex and cumbersome.
-This is further aggravated by the need to keep views updated, which would require the application developer to write code for updating both the base objects and views.
-
-To ease the deployment of views, we define and provide a specification language inspired in SQL \cite{sequel}.
-By utilizing this language, the programmer can define views with ease, as PotionDB automatically infers the objects needed to support the view, as well as generate the required view updates whenever a relevant base object is inserted, updated or deleted. 
-%To avoid this, we specify a language inspired in SQL \cite{sequel} to specify materialized views.
-%From this specification, PotionDB can automatically infer the required objects to support the view, as well as automatically generate the necessary view updates' whenever a relevant base object is inserted, updated or deleted.
-We detail this automated process in Section \ref{subsec:generated_view}.
-Generated views are read in the same way as any other object (check Table \ref{table:PotionDB_API}).
-%Note that the API to read a view's state is the same as the one previously described to read other objects.
-%Updating or reading a view is done with the same interface used for other objects, as described in Section \ref{subsec:CRDTs}.
-%Details on how we keep a view up-to-date and consistent with the objects it builds upon is left for Sections \ref{subsec:viewsTransaction} and \ref{subsec:repl_views}.
-%As such in this section we focus on how can a view be specified, namely how to make it depend on the state of other objects.
-
-\begin{table}[t]
-	\setlength\tabcolsep{3.5pt}
-	\small
-	\begin{minipage}{0.5\textwidth}
-		\centering
-		\begin{tabular}{llllll}
-			\multicolumn{6}{c}{\textbf{Sales}} \vspace{0.4em} \\%\hline
-					\hline
-			\textbf{ID} & \textbf{ProdName} & \textbf{Customer} & \textbf{Price} & \textbf{Cost} & \textbf{SaleDate} \\ \hline
-			1  & Laptop      & Bob      & 1200       & 500 & 28/01/23 \\
-			2  & Phone      & Bob      & 350       & 100 & 07/02/23 \\
-			3  & Laptop      & Alice      & 1200      & 500 & 10/02/23 \\
-			4  & Phone      & Alice      & 350       & 100 & 13/02/23 \\
-			5  & Disk      & Charlie      & 100        & 20 & 15/02/23 \\ 
-			6  & Phone      & Bob      & 350       & 100 & 16/02/23 \\
-			7  & Disk      & Bob      & 100       & 20 & 16/02/23 \\ \hline
-		\end{tabular}
-		\vspace{1em}
-		\captionof{table}{\textit{Sales} table.}
-		\label{table:sales}
-	\end{minipage}
-\end{table}
-
-\begin{figure}
-	\setlength\tabcolsep{3.5pt}
-	\begin{minipage}{0.19\textwidth}
-		\small
-		\begin{tabular}{lll}
-			\multicolumn{3}{c}{\textbf{TopSales}} \vspace{0.4em}        \\
-			\hline                                               
-			\textbf{Customer}   & \textbf{Profit} & \textbf{NSales} \\ \hline
-			Alice & 950     & 2        \\
-			Bob  & 580      & 3        \\
-			Charlie   & 80      & 1        \\ \hline
-		\end{tabular}
-		\vspace{1em}
-		\captionof{table}{\textit{TopSales} materialized view for February build upon \textit{Sales} objects.}
-		\label{table:topSales}
-	\end{minipage} \hfill
-	\begin{minipage}{0.27\textwidth}
-	\begin{lstlisting}[language=SQL]
-CREATE VIEW (key, bucket) AS
-SELECT attribute1, ..., attributeN
-FROM container
-WHERE condition(s) 
-[ORDER BY ... ]
-[LIMIT ...]
-		\end{lstlisting}
-		\captionof{figure}{Specification of views in PotionDB}
-		\label{fig:viewSQL}
-	\end{minipage}
-\end{figure}
+PotionDB also provides a data definition API, including operations to create and delete buckets, and operations
+to create views. As it is common is key-value stores and document databases, buckets have no associated
+data type, i.e., any object type can be stored in any bucket although it is common for application to 
+store objects of the same type in each bucket.
 
 \begin{figure}[t]
 \small{
 \begin{lstlisting}[language=SQL]
-CREATE VIEW (TopSales, views) AS 
-SELECT ProdName sum(Price - Cost) AS SumProfit
-	      count(sales.ID) AS NumSales 
-FROM sales 
-WHERE SaleDate.Month == [MONTH] and SaleDate.Year == 2023
-ORDER BY SumProfit DESC, NumSales DESC 
+CREATE VIEW (TopSales, views) AS
+SELECT ProdName, SaleDate.Month AS Month, SaleDate.Year AS Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
+FROM sales
+GROUP BY ProdName, SaleDate.Month,  SaleDate.Year
+GROUP BY SaleDate.Month,  SaleDate.Year
+ORDER BY SumProfit DESC, NumSales DESC
 LIMIT 10
 \end{lstlisting}}
 	\caption{Specification of the view \emph{TopSales}.}
 	\label{fig:topSalesSQL}
 \end{figure}
+%CREATE VIEW (TopSales, views) AS 
+%SELECT ProdName., sum(Price - Cost) AS SumProfit,
+%	      count(sales.ID) AS NumSales 
+%FROM sales 
+%WHERE SaleDate.Month == [MONTH] and SaleDate.Year == 2023
+%ORDER BY SumProfit DESC, NumSales DESC 
+%LIMIT 10
 
-Figure \ref{fig:viewSQL} showcases the aforementioned language.
-Clause \qcr{CREATE} defines the key and bucket of the view.
-The type is automatically inferred from the specification.
-Clause \qcr{FROM} defines which objects to use to build the view, and \qcr{SELECT} chooses which attributes of the objects should be used for the view.
-The attributes for the view can potentially be one of the following aggregating functions of objects' attributes: \qcr{sum}, \qcr{count}, \qcr{max}, \qcr{min}, \qcr{avg}.
-Clause \qcr{WHERE} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain attributes of the object (e.g., only include European customers in the view).
-Clause \qcr{ORDER BY} sorts the rows of the view given one or more attributes of the view.
-Lastly, \qcr{LIMIT} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a maximum number of elements to be considered as being in the top.
 
-Any parameter of the intended query should be indicated between []. 
-For conditions in \qcr{WHERE}, usual comparison operators are supported, as well as operations over strings (e.g., \qcr{startsWith}). %Should we mention in theory we could support directly comparing dates?
-Simple conditional expressions are also supported inside aggregates, to further boost the language expressiveness.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
+The operation to create a view receives a view specification defined in a language inspired by SQL \cite{sequel}.
+Figure \ref{fig:viewSQL} shows the specification of a view that maintains the top 10 sales for
+each month. The create view specifies in which bucket and object the the materialized object will be defined.
+The \qcr{FROM} clause specifies which bucket(s) are used in the computation of the view, and the \qcr{SELECT} specifies
+the contents of the view, which can include simple attributes of the selected objects or aggregations.
+As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause - the example 
+computes, for each month and year, the total profit and number of sales of each product.
 
-%Now explain from.
-In PotionDB we have objects instead of tables.
-Thus, to provide a ``table-like'' vision, we assume the objects can be organized in containers - e.g., we could define that all objects representing customers are in a \emph{customers} container.
-The \qcr{FROM} clause then refers to one (and only one) container. %\footnote{PotionDB actually supports more than one container in \emph{From}, as long as each object from the first container matches exactly one object of each of the remaining containers. We discuss this further in Section \ref{subsec:limitations}.}. 
-This abstraction allows for a view to easily refer to objects as if they were organized in tables, as well as consider objects that have not yet been created.
-Objects in the same container can still be in different buckets, e.g., have a bucket for each country and have each customer associated to its home country's bucket.
-Thus, views can refer to objects that are not replicated in the local server.
-We assume an object's container is non-mutable. %Do I need to refer anything further about containers (e.g. that they have no implications on implementation?)
-%\carla{Buckets where not introduced yet.}
+A common requirement when defining views \cite{tpch} is to maintain only the top elements
+of each group.  For simplifying the definition of these views while supporting only a small subset of SQL,
+we extend the standard SQL syntax by allowing the use of a second  \qcr{GROUP BY} clause, combined
+with  \qcr{ORDER BY} and  \qcr{LIMIT} clauses - in the example, for each month and year, only the 10 
+top sold products will be maintained.
 
-%Note: Is the explanation below necessary? I believe it is not. Probably would be enough to say that table contains an example of a materialized view.
-%The explanation is a bit difficult since none of this maps to actually anything in the implementation...
-Figure~\ref{fig:topSalesSQL} shows the specification of a view which answers the following query: \emph{``Who were the top 10 most profitable customers on any given month of 2023? And, for each of the top clients of said month, how many products did each client buy?"}
-Example data of the base objects and view can be seen, respectively, in Tables~\ref{table:sales} and \ref{table:topSales}.
-Such a query can be useful to identify customers to which to direct special promotions in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
-%Such a query can be useful to identify products that may need to be restocked, see if promotions/advertisement were effective, etc.
-%This view is implemented with a topSum CRDT, taking data from all products and sales, as specified in \emph{From}.
+Given a view definition, PotionDB automatically infers which objects will be used to store the view contents and
+which view updates are required to incrementally maintain the materialized view whenever a relevant base object 
+is written. We detail this automated process in Section \ref{subsec:generated_view}.
+The data in a materialized view object is read in the same way as any other object, by issuing read
+operations to the view object.
 
-The \qcr{FROM} clause specifies that all objects belonging to the container \emph{Sales} should be considered, while \qcr{SELECT} lists which attributes should be part of the view.
-The \qcr{WHERE} clause ensures only sales done on 2023 are considered, with the parameter \qcr{[MONTH]} ensuring the results are separated per month.
-Thus, the user can query the view to obtain the top sales for any desired month of 2023.
-Meanwhile, \qcr{ORDER BY} defines how to sort the rows, using attribute \qcr{NumSales} as a tie-breaker, while \qcr{LIMIT} specifies how many elements are considered to be ``in the top".
-More complex queries are also possible, namely, our specification language allows specifying efficient views for most of TPC-H's queries - out of TPC-H's 23 queries, we managed to specify views for 20 queries using our language.
 
-%I think the extension below is not hard to do - it is just a very restricted form of join, as it must be a 1:1 match. But helps in many cases. What I still need to think about, is how to include that in the specification language in a way that it is clear.
-%Implementing is not too complicated as it should be a simple GET of the primary key.
-\emph{\textbf{Extensions.}} We extend the specification language as follows.
-On the \qcr{FROM} clause, multiple containers are supported, as long as each object from the first container matches, through condition(s) defined in \qcr{WHERE}, exactly one object of each of the other containers.
-This allows for views to fetch data that may be in other objects that are relevant for the view.
-E.g., in the TopSales, we could fetch the customer's nation from the customer's container.
+%\begin{table}[t]
+%	\setlength\tabcolsep{3.5pt}
+%	\small
+%	\begin{minipage}{0.5\textwidth}
+%		\centering
+%		\begin{tabular}{llllll}
+%			\multicolumn{6}{c}{\textbf{Sales}} \vspace{0.4em} \\%\hline
+%					\hline
+%			\textbf{ID} & \textbf{ProdName} & \textbf{Customer} & \textbf{Price} & \textbf{Cost} & \textbf{SaleDate} \\ \hline
+%			1  & Laptop      & Bob      & 1200       & 500 & 28/01/23 \\
+%			2  & Phone      & Bob      & 350       & 100 & 07/02/23 \\
+%			3  & Laptop      & Alice      & 1200      & 500 & 10/02/23 \\
+%			4  & Phone      & Alice      & 350       & 100 & 13/02/23 \\
+%			5  & Disk      & Charlie      & 100        & 20 & 15/02/23 \\ 
+%			6  & Phone      & Bob      & 350       & 100 & 16/02/23 \\
+%			7  & Disk      & Bob      & 100       & 20 & 16/02/23 \\ \hline
+%		\end{tabular}
+%		\vspace{1em}
+%		\captionof{table}{\textit{Sales} table.}
+%		\label{table:sales}
+%	\end{minipage}
+%\end{table}
 
-We also provide an alternative interface for views which gives the application developer more control over the created views.
-The application developer can specify a trigger (i.e., code) that is run on the database to generate updates for views.
-Each trigger is associated to a container and an event (new, update or delete object) and can generate updates for one or more views.
-Each time the respective event regarding objects of said container occurs, the trigger's code is executed.
-Any updates generated by the trigger are appended to the current transaction.
-The trigger can, if needed, read the local objects and see all updates in the transaction. %Idea: can define a trigger on a "new order" but that trigger accesses the new items being added in the same transaction.
-This mechanism allows to specify some views not possible with our view API, further extending the possibilities of views in PotionDB.
-For instance, by using triggers, all queries in TPC-H can be served efficiently with views in PotionDB.
-
-\subsection{Architecture}
-\label{subsec:architecture}
-
-%Maybe I don't need to always refer "more details in Section x, y, z if I provide an overview in the Introduction?"
-%TODO: Maybe make a scheme where we spread the servers accross the globe? That would look nicer. I think it is OK if only one of the "servers" shows its internal structure.
-
-\begin{figure}
-	\centering
-	\includegraphics[width=\linewidth]{PotionDBArch}
-	\caption{PotionDB Architecture}
-	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
-	%\caption{PotionDB Architecture~\carla{wasted space}}
-	\label{fig:arch}
-\end{figure}
-
-We designed PotionDB with geo-replication in mind.
-Thus, we assume PotionDB instances are spread across the globe (Figure \ref{fig:arch}).
-Each instance only replicates a subset of the whole datastore's data.
-The system administrator has control over where each object is replicated.
-This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
-Objects without locality on their access pattern can be replicated everywhere if desired.
-We detail this more in Section \ref{sec:replication}.
-
-%I think details on how transactions work and guarantees do not belong here. So this is OK (but still needs to be explained somewhere).
-Clients communicate with the nearest PotionDB instance to ensure low latency.
-A client's transactions are locally executed in the PotionDB's instance the client is connected to.
-Updates are propagated asynchronously to other replicas.
-If a client's transaction accesses objects not locally replicated, other instances with said objects are contacted and involved in the transaction.
-We note this should be an exceptional case, not the norm.
-We leave further details for Section \ref{subsec:operationsNonLocal}.
-
-The internal architecture of PotionDB is inspired by Cure~\cite{cure} and is split into three main components:
-
-%Not sure if I'll need these abbreviations later. Consider removing if unused.
-\begin{compactitem}
-	\item TransactionManager (TM). This component is responsible for receiving and replying to client's requests.
-	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
-	\item Materializer: This component stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
-	Garbage collection keeps the amount of metadata in check.
-	\item Replication: This component ensures that committed transactions are replicated asynchronously to other PotionDB instances.
-	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
-	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
-\end{compactitem}
+%\begin{figure}
+%	\setlength\tabcolsep{3.5pt}
+%	\begin{minipage}{0.19\textwidth}
+%		\small
+%		\begin{tabular}{lll}
+%			\multicolumn{3}{c}{\textbf{TopSales}} \vspace{0.4em}        \\
+%			\hline                                               
+%			\textbf{Customer}   & \textbf{Profit} & \textbf{NSales} \\ \hline
+%			Alice & 950     & 2        \\
+%			Bob  & 580      & 3        \\
+%			Charlie   & 80      & 1        \\ \hline
+%		\end{tabular}
+%		\vspace{1em}
+%		\captionof{table}{\textit{TopSales} materialized view for February build upon \textit{Sales} objects.}
+%		\label{table:topSales}
+%	\end{minipage} \hfill
+%\begin{figure}
+%	\begin{minipage}{0.27\textwidth}
+%	\begin{lstlisting}[language=SQL]
+%CREATE VIEW (key, bucket) AS
+%SELECT attribute1, ..., attributeN
+%FROM container
+%WHERE condition(s) 
+%[ORDER BY ... ]
+%[LIMIT ...]
+%		\end{lstlisting}
+%		\captionof{figure}{Specification of views in PotionDB}
+%		\label{fig:viewSQL}
+%	\end{minipage}
+%\end{figure}
 
 
 
-%=========================================================================================
-%=========================================================================================
-%=========================================================================================
-%=========================================================================================
-
-
-\section{{Consistency}}
+\subsection{{Consistency}}
 \label{sec:consistency}
 
 By default, PotionDB provides Transactional Causal Consistency (TCC).
 We also support the weaker Read committed (RC) consistency. %Do I need to justify why we provide both? Basically the later is provided to achieve higher throughput.
 We now detail the guarantees provided by PotionDB under both models.
 
-\subsection{Transactional Causal Consistency}
+\paragraph{Transactional Causal Consistency}
 \label{subsec:transactionalcausal}
 
 %I introduce here the idea of snapshots. Maybe it should be before, e.g. Nuno had defined it in a draft of the system model.
@@ -683,7 +599,7 @@ I.e., given any transaction $T$ executing on snapshot $S_n$ with operations $op_
 Our PotionDB prototype provides Transactional Causal Consistency (TCC) by default, i.e., our transactions always observe a consistent snapshot of the database.
 Transactions are atomic, i.e., either all the effects of the updates in the transaction are reflected in the next state of the database or none are.
 
-\subsection{Read committed}
+\paragraph{Read committed}
 \label{subsec:readcommitted}
 %TODO: Maybe a table with all the symbols we use like in Cure?
 %Note for self:  PotionDB does not provide repeatable reads under the weaker consistency model, because the same read during one transaction can return different values under Rc
@@ -716,6 +632,60 @@ Under RC, the following is possible: $R_1(o_1) \prec R_2(o_2) \land S_2(o) \prec
 I.e., reads of different objects may return states corresponding to different snapshots.
 
 For two transactions $T_1$, $T_2$, with $T_1 \prec T_2$, there is still no causality across objects. However, for $R_1(o) \in T_1$, $R_2(o) \in T_2$, $S_1(o)$ $\prec$ $S_2(o)$.
+
+
+\subsection{Architecture}
+\label{subsec:architecture}
+
+%Maybe I don't need to always refer "more details in Section x, y, z if I provide an overview in the Introduction?"
+%TODO: Maybe make a scheme where we spread the servers accross the globe? That would look nicer. I think it is OK if only one of the "servers" shows its internal structure.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\linewidth]{PotionDBArch}
+	\caption{PotionDB Architecture}
+	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
+	%\caption{PotionDB Architecture~\carla{wasted space}}
+	\label{fig:arch}
+\end{figure}
+
+We designed PotionDB with geo-replication in mind.
+Thus, we assume PotionDB instances are spread across the globe (Figure \ref{fig:arch}).
+Each instance only replicates a subset of the whole datastore's data.
+The system administrator has control over where each object is replicated.
+This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
+Objects without locality on their access pattern can be replicated everywhere if desired.
+We detail this more in Section \ref{sec:replication}.
+
+%I think details on how transactions work and guarantees do not belong here. So this is OK (but still needs to be explained somewhere).
+Clients communicate with the nearest PotionDB instance to ensure low latency.
+A client's transactions are locally executed in the PotionDB's instance the client is connected to.
+Updates are propagated asynchronously to other replicas.
+If a client's transaction accesses objects not locally replicated, other instances with said objects are contacted and involved in the transaction.
+We note this should be an exceptional case, not the norm.
+We leave further details for Section \ref{subsec:operationsNonLocal}.
+
+The internal architecture of PotionDB is inspired by Cure~\cite{cure} and is split into three main components:
+
+%Not sure if I'll need these abbreviations later. Consider removing if unused.
+\begin{compactitem}
+	\item TransactionManager (TM). This component is responsible for receiving and replying to client's requests.
+	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
+	\item Materializer: This component stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
+	Garbage collection keeps the amount of metadata in check.
+	\item Replication: This component ensures that committed transactions are replicated asynchronously to other PotionDB instances.
+	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
+	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
+\end{compactitem}
+
+
+
+%=========================================================================================
+%=========================================================================================
+%=========================================================================================
+%=========================================================================================
+
+
 
 \section{Transactions}
 \label{sec:transactions}
@@ -1421,6 +1391,62 @@ The end of a transaction is signalized either by receiving another transaction f
 
 \subsection{Views}
 \label{subsec:repl_views}
+
+HERE 
+
+Figure \ref{fig:viewSQL} showcases the aforementioned language.
+Clause \qcr{CREATE} defines the key and bucket of the view.
+The type is automatically inferred from the specification.
+Clause \qcr{FROM} defines which objects to use to build the view, and \qcr{SELECT} chooses which attributes of the objects should be used for the view.
+The attributes for the view can potentially be one of the following aggregating functions of objects' attributes: \qcr{sum}, \qcr{count}, \qcr{max}, \qcr{min}, \qcr{avg}.
+Clause \qcr{WHERE} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain attributes of the object (e.g., only include European customers in the view).
+Clause \qcr{ORDER BY} sorts the rows of the view given one or more attributes of the view.
+Lastly, \qcr{LIMIT} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a maximum number of elements to be considered as being in the top.
+
+Any parameter of the intended query should be indicated between []. 
+For conditions in \qcr{WHERE}, usual comparison operators are supported, as well as operations over strings (e.g., \qcr{startsWith}). %Should we mention in theory we could support directly comparing dates?
+Simple conditional expressions are also supported inside aggregates, to further boost the language expressiveness.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
+
+%Now explain from.
+In PotionDB we have objects instead of tables.
+Thus, to provide a ``table-like'' vision, we assume the objects can be organized in containers - e.g., we could define that all objects representing customers are in a \emph{customers} container.
+The \qcr{FROM} clause then refers to one (and only one) container. %\footnote{PotionDB actually supports more than one container in \emph{From}, as long as each object from the first container matches exactly one object of each of the remaining containers. We discuss this further in Section \ref{subsec:limitations}.}. 
+This abstraction allows for a view to easily refer to objects as if they were organized in tables, as well as consider objects that have not yet been created.
+Objects in the same container can still be in different buckets, e.g., have a bucket for each country and have each customer associated to its home country's bucket.
+Thus, views can refer to objects that are not replicated in the local server.
+We assume an object's container is non-mutable. %Do I need to refer anything further about containers (e.g. that they have no implications on implementation?)
+%\carla{Buckets where not introduced yet.}
+
+%Note: Is the explanation below necessary? I believe it is not. Probably would be enough to say that table contains an example of a materialized view.
+%The explanation is a bit difficult since none of this maps to actually anything in the implementation...
+Figure~\ref{fig:topSalesSQL} shows the specification of a view which answers the following query: \emph{``Who were the top 10 most profitable customers on any given month of 2023? And, for each of the top clients of said month, how many products did each client buy?"}
+Example data of the base objects and view can be seen, respectively, in Tables~\ref{table:sales} and \ref{table:topSales}.
+Such a query can be useful to identify customers to which to direct special promotions in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
+%Such a query can be useful to identify products that may need to be restocked, see if promotions/advertisement were effective, etc.
+%This view is implemented with a topSum CRDT, taking data from all products and sales, as specified in \emph{From}.
+
+The \qcr{FROM} clause specifies that all objects belonging to the container \emph{Sales} should be considered, while \qcr{SELECT} lists which attributes should be part of the view.
+The \qcr{WHERE} clause ensures only sales done on 2023 are considered, with the parameter \qcr{[MONTH]} ensuring the results are separated per month.
+Thus, the user can query the view to obtain the top sales for any desired month of 2023.
+Meanwhile, \qcr{ORDER BY} defines how to sort the rows, using attribute \qcr{NumSales} as a tie-breaker, while \qcr{LIMIT} specifies how many elements are considered to be ``in the top".
+More complex queries are also possible, namely, our specification language allows specifying efficient views for most of TPC-H's queries - out of TPC-H's 23 queries, we managed to specify views for 20 queries using our language.
+
+%I think the extension below is not hard to do - it is just a very restricted form of join, as it must be a 1:1 match. But helps in many cases. What I still need to think about, is how to include that in the specification language in a way that it is clear.
+%Implementing is not too complicated as it should be a simple GET of the primary key.
+\emph{\textbf{Extensions.}} We extend the specification language as follows.
+On the \qcr{FROM} clause, multiple containers are supported, as long as each object from the first container matches, through condition(s) defined in \qcr{WHERE}, exactly one object of each of the other containers.
+This allows for views to fetch data that may be in other objects that are relevant for the view.
+E.g., in the TopSales, we could fetch the customer's nation from the customer's container.
+
+We also provide an alternative interface for views which gives the application developer more control over the created views.
+The application developer can specify a trigger (i.e., code) that is run on the database to generate updates for views.
+Each trigger is associated to a container and an event (new, update or delete object) and can generate updates for one or more views.
+Each time the respective event regarding objects of said container occurs, the trigger's code is executed.
+Any updates generated by the trigger are appended to the current transaction.
+The trigger can, if needed, read the local objects and see all updates in the transaction. %Idea: can define a trigger on a "new order" but that trigger accesses the new items being added in the same transaction.
+This mechanism allows to specify some views not possible with our view API, further extending the possibilities of views in PotionDB.
+For instance, by using triggers, all queries in TPC-H can be served efficiently with views in PotionDB.
+
 %TODO: This section needs a review. I want to shorten it. But I think, better do after I do the section that describes views at Transaction level.
 %The implications view support has on replication. How we maintain views consistent when replicating. Careful with overlap between view explanation here and on the Transaction algorithm.
 %I probably need to revisit this section after writing the main view section
