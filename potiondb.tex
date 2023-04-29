@@ -496,7 +496,7 @@ A transaction proceeds with a sequence of operations:
 \item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist; an object is deleted by issuing the delete operation.
 \end{inparaenum}
 The operations defined in each object are type-specific - e.g. a set object includes a \code{contains(el)} operation to check
-if value \code{el} belongs to the set, and an \code{add(el)} and \emph{remove(el)} to add or remove \code{el} from the set.
+if value \code{el} belongs to the set, and an \code{add(el)} and \code{remove(el)} to add or remove \code{el} from the set.
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
 PotionDB also allows an application to issue an one-shot~\cite{} read-only or write-only transaction,
@@ -504,7 +504,7 @@ by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk
 for aborting 
 
 PotionDB also provides a data definition API, including operations to create and delete buckets, and operations
-to create views. As it is common is key-value stores and document databases, buckets have no associated
+to create views. As it is common in key-value stores and document databases, buckets have no associated
 data type, i.e., any object type can be stored in any bucket although it is common for application to 
 store objects of the same type in each bucket.
 
@@ -532,7 +532,7 @@ LIMIT 10
 
 
 The operation to create a view receives a view specification defined in a language inspired by SQL \cite{sequel}.
-Figure \ref{fig:viewSQL} shows the specification of a view that maintains the top 10 sales for
+Figure \ref{fig:topSalesSQL} shows the specification of a view that maintains the top 10 sales for
 each month. The create view specifies in which bucket and object the the materialized object will be defined.
 The \qcr{FROM} clause specifies which bucket(s) are used in the computation of the view, and the \qcr{SELECT} specifies
 the contents of the view, which can include simple attributes of the selected objects or aggregations.
@@ -3389,7 +3389,7 @@ Our implementation and analysis of TPC-H benchmark showcases both the expressivi
 %Anything else I should mention? Like the replication/transaction algorithms?
 
 \begin{acks}
-%This work was partially funded by FCT, Fundação para a Ciência e Tecnologia - Portugal, through SAMOA, Project PTDC/CCI-INF/32662/2017, and PhD scolarship SFRH/BD/143401/2019.
+This work was partially funded by FCT, Fundação para a Ciência e Tecnologia - Portugal, through SAMOA, Project PTDC/CCI-INF/32662/2017, and PhD scolarship SFRH/BD/143401/2019.
 Experiments presented in this paper were carried out using the Grid'5000 testbed, supported by a scientific interest group hosted by INRIA and including CNRS, RENATER and several Universities as well as other organizations (see https://www.grid5000.fr).
 \end{acks}
 
