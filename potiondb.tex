@@ -739,6 +739,7 @@ setting. In the following Section we show how PotionDB mechanism are used to mai
 the state of materialized views.
 
 \subsection{Objects}
+\label{sec:tx:objs}
 
 PotionDB stores two types of CRDTs: common CRDTs~\cite{crdt} and non-uniform CRDTs (NuCRDTs)~\cite{Cabrita17Nonuniform}.
 We now explain the guarantees and uses of each type of objects.
@@ -916,6 +917,21 @@ After receiving the copy of the object, the shard will apply any updates perform
 there will be no update, as $L_i$ does not replicate $o$.
 
 \noindent
+\textbf{Reads on NuCRDTs:}
+As mentioned in the previous Section, due to the way as NuCRDTs work, they may temporarily expose 
+incorrect results when the execution of an operation $o$ changes the set of relevant operations.  
+As explained before, PotionDB maintains information for a replica to know if this is the case and
+this is expected to be a rare situation. 
+Applications may select two behaviors when they start a transactions.
+First, to ignore the potential anomalies and immediately execute the read operation in the local replica.
+This guarantees fast replies at the cost of potential anomalies. 
+
+Second, to strictly enforce TCC. In this case, the read blocks until the replica can gather 
+information that there is no missing relevant operation. This requires receiving information from
+all replicas that operation $o$ has been performed and all additional relevant operations, if any, have been
+propagated. This is done in the context of the replication process and explained later.
+
+\noindent
 \textbf{Triggers:}
 %\label{subsec:triggers}
 PotionDB has an after update trigger mechanism that can be associated with 
@@ -938,134 +954,98 @@ the customers of each online store.  The container \emph{customers} would includ
 The bucket for the EU customers would be replicated in the location for the EU online store and
 in one or more additional locations for fault tolerance.
 
+PotionDB adopts an operation-based replication approach, where updates performed in 
+transactions are propagated to other replicas. To be more precise, in the context of CRDTs, an update
+operation executed in a CRDT generates a \emph{effects} operation, and it is this effect update that is
+propagated and applied in other replicas. We now start by describing how the replication process works to
+guarantee that the updates of a transaction are propagated to all relevant locations. In the end of this section 
+we discuss the special case of NuCRDTs.
+
 The replication process works as follows. 
-When a transaction commits locally, the TM sends the transaction to the replicator for being replicated.
-it is queued for replication.
-Periodically, our replication algorithm collects queued transactions and sends them asynchronously to other replicas.
+When a transaction commits at a shard, the shard sends its part of the transaction to the replicator.  
+Given the way transactions are committed at a shard, it is guaranteed that a shard sends the transactions
+ordered by the commit timestamp.
+If the shard processes no transaction for some time, it sends a message notifying the replicator that there are
+no parts of transactions for the shard until the current timestamp, obtained from the HLC of the shard.
+
+The replicator processes the parts of transactions received from the shards in timestamp order. 
+For each transaction, the replicator groups the updates of the transactions and repartitions the
+updates, one for each buckets updated. The new parts of the transaction are then queued 
+for replication, one part for each bucket, being propagated in order to all other locations that 
+replicate the bucket. 
+We note that a location has a logical stream of updates not only for all buckets the location replicates,
+but also for the buckets that a local transaction has updated an object.
 
 
-When a transaction 
+The replicator integrates remote transactions locally as follows.
+A replicator subscribes to the logical streams of updates for the buckets it replicates from all other 
+locations. For the logical streams of each location, it processes transaction parts in timestamp order.
+For a given timestamp, the replicator groups the parts of the transaction $t$ and verifies if the causal dependencies 
+of the transaction are satisfied by checking that $t.rc \leq \mathit{vc}_G$. If not, some transactions
+from other locations need to be applied before executing $t$, and the replicator proceeds by processing
+the logical streams from other locations. If so, the replicator repartitions the transaction according to
+the local shards and forwards the transaction updates to the shards, where they are executed. 
+After all shards involved notify that they have executed their part of the transaction,  the global
+vector clock is updated to include the timestamp of $t$.
+Additionally, the replicator records the information that the transactions has been executed locally,
+which will be piggybacked to other locations.
 
-Considering that there is a replica for the EU online store, that replica would replicate the 
-buckets 
- would 
-be defined 
-
- would include  for the custo 
-
-
-
-Replication in PotionDB is asynchronous and partial.
-
-
-
-Operations are executed locally, without needing to contact other replicas.
-Periodically, new updates are propagated asynchronously to other replicas, according to causal order.
-Since objects in PotionDB are operation-based CRDTs, for each transaction's updates we propagate the updates themselves.
-Updates received are applied according to causal order, keeping the replicas consistent and ensuring state convergence.
-%Do I need to mention transactions here?
-
-In this section we discuss how objects can be partitioned across PotionDB instances and how our replication algorithm takes advantage of this partitioning.
-Afterwards, we explain how views are kept consistent with their base objects despite partial replication.
-Finally, we describe how we incorporate non-uniform replication to further reduce views' storage and replication costs.
-
-
-
-%I may need to define somewhere that transactions have a commit clock associated to them.
-When a transaction commits locally, it is queued for replication.
-Periodically, our replication algorithm collects queued transactions and sends them asynchronously to other replicas.
-Algoritms \ref{alg:replication_repl}, \ref{alg:replication_tm} and \ref{alg:replication_shard} showcase the roles of, respectively, the Replicator, TransactionManager and Materializer in the replication algorithm.
-
-%Not referred/explained: how we get the list of transactions that are ready to replicate and haven't been replicated already.
-
-Given a transaction $T$, we group all updates $u \in T$ according to each update's bucket (Alg \ref{alg:replication_repl}, line \ref{alg_line:call_splitTxPerBucket}).
-Let $T^{bkt}$ be the sublist of updates of $T$ such that, $\forall u(o) \in T^{bkt}, o^{bucket} = bkt$.
-Note that $T^{bkt}$ maintains the order of updates, that is, for any pair of updates $u_1$, $u_2 \in T^{bkt}$, if $u_1 \prec u_2$ in $T$, then $u_1 \prec u_2$ in $T^{bkt}$.
-This ensures updates for the same object are applied by causal order and, thus, the correct final state is reached in every replica.
-
-%I want to say our algorithm's unit of delivery is T_{bkt}. We demand no order in sending T_{bkt}, but we do demand that T1 \prec T2 => All T1_{bkt} are sent before any T2_{bkt}  gets sent.
-For a given transaction $T$, all of its $T^{bkt}$ can be sent in an arbitrary order (Alg \ref{alg:replication_repl}, line \ref{alg_line:sendTx}).
-We do however require that for any $T_1$, $T_2$: $T_1 \prec T_2 \implies$ all $T_1^{bkt}$ is sent before any $T_2^{bkt}$ is.
-Thus, our algorithm sends transactions according to the serialization order.
-We assume an underlying communication mechanism that ensures causal order delivery, ensuring that all servers receive transactions from a given server $S_i$ according to their serialization order in $S_i$.
-We also assume some mechanism that allows knowing which buckets each server replicates, in order to only send to each server the $T^{bkt}$s relevant for the receiving server.
-%For a given transaction $T$, we do not require any order for its $T_{bkt}$s to be sent.
-%We do however require that, $\forall bkt : \exists u(o{bucket}) \in T \land bucket = bkt$, all the respective $T_{bkt}$ get sent before the next transaction.
-%This ensures that each server, for each transaction, receives all updates of said transaction for all buckets it replicates before receiving the next transaction.
-
-%Note: This probably belongs to the transaction algorithm description.
-Assume $S_1, ..., S_n$ is the list of PotionDB servers and $S_i \in S_1, ..., S_n$.
-$\forall j \in (1, ..., n \setminus i)$, server $S_i$ has a queue $q_j$ which holds the transactions received from $S_j$ sorted by the order received (Alg \ref{alg:replication_tm}, line \ref{alg_line:queued}).
-A transaction $T$ on the head of a queue is only applied if $T.rc \leq S_i$'s $vc_G$ (Alg \ref{alg:replication_tm}, line \ref{alg_line:remoteCheck}).
-Note that transactions from different servers can be applied by any order if they are concurrent. 
-If they are not, e.g. if for two transactions $T_1$, $T_2$ from different replicas we have $T_1 \prec T_2$, then $T_2.rc$ will not be $\leq$ $S_i$'s $vc_G$ until $T_1$ is applied.
-Thus, $T_2$ will be applied after $T_1$, maintaining causality. %I do not know if this explanation is generic enough - the idea here is that, for transactions causally related from different replicas, they will be applied with causal order, as their clocks will enforce so (we cannot apply a transaction until the replica's clock reflects all preceding transactions).
-
-In our PotionDB prototype we leverage on RabbitMQ \cite{rabbitmq} for handling communication between replicas.
-RabbitMQ is a message broker which allows consumers to register the topics of messages in which they are interested.
-We associate a topic to a bucket in order to allow servers to only receives updates for buckets they are replicating.
-
-We use RabbitMQ as follows. We run a RabbitMQ instance alongside each PotionDB instance.
-When a server starts, it contacts other server's RabbitMQs and subscribes the topics matching the buckets it replicates.
-To replicate, a server sends updates to its RabbitMQ instance.
-Transactions are sorted by serialization order and each transaction is split in buckets, as described previously.
-Updates are sent in group to RabbitMQ, with one group per bucket of a transaction.
-The group's topic is set to the value of the bucket.
-This allows RabbitMQ to later forward the updates to each interested PotionDB instance, ensuring each server receives only the relevant buckets and maintaining the transaction order.
-The receiving server rebuilds the transaction as it receives the buckets.
-The end of a transaction is signalized either by receiving another transaction from the same server, or by a special message in the case of being the last transaction that is being replicated so far.
-
-
-\subsection{Non-uniform replication}
+\textbf{Support for NuCRDTs:}
 \label{subsec:nonuniform}
 %Note: we do not really guarantee causality when considering non-uniform CRDTs. How should we handle this? Do we mention this in the paper? Or maybe mention how we could "fix" this?
+NuCRDTs employ the non-uniform replication approach~\cite{Cabrita17Nonuniform}, in which some 
+updates might not need to be propagated, as explained in Section~\ref{sec:tx:objs}.
+Not immediately propagating some updates is straightforward - as update operations generate 
+the \emph{effect} update to be propagated to other replicas, if an update operation has no
+effect in the observable state of the object, and hence does not need to be propagated to other replicas, 
+the update operation just generate a null effect.
 
-Cabrita et. al \cite{Cabrita17Nonuniform} introduce the concept of non-uniform distributed system.
-In a non-uniform distributed system, the state of any given object $o$ can diverge between replicas forever, as long as when the system is in a quiescent state, the \emph{observable state} of all replicas is the same.
-Two observable states are defined as equivallent iff, for each possible query, the result is equivalent when executed on either states.
+As explained before, in NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{prv}$
+relevant, requiring this previous operation to be propagated to other replicas  
+(e.g. the \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
+maximum element relevant). There are two cases that need to be considered.
 
-Non-uniform replication allows to save on both replication, processing and storage costs, as not all updates for a given object $o$ need to be replicated and applied everywhere.
-E.g., in a topK object, only the k entries in the top must be replicated everywhere.
-Adding an element that does not belong to the top does not need to be replicated.
-Even if removals are considered, not all entries need to be replicated everywhere - e.g., entries that are far from the top or that were removed before ever entering the top do not need to be replicated.
+The first case is what happens when operation $o$ is executed initially. In this case, the effect of
+$o$ will include also the effect of $o_{prv}$. Thus, as the combined effects are propagated and applied in 
+the context of the same transaction, no anomaly is generated.
 
-We leverage on non-uniform replication, namely on non-uniform CRDTs (NuCRDTs) to provide materialized views with good space efficiency.
-The savings on space and operation processing are considerable, as in some scenarios most data is not relevant for queries.
-E.g., in an global e-commerce scenario, consider the query "top 10 most sold products worldwide".
-Even with hundreds of thousands of products, only a small subset of entries needs to be replicated everywhere to correctly reply the query, as the vast majority of entries will never be relevant.
-In PotionDB, we support the following NuCRDTs: max/min, average, topK (with removals) and topSum.
-We extended the specification of some NuCRDTs for better expressivety.
-For instance, our topK supports extra data on each entry in order to contain all the information relevant for the query (e.g., in the previous example, one may want to display the product name, number of sales and total value of the sales).
-Furthermore, our topSum also supports decrements, allowing support for dynamic leaderboards where points can be added or subtracted whenever necessary.
-This can be useful, e.g., to represent the top 10 most sold products in the last 30 days - when a new day comes by, sales from the first day must be removed (subtract) and sales from the new day must be accounted for (addition).
-%Should I mention computational CRDTs? The average is, in theory, a computational CRDT...
-%Do I need to describe what is the heuristic for TopSum and how we support subtractions?
+The second case is what happens when the now relevant $o_{prv}$ operation was executed in some 
+other replica.  This is handled in the context of the replication process as follows.  When a location receives
+the replication stream from other replicas, it executes the received \emph{effects} in the local copy
+of the objects.  For NuCRDTs, the execution of an \emph{effect} operation may generate additional 
+\emph{effects} - in our example, the execution of the \emph{effect}s of $o$ would generate
+the effects of $o_{prv}$. These additional effects are propagated to other locations along with the 
+information that a given operation has been executed in the current location. 
 
-With NuCRDTs, only updates that change the visible state must be replicated right away.
-We adapted our transaction execution algorithm to account for this - an update is only queued for replication if the visible state changed. 
-If the operation may be relevant later on (e.g., an add that is close to the top), it is stored locally. ~\footnote{Operations in this category are still replicated right away to a small subset of replicas to account for faults.}
-If not, i.e., it is known it will never be relevant, e.g., when adding an element outside of the top for a topK without removes, it is discarded.
-
-%Supporting NuCRDTs in PotionDB has the following implications on the replication algorithm.
-%First, only operations that change the observable state are replicated - when executing transactions, PotionDB checks if said state changed.
-%Otherwise, the operation is still stored locally if it may be relevant later on.
-%If it is known that the operation will never be relevant, e.g. when adding an element outside of the top for a topK without removes, the operation is discarded.
-
-When operations are applied in a NuCRDT, some previously non-relevant operations may become relevant.
-E.g., in a topK, removing an entry in the top will promote another entry to the top - if this promoted entry was not replicated previously, it will need to be replicated now.
-This can happen when executing either local or remote transactions.
-PotionDB supports both situations as follows.
-In the former case, the newly relevant operations are appended to the transaction and will, thus, be replicated normally.
-In the latter case, a new transaction is created that holds the newly relevant operations that were generated by the NuCRDTs that were modified in the remote transaction being applied.
-This new transaction is locally committed but without applying said operations, as they were already applied locally before.
-The transaction is then replicated to other replicas, which apply it normally.
-This new transaction may potencially make more operations relevant.
-However it is ensured the observable states will eventually converge.
-eventually the observable state will converge.
-We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and more details on non-uniform replication.
-
-\section{Designing views for applications}
+\section{Views}
 \label{sec:views_for_apps}
+
+PotionDB provides materialized views, where a view is the result of a query (including aggregations and limits)
+over data in the database. 
+
+
+that is  
+
+
+ relying on the mechanisms presented in the previous 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 Figure \ref{fig:viewSQL} showcases the aforementioned language.
