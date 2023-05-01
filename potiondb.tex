@@ -1021,208 +1021,49 @@ information that a given operation has been executed in the current location.
 \label{sec:views_for_apps}
 
 PotionDB provides materialized views, where a view is the result of a query (including aggregations and limits)
-over data in the database. 
+over data in the database.  A materialized view is stored as a database object, which can be replicated
+in any location.
+PotionDB adopts an incremental view maintenance approach, where 
+view objects are updated in the context of transactions that update the database. 
+To this end, from the definition of the view, PotionDB generates code that runs as triggers.
 
+In this section we present how views are supported in PotionDB and how this support was used to
+define views for queries of the TPC-H benchmark~\cite{tpch}. This also serves as a demonstration of
+the expressiveness to our approach. We start by presenting the TPC-H data model and how we propose
+to partial replicate the database.
 
-that is  
-
-
- relying on the mechanisms presented in the previous 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Figure \ref{fig:viewSQL} showcases the aforementioned language.
-Clause \qcr{CREATE} defines the key and bucket of the view.
-The type is automatically inferred from the specification.
-Clause \qcr{FROM} defines which objects to use to build the view, and \qcr{SELECT} chooses which attributes of the objects should be used for the view.
-The attributes for the view can potentially be one of the following aggregating functions of objects' attributes: \qcr{sum}, \qcr{count}, \qcr{max}, \qcr{min}, \qcr{avg}.
-Clause \qcr{WHERE} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain attributes of the object (e.g., only include European customers in the view).
-Clause \qcr{ORDER BY} sorts the rows of the view given one or more attributes of the view.
-Lastly, \qcr{LIMIT} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a maximum number of elements to be considered as being in the top.
-
-Any parameter of the intended query should be indicated between []. 
-For conditions in \qcr{WHERE}, usual comparison operators are supported, as well as operations over strings (e.g., \qcr{startsWith}). %Should we mention in theory we could support directly comparing dates?
-Simple conditional expressions are also supported inside aggregates, to further boost the language expressiveness.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
-
-%Now explain from.
-In PotionDB we have objects instead of tables.
-Thus, to provide a ``table-like'' vision, we assume the objects can be organized in containers - e.g., we could define that all objects representing customers are in a \emph{customers} container.
-The \qcr{FROM} clause then refers to one (and only one) container. %\footnote{PotionDB actually supports more than one container in \emph{From}, as long as each object from the first container matches exactly one object of each of the remaining containers. We discuss this further in Section \ref{subsec:limitations}.}. 
-This abstraction allows for a view to easily refer to objects as if they were organized in tables, as well as consider objects that have not yet been created.
-Objects in the same container can still be in different buckets, e.g., have a bucket for each country and have each customer associated to its home country's bucket.
-Thus, views can refer to objects that are not replicated in the local server.
-We assume an object's container is non-mutable. %Do I need to refer anything further about containers (e.g. that they have no implications on implementation?)
-%\carla{Buckets where not introduced yet.}
-
-%Note: Is the explanation below necessary? I believe it is not. Probably would be enough to say that table contains an example of a materialized view.
-%The explanation is a bit difficult since none of this maps to actually anything in the implementation...
-Figure~\ref{fig:topSalesSQL} shows the specification of a view which answers the following query: \emph{``Who were the top 10 most profitable customers on any given month of 2023? And, for each of the top clients of said month, how many products did each client buy?"}
-Example data of the base objects and view can be seen, respectively, in Tables~\ref{table:sales} and \ref{table:topSales}.
-Such a query can be useful to identify customers to which to direct special promotions in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
-%Such a query can be useful to identify products that may need to be restocked, see if promotions/advertisement were effective, etc.
-%This view is implemented with a topSum CRDT, taking data from all products and sales, as specified in \emph{From}.
-
-The \qcr{FROM} clause specifies that all objects belonging to the container \emph{Sales} should be considered, while \qcr{SELECT} lists which attributes should be part of the view.
-The \qcr{WHERE} clause ensures only sales done on 2023 are considered, with the parameter \qcr{[MONTH]} ensuring the results are separated per month.
-Thus, the user can query the view to obtain the top sales for any desired month of 2023.
-Meanwhile, \qcr{ORDER BY} defines how to sort the rows, using attribute \qcr{NumSales} as a tie-breaker, while \qcr{LIMIT} specifies how many elements are considered to be ``in the top".
-More complex queries are also possible, namely, our specification language allows specifying efficient views for most of TPC-H's queries - out of TPC-H's 23 queries, we managed to specify views for 20 queries using our language.
-
-%I think the extension below is not hard to do - it is just a very restricted form of join, as it must be a 1:1 match. But helps in many cases. What I still need to think about, is how to include that in the specification language in a way that it is clear.
-%Implementing is not too complicated as it should be a simple GET of the primary key.
-\emph{\textbf{Extensions.}} We extend the specification language as follows.
-On the \qcr{FROM} clause, multiple containers are supported, as long as each object from the first container matches, through condition(s) defined in \qcr{WHERE}, exactly one object of each of the other containers.
-This allows for views to fetch data that may be in other objects that are relevant for the view.
-E.g., in the TopSales, we could fetch the customer's nation from the customer's container.
-
-We also provide an alternative interface for views which gives the application developer more control over the created views.
-The application developer can specify a trigger (i.e., code) that is run on the database to generate updates for views.
-Each trigger is associated to a container and an event (new, update or delete object) and can generate updates for one or more views.
-Each time the respective event regarding objects of said container occurs, the trigger's code is executed.
-Any updates generated by the trigger are appended to the current transaction.
-The trigger can, if needed, read the local objects and see all updates in the transaction. %Idea: can define a trigger on a "new order" but that trigger accesses the new items being added in the same transaction.
-This mechanism allows to specify some views not possible with our view API, further extending the possibilities of views in PotionDB.
-For instance, by using triggers, all queries in TPC-H can be served efficiently with views in PotionDB.
-
-%TODO: This section needs a review. I want to shorten it. But I think, better do after I do the section that describes views at Transaction level.
-%The implications view support has on replication. How we maintain views consistent when replicating. Careful with overlap between view explanation here and on the Transaction algorithm.
-%I probably need to revisit this section after writing the main view section
-Section \ref{subsec:viewsTransaction} described how, for a single replica, views are kept consistent with their base data.
-Consistency is maintained by forcing view updates to be in the same transaction as the base objects' updates, ensuring both updates are visible at the same logical time.
-%Should I instead just refer "Because we provide TCC, the views' updates will be visible at the same logical time as the base objects' updates."
-%Said consistency is maintained by forcing view updates to be in the same transaction as the base objects' updates
-%Since transactions are atomic and generate a new snapshot, the views' updates will be visible at the same logical time as the base objects' updates. 
-
-Assuming full replication, ensuring view consistency is relatively straightforward.
-Consider the following two possibilities:
-
-\begin{compactenum}
-	\item \label{repl_sol_1} Replicate only the updates for base objects, and have the receiving replica generate the correspondent view updates. The replica would then apply all updates in the context of the same transaction;
-	\item \label{repl_sol_2} Replicate both base objects and view updates together. 
-	Since base objects and their view's updates are in the same transaction, the replication algorithm would send them together and the receiving replicas would apply them atomically and generate a new causally consistent snapshot.	
-\end{compactenum}
-
-Partial replication poses challenges to both solutions.
-First, possibility \ref{repl_sol_1} would require a way to automatically generate view updates based solely on base object updates, which is far from trivial \cite{ahmed2020automated}. %I need citations of papers that talk about automatic view updating.
-It would also require propagating all base objects' updates (and possibly current state), which is undesirable, as it would defeat the purpose of partial replication.
-Both requirements are undesirable.
-
-Possibility \ref{repl_sol_2} faces different challenges.
-Namely, 
-\begin{enumerate*}[label=(\roman*)] 
-	\item \label{item:view_challenge1}the source replica may not replicate a view but may replicate some of its base objects;
-	\item \label{item:view_challenge2}the receiving replica may replicate a view but not some of the updated base objects.
-\end{enumerate*}
-A solution must account for both challenges.
-We decide to follow this possibility, as it does not have undesirable requirements and allows for replicas to only receive and process updates for objects in buckets they replicate.
-
-An initial solution to support possibility \ref{repl_sol_2} is to require views to be replicated in every server.
-This can be achieved by associating views to bucket(s) that are replicated everywhere.
-Challenge \ref{item:view_challenge1} is addressed as every server with base objects relevant to some view will now also have said views and, thus, include the necessary view updates in the local transactions and replicate said updates.
-Every server will receive view updates and apply them as all servers replicate the bucket(s) with views.
-As for challenge \ref{item:view_challenge2}, a server will receive all view updates and updates only for the base objects (potencially none) it replicates. %Do I need to refer that those view and base object updates will be received in the same transaction? That's already mentioned at the start of this subsection. And the previous subsection states that replication keeps updates of the same transaction in... the same transaction.
-%If the server only replicates the view, only the view updates will be received.
-%In any case, all servers will eventually converge to the same view state.
-Thus, views will be kept up to date (i.e., states will converge) in all servers, even if some do not replicate all (or even none) of the base objects.
-
-We now provide an informal proof sketch of how views are updated correctly.
-We need to prove three properties:
-\begin{enumerate*}[label=(\roman*)] 
-	\item \label{viewProp1} a server replicating a view $v$ receives all updates for $v$;
-	\item \label{viewProp2} $v$ is always consistent with its base objects in any given server;
-	\item \label{viewProp3} the state of $v$ in different replicas eventually converges.
-\end{enumerate*}
-
-For property \ref{viewProp1}, assume all servers replicate all views.
-When a base object of $v$ is updated, $v$ is updated in the same transaction.
-The whole transaction will be sent to replication, and split by buckets.
-Because all servers replicate all views, all servers will receive $v$'s updates and all servers will send $v$'s updates generated by their local transactions.
-Thus, all servers receive all of $v$'s updates.
-
-Property \ref{viewProp3} follows up from the propositions above.
-Given all servers receive all of $v$'s updates, they are applied by causal order and concurrent operations are commutative (views are CRDTs), then all replicas will converge when the set of updates applied is the same.
-
-Property \ref{viewProp2} can be proven by leveraging on how buckets are replicated.
-A server receives updates for all objects it replicates.
-Assume server $S_1$ replicates objects $o_1, ..., o_k$ and that view $v = fun_v(o_1, ..., o_k, ..., o_n)$.
-Thus, $S_1$ replicates the buckets of $o_1, ..., o_k$ and will receive all updates for $o_1, ..., o_k$.
-Since objects and their views are updated together, updates for $v$ will be applied in the same transactions as updates for $o_1, ..., o_k$, and made visible at the same logical time.
-Consequently, views and their base objects are kept consistent.
-Note that $S_1$ does not replicate $o_k+1, ..., o_n$, therefore consistency between those base objects and $v$ does not apply for those objects.
-However, as proven before, $S_1$ will still receive the view updates corresponding to $o_k+1, ..., o_n$ updates and thus $v$ is kept up-to-date and will converge with other replicas. %The last 2 sentences may be unecessary.
-
-To be precise, the requirement to ensure views are kept up-to-date can be relaxed.
-Our exact requirement is for $v$ to be replicated in every server that replicates any of the objects in $o_1, ..., o_n$.
-Replication in other servers is optional, e.g., for fault tolerance or faster access in other locations.
-This relaxation can be useful, e.g., for views concerning data of only one country or continent.
-
-
-These view updates can be provided in different ways - e.g., automatically through database triggers \cite{oracleTriggers, dbtoaster} or through a proxy close to PotionDB that uses application logic to generate the views' updates.
-How those updates are supplied is agnostic to our protocol, as long as they are included in the same transaction.
-
-
-%I think it needs a different motivation
-In order to evaluate PotionDB's performance and demonstrate the expressivity of PotionDB's views and objects, we implemented TPC-H's data model, along with all proposed updates and a subset of the proposed queries.
-In this section we discuss the experience of adapting a SQL-oriented database scenario like TPC-H to PotionDB, focusing on view design and shortcomings of our solution.
-
-\subsection{Dataset and partial replication}
+\subsection{TPC-H data model in PotionDB}
 \label{subsec:dataset}
 
-%I think this one is OK
-TPC-H's dataset represents an e-commerce scenario. %If we define a section with a recurring example, point to it.
-Tables are used to represent customers, suppliers, parts (products), orders, nations and regions (continents).
-Two extra tables represent associations: partsupply and lineitem represent, respectively, a part provided by a supplier and a product sold in an order. %Do I need to refer orders can have multiple products?
+TPC-H data is representative of an e-commerce service with tables storing information about customers, suppliers, parts (products), orders, 
+countries and regions (continents).
+Two extra tables represent associations: partsupply and lineitem represent, respectively, a part provided by a supplier
+and a product sold in an order. 
 
-The dataset is adequate for partial replication.
-We defined a bucket for each region and partitioned each table as follows:
+As the dataset includes countries and regions, it is straightforward to define a partial replication strategy. 
+For each table that will be partially replicated, we define a bucket for each region and a container including all these buckets.
+For tables that are fully replicated, there is a single bucket and container. 
+We do the following mapping from tables to buckets: 
+\begin{inparaenum}[(i)]
+\item Customers, suppliers, nations and regions have a nation or region directly
+associated with it, which is used to select the bucket to use;
+\item Orders are stored in the region of the customer;
+\item Partsupplies are stored in the supplier's region;
+\item Lineitems are stored in the customer's and supplier's region, as this information is relevant for both.
+\item Parts are used across the globe, so they are stored in a single bucket to be fully replicated;
+\end{inparaenum}
 
-\begin{compactitem}
-	\item Customer, Supplier, Nation, Region, Orders, Partsupply: associated to one region bucket. 
-	All but orders and partsupply have a nation or region directly associated to it, which is used to select the bucket.
-	For orders and partsupply, we use, respectively, the customer's and supplier's region.
-	\item Parts: associated to the bucket \emph{parts} which is fully replicated.
-	This is because both multiple suppliers and multiple customers across the globe may, respectively, supply/order the same part.
-	Our analysis of TPC-H's dataset shows this happens frequently.
-	\item Lineitem: associated to both the customer's and supplier's region, as this information is relevant for both.
-\end{compactitem}
+Each table row is stored as a map CRDT, with the key of the row (e.g. the identifier of a customer or the combination of part key and supplier key for partsupply) used as the key in PotionDB's identifier of the object. 
+Each columns is represented as a CRDT - e.g. the counter CRDT is used for numbers that are updated using numeric operations and the
+LWW register is used for strings and other numbers.
+When useful, we de-normalize the data model (as it is common in key-value stores and document databases). 
 
-We highlight that views are fully replicated with a common bucket associated to them all.
-Thus, queries that access worldwide data, which are frequent in TPC-H, can  be served efficiently in any server.
-
-\subsection{Converting tables to objects}
-\label{subsec:tables_to_objects}
-
-All tables in TPC-H have either an unique key (e.g., customer key for customer) or multiple keys that, when combined, are unique (e.g., part key + supplier key for partsupply).
-We use those as keys for our objects.	%Basically we have unique keys for each row that we use as the key of our objects
-
-Each entry in a table maps directly to a map CRDT.
-E.g., each customer is represented by a map, with the map's object key being the customer's key.
-Each field of the table is also a CRDT - we use whichever data type most closely matches the data in the tables - e.g. registers for strings, counters for numbers.
-Buckets are associated to each object as previously described.
-%Should I say something @ containers here?
-
-\subsection{Specifying views for queries}
+\subsection{Specifying views}
 \label{subsec:views_for_queries}
 
 %Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
-Given a query, the application developer can specify one or more views that hold the necessary data to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
+Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
+to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
 
 As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
 PotionDB's view API (Section \ref{subsec:viewAPI}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
@@ -1234,15 +1075,15 @@ Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
 \footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
 
 \begin{figure}[h]
-	Return the first 10 rows: \\
 	\begin{lstlisting}[language=SQL]
-	SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
-	FROM lineitem
-	WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE]
-	GROUP BY orderkey, orderdate, shippriority
-	ORDER BY revenue DESC, orderdate
+	SELECT o_orderkey, sum(l_price*(1-l_discount)) AS renevue, o_orderdate, o_shippriority
+	FROM customer, orders,lineitem,
+	WHERE c_mktsegment $=$ [SEGMENT] and c_custkey $=$ o_custkey and o_orderkey $=$ l_orderkey and o_orderdate $<$ [DATE] and l_shipdate $>$ [DATE]
+	GROUP BY l_orderkey, o_orderdate, o_shippriority
+	ORDER BY revenue DESC, o_orderdate
+	LIMIT 10
 	\end{lstlisting}
-\caption{SQL of TPC-H's Query 3}
+\caption{SQL of TPC-H's Query 3.}
 \label{fig:q3}
 \end{figure}
 
@@ -1276,6 +1117,9 @@ The final materialized view can be specified as follows:
 CREATE view (Q3, views) AS
 SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
 FROM lineitem
+GROUP BY orderkey, orderdate, shippriority
+
+
 WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
 ORDER BY revenue DESC, orderdate
 LIMIT 10
@@ -1344,56 +1188,56 @@ This is known as it was previously determined that the view is represented by a 
 It is also known which fields compose the id and value parts of the TopSum entry, as this was previously defined too.
 Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectively, the example of two new lineitems and the respective view updates.
 
-%Note: Probably the caption should be of both tables?
-\begin{table}
-	\small
-	%\setlength\tabcolsep{0.1pt}
-	\setlength\tabcolsep{5pt}
-	\begin{minipage}{0.26\textwidth}
-	\begin{tabular}{lcc}
-		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
-		orderkey     & 5         & 5         \\
-		partkey      & 20        & 10        \\
-		suppkey      & 4         & 3         \\
-		linenumber   & 1         & 2         \\
-		quantity     & 10        & 1         \\
-		orderdate    & 15/03/95  & 15/03/95  \\
-		shipdate     & 19/03/95  & 17/03/95  \\
-		shippriority & high      & high      \\
-		mktsegment   & furniture & furniture \\
-		price        & 50        & 100       \\
-		discount     & 10        & 0         \\
-		...          & ...       & ...       \\ \hline
-	\end{tabular}
-		\vspace{1em}
-		\captionof{table}{New lineitems}
-		\label{table:new_lineitems}
-	\end{minipage}
-	\begin{minipage}{0.2\textwidth}
-	\begin{tabular}{lc}
-		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
-		orderkey     & 5        \\
-		revenue      & 140      \\
-		orderdate    & 15/03/95 \\
-		shippriority & high     \\ \hline
-		{} & {} \vspace*{-0.4em}    \\ 
-		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
-		orderkey     & 5        \\
-		revenue      & 40       \\
-		orderdate    & 15/03/95 \\
-		shippriority & high     \\ \hline
-		{} & {} \vspace*{-0.4em}    \\
-		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
-		orderkey     & 5        \\
-		revenue      & 40       \\
-		orderdate    & 15/03/95 \\
-		shippriority & high    \\ \hline
-	\end{tabular}
-\vspace{1em}
-\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
-\label{table:view_update}
-	\end{minipage}
-\end{table}
+%%Note: Probably the caption should be of both tables?
+%\begin{table}
+%	\small
+%	%\setlength\tabcolsep{0.1pt}
+%	\setlength\tabcolsep{5pt}
+%	\begin{minipage}{0.26\textwidth}
+%	\begin{tabular}{lcc}
+%		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
+%		orderkey     & 5         & 5         \\
+%		partkey      & 20        & 10        \\
+%		suppkey      & 4         & 3         \\
+%		linenumber   & 1         & 2         \\
+%		quantity     & 10        & 1         \\
+%		orderdate    & 15/03/95  & 15/03/95  \\
+%		shipdate     & 19/03/95  & 17/03/95  \\
+%		shippriority & high      & high      \\
+%		mktsegment   & furniture & furniture \\
+%		price        & 50        & 100       \\
+%		discount     & 10        & 0         \\
+%		...          & ...       & ...       \\ \hline
+%	\end{tabular}
+%		\vspace{1em}
+%		\captionof{table}{New lineitems}
+%		\label{table:new_lineitems}
+%	\end{minipage}
+%	\begin{minipage}{0.2\textwidth}
+%	\begin{tabular}{lc}
+%		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
+%		orderkey     & 5        \\
+%		revenue      & 140      \\
+%		orderdate    & 15/03/95 \\
+%		shippriority & high     \\ \hline
+%		{} & {} \vspace*{-0.4em}    \\ 
+%		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
+%		orderkey     & 5        \\
+%		revenue      & 40       \\
+%		orderdate    & 15/03/95 \\
+%		shippriority & high     \\ \hline
+%		{} & {} \vspace*{-0.4em}    \\
+%		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
+%		orderkey     & 5        \\
+%		revenue      & 40       \\
+%		orderdate    & 15/03/95 \\
+%		shippriority & high    \\ \hline
+%	\end{tabular}
+%\vspace{1em}
+%\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
+%\label{table:view_update}
+%	\end{minipage}
+%\end{table}
 
 \subsection{Limitations}	%Not sure if this section is still relevant
 \label{subsec:limitations}
@@ -1454,6 +1298,8 @@ Another factor considered is the interest of the business question associated to
 Even though only 6 of TPC-H’s queries were implemented in PotionDB, all were analyzed.
 Our specification language can provide views for most queries - the few that it can not, manually supplying triggers does the trick.
 Thus, PotionDB's data types are expressive enough to fully support TPC-H queries' efficiently, demonstrating PotionDB's expressivety and adequaty for OLAP scenarios. %Maybe replace OLAP with analytical.
+
+
 
 \section{Evaluation}
 \label{sec:evaluation}
@@ -3825,3 +3671,413 @@ This new transaction may potencially make more operations relevant.
 However it is ensured the observable states will eventually converge.
 eventually the observable state will converge.
 We forward the interested reader to \cite{Cabrita17Nonuniform} for proofs and more details on non-uniform replication.
+
+\section{Views}
+
+Figure \ref{fig:viewSQL} showcases the aforementioned language.
+Clause \qcr{CREATE} defines the key and bucket of the view.
+The type is automatically inferred from the specification.
+Clause \qcr{FROM} defines which objects to use to build the view, and \qcr{SELECT} chooses which attributes of the objects should be used for the view.
+The attributes for the view can potentially be one of the following aggregating functions of objects' attributes: \qcr{sum}, \qcr{count}, \qcr{max}, \qcr{min}, \qcr{avg}.
+Clause \qcr{WHERE} allows to define conditions that are used to decide whenever a given object is considered for the view or not, depending on certain attributes of the object (e.g., only include European customers in the view).
+Clause \qcr{ORDER BY} sorts the rows of the view given one or more attributes of the view.
+Lastly, \qcr{LIMIT} indicates that this view represents a top, i.e., a leaderboard, and optionally defines a maximum number of elements to be considered as being in the top.
+
+Any parameter of the intended query should be indicated between []. 
+For conditions in \qcr{WHERE}, usual comparison operators are supported, as well as operations over strings (e.g., \qcr{startsWith}). %Should we mention in theory we could support directly comparing dates?
+Simple conditional expressions are also supported inside aggregates, to further boost the language expressiveness.	%This is useful e.g. for Q14, that way we can use one single average object instead of two.
+
+%Now explain from.
+In PotionDB we have objects instead of tables.
+Thus, to provide a ``table-like'' vision, we assume the objects can be organized in containers - e.g., we could define that all objects representing customers are in a \emph{customers} container.
+The \qcr{FROM} clause then refers to one (and only one) container. %\footnote{PotionDB actually supports more than one container in \emph{From}, as long as each object from the first container matches exactly one object of each of the remaining containers. We discuss this further in Section \ref{subsec:limitations}.}. 
+This abstraction allows for a view to easily refer to objects as if they were organized in tables, as well as consider objects that have not yet been created.
+Objects in the same container can still be in different buckets, e.g., have a bucket for each country and have each customer associated to its home country's bucket.
+Thus, views can refer to objects that are not replicated in the local server.
+We assume an object's container is non-mutable. %Do I need to refer anything further about containers (e.g. that they have no implications on implementation?)
+%\carla{Buckets where not introduced yet.}
+
+%Note: Is the explanation below necessary? I believe it is not. Probably would be enough to say that table contains an example of a materialized view.
+%The explanation is a bit difficult since none of this maps to actually anything in the implementation...
+Figure~\ref{fig:topSalesSQL} shows the specification of a view which answers the following query: \emph{``Who were the top 10 most profitable customers on any given month of 2023? And, for each of the top clients of said month, how many products did each client buy?"}
+Example data of the base objects and view can be seen, respectively, in Tables~\ref{table:sales} and \ref{table:topSales}.
+Such a query can be useful to identify customers to which to direct special promotions in order to keep them as regular customers, as well as identify if high profit customers tend to buy many cheap products or few but expensive ones.
+%Such a query can be useful to identify products that may need to be restocked, see if promotions/advertisement were effective, etc.
+%This view is implemented with a topSum CRDT, taking data from all products and sales, as specified in \emph{From}.
+
+The \qcr{FROM} clause specifies that all objects belonging to the container \emph{Sales} should be considered, while \qcr{SELECT} lists which attributes should be part of the view.
+The \qcr{WHERE} clause ensures only sales done on 2023 are considered, with the parameter \qcr{[MONTH]} ensuring the results are separated per month.
+Thus, the user can query the view to obtain the top sales for any desired month of 2023.
+Meanwhile, \qcr{ORDER BY} defines how to sort the rows, using attribute \qcr{NumSales} as a tie-breaker, while \qcr{LIMIT} specifies how many elements are considered to be ``in the top".
+More complex queries are also possible, namely, our specification language allows specifying efficient views for most of TPC-H's queries - out of TPC-H's 23 queries, we managed to specify views for 20 queries using our language.
+
+%I think the extension below is not hard to do - it is just a very restricted form of join, as it must be a 1:1 match. But helps in many cases. What I still need to think about, is how to include that in the specification language in a way that it is clear.
+%Implementing is not too complicated as it should be a simple GET of the primary key.
+\emph{\textbf{Extensions.}} We extend the specification language as follows.
+On the \qcr{FROM} clause, multiple containers are supported, as long as each object from the first container matches, through condition(s) defined in \qcr{WHERE}, exactly one object of each of the other containers.
+This allows for views to fetch data that may be in other objects that are relevant for the view.
+E.g., in the TopSales, we could fetch the customer's nation from the customer's container.
+
+We also provide an alternative interface for views which gives the application developer more control over the created views.
+The application developer can specify a trigger (i.e., code) that is run on the database to generate updates for views.
+Each trigger is associated to a container and an event (new, update or delete object) and can generate updates for one or more views.
+Each time the respective event regarding objects of said container occurs, the trigger's code is executed.
+Any updates generated by the trigger are appended to the current transaction.
+The trigger can, if needed, read the local objects and see all updates in the transaction. %Idea: can define a trigger on a "new order" but that trigger accesses the new items being added in the same transaction.
+This mechanism allows to specify some views not possible with our view API, further extending the possibilities of views in PotionDB.
+For instance, by using triggers, all queries in TPC-H can be served efficiently with views in PotionDB.
+
+%TODO: This section needs a review. I want to shorten it. But I think, better do after I do the section that describes views at Transaction level.
+%The implications view support has on replication. How we maintain views consistent when replicating. Careful with overlap between view explanation here and on the Transaction algorithm.
+%I probably need to revisit this section after writing the main view section
+Section \ref{subsec:viewsTransaction} described how, for a single replica, views are kept consistent with their base data.
+Consistency is maintained by forcing view updates to be in the same transaction as the base objects' updates, ensuring both updates are visible at the same logical time.
+%Should I instead just refer "Because we provide TCC, the views' updates will be visible at the same logical time as the base objects' updates."
+%Said consistency is maintained by forcing view updates to be in the same transaction as the base objects' updates
+%Since transactions are atomic and generate a new snapshot, the views' updates will be visible at the same logical time as the base objects' updates. 
+
+Assuming full replication, ensuring view consistency is relatively straightforward.
+Consider the following two possibilities:
+
+\begin{compactenum}
+	\item \label{repl_sol_1} Replicate only the updates for base objects, and have the receiving replica generate the correspondent view updates. The replica would then apply all updates in the context of the same transaction;
+	\item \label{repl_sol_2} Replicate both base objects and view updates together. 
+	Since base objects and their view's updates are in the same transaction, the replication algorithm would send them together and the receiving replicas would apply them atomically and generate a new causally consistent snapshot.	
+\end{compactenum}
+
+Partial replication poses challenges to both solutions.
+First, possibility \ref{repl_sol_1} would require a way to automatically generate view updates based solely on base object updates, which is far from trivial \cite{ahmed2020automated}. %I need citations of papers that talk about automatic view updating.
+It would also require propagating all base objects' updates (and possibly current state), which is undesirable, as it would defeat the purpose of partial replication.
+Both requirements are undesirable.
+
+Possibility \ref{repl_sol_2} faces different challenges.
+Namely, 
+\begin{enumerate*}[label=(\roman*)] 
+	\item \label{item:view_challenge1}the source replica may not replicate a view but may replicate some of its base objects;
+	\item \label{item:view_challenge2}the receiving replica may replicate a view but not some of the updated base objects.
+\end{enumerate*}
+A solution must account for both challenges.
+We decide to follow this possibility, as it does not have undesirable requirements and allows for replicas to only receive and process updates for objects in buckets they replicate.
+
+An initial solution to support possibility \ref{repl_sol_2} is to require views to be replicated in every server.
+This can be achieved by associating views to bucket(s) that are replicated everywhere.
+Challenge \ref{item:view_challenge1} is addressed as every server with base objects relevant to some view will now also have said views and, thus, include the necessary view updates in the local transactions and replicate said updates.
+Every server will receive view updates and apply them as all servers replicate the bucket(s) with views.
+As for challenge \ref{item:view_challenge2}, a server will receive all view updates and updates only for the base objects (potencially none) it replicates. %Do I need to refer that those view and base object updates will be received in the same transaction? That's already mentioned at the start of this subsection. And the previous subsection states that replication keeps updates of the same transaction in... the same transaction.
+%If the server only replicates the view, only the view updates will be received.
+%In any case, all servers will eventually converge to the same view state.
+Thus, views will be kept up to date (i.e., states will converge) in all servers, even if some do not replicate all (or even none) of the base objects.
+
+We now provide an informal proof sketch of how views are updated correctly.
+We need to prove three properties:
+\begin{enumerate*}[label=(\roman*)] 
+	\item \label{viewProp1} a server replicating a view $v$ receives all updates for $v$;
+	\item \label{viewProp2} $v$ is always consistent with its base objects in any given server;
+	\item \label{viewProp3} the state of $v$ in different replicas eventually converges.
+\end{enumerate*}
+
+For property \ref{viewProp1}, assume all servers replicate all views.
+When a base object of $v$ is updated, $v$ is updated in the same transaction.
+The whole transaction will be sent to replication, and split by buckets.
+Because all servers replicate all views, all servers will receive $v$'s updates and all servers will send $v$'s updates generated by their local transactions.
+Thus, all servers receive all of $v$'s updates.
+
+Property \ref{viewProp3} follows up from the propositions above.
+Given all servers receive all of $v$'s updates, they are applied by causal order and concurrent operations are commutative (views are CRDTs), then all replicas will converge when the set of updates applied is the same.
+
+Property \ref{viewProp2} can be proven by leveraging on how buckets are replicated.
+A server receives updates for all objects it replicates.
+Assume server $S_1$ replicates objects $o_1, ..., o_k$ and that view $v = fun_v(o_1, ..., o_k, ..., o_n)$.
+Thus, $S_1$ replicates the buckets of $o_1, ..., o_k$ and will receive all updates for $o_1, ..., o_k$.
+Since objects and their views are updated together, updates for $v$ will be applied in the same transactions as updates for $o_1, ..., o_k$, and made visible at the same logical time.
+Consequently, views and their base objects are kept consistent.
+Note that $S_1$ does not replicate $o_k+1, ..., o_n$, therefore consistency between those base objects and $v$ does not apply for those objects.
+However, as proven before, $S_1$ will still receive the view updates corresponding to $o_k+1, ..., o_n$ updates and thus $v$ is kept up-to-date and will converge with other replicas. %The last 2 sentences may be unecessary.
+
+To be precise, the requirement to ensure views are kept up-to-date can be relaxed.
+Our exact requirement is for $v$ to be replicated in every server that replicates any of the objects in $o_1, ..., o_n$.
+Replication in other servers is optional, e.g., for fault tolerance or faster access in other locations.
+This relaxation can be useful, e.g., for views concerning data of only one country or continent.
+
+
+These view updates can be provided in different ways - e.g., automatically through database triggers \cite{oracleTriggers, dbtoaster} or through a proxy close to PotionDB that uses application logic to generate the views' updates.
+How those updates are supplied is agnostic to our protocol, as long as they are included in the same transaction.
+
+
+%I think it needs a different motivation
+In order to evaluate PotionDB's performance and demonstrate the expressivity of PotionDB's views and objects, we implemented TPC-H's data model, along with all proposed updates and a subset of the proposed queries.
+In this section we discuss the experience of adapting a SQL-oriented database scenario like TPC-H to PotionDB, focusing on view design and shortcomings of our solution.
+
+\subsection{Dataset and partial replication}
+\label{subsec:dataset}
+
+%I think this one is OK
+TPC-H's dataset represents an e-commerce scenario. %If we define a section with a recurring example, point to it.
+Tables are used to represent customers, suppliers, parts (products), orders, nations and regions (continents).
+Two extra tables represent associations: partsupply and lineitem represent, respectively, a part provided by a supplier and a product sold in an order. %Do I need to refer orders can have multiple products?
+
+The dataset is adequate for partial replication.
+We defined a bucket for each region and partitioned each table as follows:
+
+\begin{compactitem}
+	\item Customer, Supplier, Nation, Region, Orders, Partsupply: associated to one region bucket. 
+	All but orders and partsupply have a nation or region directly associated to it, which is used to select the bucket.
+	For orders and partsupply, we use, respectively, the customer's and supplier's region.
+	\item Parts: associated to the bucket \emph{parts} which is fully replicated.
+	This is because both multiple suppliers and multiple customers across the globe may, respectively, supply/order the same part.
+	Our analysis of TPC-H's dataset shows this happens frequently.
+	\item Lineitem: associated to both the customer's and supplier's region, as this information is relevant for both.
+\end{compactitem}
+
+We highlight that views are fully replicated with a common bucket associated to them all.
+Thus, queries that access worldwide data, which are frequent in TPC-H, can  be served efficiently in any server.
+
+\subsection{Converting tables to objects}
+\label{subsec:tables_to_objects}
+
+All tables in TPC-H have either an unique key (e.g., customer key for customer) or multiple keys that, when combined, are unique (e.g., part key + supplier key for partsupply).
+We use those as keys for our objects.	%Basically we have unique keys for each row that we use as the key of our objects
+
+Each entry in a table maps directly to a map CRDT.
+E.g., each customer is represented by a map, with the map's object key being the customer's key.
+Each field of the table is also a CRDT - we use whichever data type most closely matches the data in the tables - e.g. registers for strings, counters for numbers.
+Buckets are associated to each object as previously described.
+%Should I say something @ containers here?
+
+\subsection{Specifying views for queries}
+\label{subsec:views_for_queries}
+
+%Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
+Given a query, the application developer can specify one or more views that hold the necessary data to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
+
+As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
+PotionDB's view API (Section \ref{subsec:viewAPI}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
+PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
+Such inference takes out a considerable burden from the application developer.
+
+We now illustrate how to obtain a materialized view’s specification for a given query. 
+Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
+\footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
+
+\begin{figure}[h]
+	Return the first 10 rows: \\
+	\begin{lstlisting}[language=SQL]
+	SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+	FROM lineitem
+	WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE]
+	GROUP BY orderkey, orderdate, shippriority
+	ORDER BY revenue DESC, orderdate
+	\end{lstlisting}
+\caption{SQL of TPC-H's Query 3}
+\label{fig:q3}
+\end{figure}
+
+%\begin{figure}[h]
+%	Return the first 10 rows: \\
+%	SELECT l.orderkey, sum(l.price*(1-l.discount)) AS renevue, \\
+%	\hphantom{SELECT }o.orderdate, o.shippriority \\
+%	FROM lineitem, orders, customer \\
+%	WHERE c.mktsegment = [SEGMENT] and c.custkey = o.custkey and l.orderkey = o.orderkey and o_orderdate < [DATE] and l_shipdate > [DATE]\\
+%	GROUP BY l_orderkey, o_orderdate, o_shippriority
+%	ORDER BY revenue DESC, o_orderdate \\
+%\end{figure}
+
+The idea behind Q3 is to detect orders of high value for a certain market segment that haven't been fully shipped as of a given date.
+The top 10 of such orders is presented, sorted by revenue and using as tiebreaker the orderdate.
+The query has two parameters - DATE and SEGMENT, where date can only take values between 1995-03-01 and 1995-03-31.
+
+For the view, we want to select the same fields as in the query, so that all necessary information is in the view.
+This avoids having to fetch extra data from other objects, which could imply communication with other servers due to partial replication.
+The \emph{from} and \emph{order by} clauses are also unchanged. %Do I need to justify this?
+Since the query only needs to list the top 10 rows, we add a \emph{limit} 10 clause.
+Furthermore, we need to modify the \emph{where} clause to add restrictions to DATE - this query parameter only varies between 1995-03-01 and 1995-03-31, so we add ``and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31''.
+This is necessary so that only lineitem objects whose \emph{where} clause is valid for these ranges are reflected in the view's state.
+No restriction is needed for SEGMENT, as all values of SEGMENT are to be considered for the view.
+Finally, the group by cause is not used in PotionDB.
+
+The final materialized view can be specified as follows:
+
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+CREATE view (Q3, views) AS
+SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+FROM lineitem
+WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
+ORDER BY revenue DESC, orderdate
+LIMIT 10
+	\end{lstlisting}
+\caption{PotionDB specification of a view for TPC-H's Query 3}
+\label{fig:q3_view}
+\end{figure}
+
+\subsection{Generated view}
+\label{subsec:generated_view}
+
+We now show how PotionDB, given a view specification, generates the right objects to hold the view's data and its updates.
+For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
+
+Recall the view specification in Figure \ref{fig:q3_view}.
+\emph{Limit} tells PotionDB that the view's data will be represented by a TopK or TopSum.
+\emph{Order By} specifies how the top's elements will be sorted - first by revenue, then orderdate.
+These elements will be the "value" of each entry.
+The id of each entry will be composed by the elements in \emph{select} not used in \emph{order by}. %NOTE: I can change this if we want to use a clause or similar like ID() just for TopK/TopSum
+After analysing select, PotionDB concludes the \emph{revenue} field in \emph{order by} is a sum and, thus, decides to use a TopSum in order to support increments and decrements of an entry.
+
+The parameters of the query, [SEGMENT] and [DATE], in practice represent different variations of the query.
+That is, the query may be instantiated with different values of both SEGMENT and DATE.
+As such, it is necessary for the materialized view to support all these variations efficiently, without requiring expensive filtering or processing.
+PotionDB accomplishes this by deploying a different object for each value of a parameter - in this case, a different TopSum CRDT for each pair of SEGMENT, DATE. 
+The key of each object is the concatenation of “Q3” with the value of SEGMENT, followed by DATE’s. 
+The order of the parameters in the key is the order of their appearence in \emph{Where}. 
+Executing the right variation of the query is as simple as building the key and executing a single read in the database.
+%For this, a different object is used for each pair of SEGMENT, DATE - the key of the view for each object is the concatenation of "Q3", the value of SEGMENT followed by DATE.
+%The order is the same as the order by which the parameters appear in \emph{Where}.
+%Executing the right variation of the query is as simple as building the key and doing a direct get on the database.
+ 
+ %There is an alternative solution (which we actually do in our implementation depending on the query) for handling parameters. This different solution consists in using Map CRDTs, one per parameter, and embed them on each other. So the idea is kinda like "levels" of filtering. Should we describe this solution instead? Advantages: easier because only one key for the view, defined by the user. Disadvantages: can't do internal sharding because everything is condensed into a single big object.
+ 
+ Given the information above, PotionDB decides to support Q3’s materialized view with a TopSum CRDT per pair of SEGMENT, DATE.
+ Each pair's CRDT is only initialized when the first respective update is executed, thus it is not necessary to know the possible values of SEGMENT.
+ That is, we support parameters whose set of possible values is unknown and remain efficient by only initializing objects as necessary.
+ 
+ \subsection{Generating updates}
+ \label{subsec:generated_updates}
+ %NOTE: Important limitation of our algorithm for this view API - we do not support a view based on another view, unless it is a map!!!
+ 
+ %Should I explain the algorithm in detail? I think for that I would need to present the pseudo-code or at least some parts of it, like e.g. say which structures are needed to gather information collected by parsing the specification, and how triggers are generated from that.
+After determining the view objects used to represent the view, PotionDB generates two triggers that will be used to update those view objects.
+One trigger corresponds to new/updates of objects relevant to the view (base objects), while the other to removals of said objects.	%Is this safe to say? I don't know how updates would do actually.
+The respective trigger is fired when a base object is added/updated/removed, generating the necessary updates for the view.
+These updates are then appended to the current transaction, ensuring views get updated simultaneously with the respective base objects.
+The set of base objects of a view is determined by the \emph{from} clause - only objects with the container specified activate the triggers.
+The conditions in the \emph{where} clause further restrict which objects generate updates for the view.
+
+For the generation of the triggers themselves, for brevity sake we only present the intuition behind update generation and not the full algorithm.
+For the rest of the explanation, assume \emph{view} refers to all possible variants generated by the parameters, while \emph{subview} refers to one of the variants.
+Assuming the objects in the container are maps, PotionDB uses the field names in \emph{select}, \emph{where} and \emph{order by} as the map's keys to obtain the necessary values.
+
+The fields that are compared to parameters are used to build the key for the subview to be updated - when compared as equality, only a single subview is updated. If inequality, the update is isued for all keys of subviews for which the \emph{where} clause is true. %By inequality I mean, < and >.
+Testing $=, <, >, \leq, \geq$ and $\neq$ between two fields or between a field and some constant value is straightforward. 
+Comparing with a parameter is done as follows.
+If comparing by equality and no restriction is defined for the parameter (e.g. SEGMENT), the field's value is directly used to build the update's key.
+Otherwise, if a restriction is defined, it is verified if the value respects said restriction (e.g. DATE).
+When comparing by inequality, the condition must be tested for every possible value of the parameter - thus, when \emph{where} has an inequality with a parameter, bounds must be defined for the parameter.
+
+Since the objects used to represent a view are known, knowing which type of update to generate is straightforward.
+The matching of fields in select with the view is also straightforward - this was already necessary to do previously to determine the required CRDT(s) to represent the view.
+In the example of Figure \ref{fig:q3_view}, it is known that a new lineitem is an increment to a TopSum, an update an increment or decrement depending on the change, and a remove a decrement.
+This is known as it was previously determined that the view is represented by a TopSum due to limit and the existence of a sum aggregation.
+It is also known which fields compose the id and value parts of the TopSum entry, as this was previously defined too.
+Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectively, the example of two new lineitems and the respective view updates.
+
+%Note: Probably the caption should be of both tables?
+\begin{table}
+	\small
+	%\setlength\tabcolsep{0.1pt}
+	\setlength\tabcolsep{5pt}
+	\begin{minipage}{0.26\textwidth}
+	\begin{tabular}{lcc}
+		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
+		orderkey     & 5         & 5         \\
+		partkey      & 20        & 10        \\
+		suppkey      & 4         & 3         \\
+		linenumber   & 1         & 2         \\
+		quantity     & 10        & 1         \\
+		orderdate    & 15/03/95  & 15/03/95  \\
+		shipdate     & 19/03/95  & 17/03/95  \\
+		shippriority & high      & high      \\
+		mktsegment   & furniture & furniture \\
+		price        & 50        & 100       \\
+		discount     & 10        & 0         \\
+		...          & ...       & ...       \\ \hline
+	\end{tabular}
+		\vspace{1em}
+		\captionof{table}{New lineitems}
+		\label{table:new_lineitems}
+	\end{minipage}
+	\begin{minipage}{0.2\textwidth}
+	\begin{tabular}{lc}
+		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
+		orderkey     & 5        \\
+		revenue      & 140      \\
+		orderdate    & 15/03/95 \\
+		shippriority & high     \\ \hline
+		{} & {} \vspace*{-0.4em}    \\ 
+		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
+		orderkey     & 5        \\
+		revenue      & 40       \\
+		orderdate    & 15/03/95 \\
+		shippriority & high     \\ \hline
+		{} & {} \vspace*{-0.4em}    \\
+		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
+		orderkey     & 5        \\
+		revenue      & 40       \\
+		orderdate    & 15/03/95 \\
+		shippriority & high    \\ \hline
+	\end{tabular}
+\vspace{1em}
+\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
+\label{table:view_update}
+	\end{minipage}
+\end{table}
+
+\subsection{Limitations}	%Not sure if this section is still relevant
+\label{subsec:limitations}
+
+The main limitation of PotionDB's views is that they are designed for recurring queries - that is, each view is defined to precisely answer a given query.
+While the parameters give some flexibility, if the queries themselves are constantly changing instead of just varying the values of the parameters, it might be challenging to define views in PotionDB to serve those queries efficiently.
+We note however that applications with rapidly changing query patterns are outside of the scope that PotionDB aims for.
+
+Our view specification language also has some limitations.
+First, our support for joins is limited. While our join support at least helps fetching data from other objects, thus avoiding the need to denormalize/repeat data, it does not provide the expressivity of full joins.
+Note however this shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. Many do not support any form of join for materialized views \cite{???}.
+%First, joins of containers are not supported.
+%This shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. %Check oracle paper, I think some others like the documents one also had this limitation
+Furthermore, the specification language is also not as expressive as SQL in other clauses like \emph{select} and \emph{where} - for instance, it does not support embedded queries.
+This may difficult the specification of certain advanced views or make some cases not possible.
+However, we note most TPC-H queries can be specified with some ease by using our specification language.
+Moreover, they are all supported by manually supplying the triggers to the database, which also goes around the limitation of joins.
+%Thus, PotionDB's data types are expressive enough to fully support all TPC-H queries with efficient views, demonstrating PotionDB's adequaty for OLAP
+
+%I don't think I need to mention this shotcoming anymore.
+%Finally, manually supplied triggers raise security and safety concerns due to the usage of custom code. However this is a shortcoming of our implementation and not of triggers themselves - it would be possible to use an existing data manipulation language (e.g., \cite{oracleTriggers}) instead of custom code.
+
+%Any suggestions for further limitations
+
+\subsection{Discussion of selected TPC-H queries}
+\label{subsec:implementedQueries}
+%Maybe this should be under the Evaluation section.
+
+\textbf{NOTE (Andre)}: I feel this section is not as necessary anymore, as using the specification language we described, as well as assuming data is not normalized, defeats half of the purpose/reasoning for selecting the queries. It is, however, in some way helpful for Evaluation (but maybe we could short it just to provide enough information for Evaluation, like e.g., say only the data types supporting each query)
+
+\textbf{NOTE2 (Andre)}: Note that our implementation of view updating and what would be automatically generated by a view specification do not match - namely, our implementation takes advantage of TPC-H's granularity of updating (one whole order at a time) for more efficient view updating. This is not trivial to do with a specification language as most queries depend on lineitem (1 item of an order) specific information.
+
+A subset of TPC-H's queries were implemented in order to assess PotionDB's performance and demonstrate its expressiveness.
+%The choosen queries allow us to use multiple kinds of CRDTs and types of queries.
+The subset was chosen in order to cover multiple kinds of CRDTs and scenarios.
+Another factor considered is the interest of the business question associated to each query, however here we focus on their relevance to test PotionDB:
+
+\begin{compactitem}
+	\item \emph{Query 3} challenges how PotionDB deals with queries whose parameters can have multiple values, as well as inequalities as restrictions. 
+	This implies that an update to one object may update multiple views. 
+	The query is implemented with a TopSum CRDT. %Actually we implemented with a TopK but for consistency with previous section I said TopSum.
+	\item \emph{Query 5} was chosen to represent queries local to a region, i.e., queries that could be served with only data locally replicated. %, not requiring global views.
+	This query is implemented with a Map CRDT, as well as Counters and Registers.
+	\item \emph{Query 11} requires limiting the results by a factor that depends on the value of many items instead of a constant.
+	This required a different approach to query a TopK CRDT, utilizing two views: one with a TopK and another with a Counter maintaining said factor.
+	\item \emph{Query 14} allows us to evaluate how our Average CRDT behaves, as well as further test the filtering capabilities of PotionDB.
+	Namely, this query requires doing a string comparison to determine if a sold item is on sale or not, as this affects how the view should be updated.
+	\item \emph{Query 15} not only mandates the usage of a TopSum CRDT, it also has an interesting query pattern - only one entry of the top is returned except when multiple entries have the same max value.
+	It also shows how multiple CRDTs can be used to represent data concerning multiple ranges of time (quarters of 5 years)
+	%It also shows how multiple CRDTs (20, in this case) can be used to represent data concerning multiple ranges of time (quarters of 5 years).
+ %Thus it's interesting because in theory we could keep less data in each server.
+	\item \emph{Query 18}'s interests are two-fold: %first, it requires each entry of the TopK to maintain considerable extra fields the top in order to avoid having to query the base objects.
+	first, it requires each entry of the TopK CRDT to maintain extra information in the top to avoid querying the base objects.
+	%Our TopK CRDT implementation had to be extended to support extra fields.
+	Second, the TopK is expected to have few entries, as the query conditions are quite restricting - thus, most updates to base objects won't generate any updates for the view.
+\end{compactitem}
+
+Even though only 6 of TPC-H’s queries were implemented in PotionDB, all were analyzed.
+Our specification language can provide views for most queries - the few that it can not, manually supplying triggers does the trick.
+Thus, PotionDB's data types are expressive enough to fully support TPC-H queries' efficiently, demonstrating PotionDB's expressivety and adequaty for OLAP scenarios. %Maybe replace OLAP with analytical.
+
