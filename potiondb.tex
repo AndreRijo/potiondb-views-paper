@@ -181,12 +181,12 @@
 
 
 Geo-replication is a key technique for providing low latency and high
-availability in global services. As the number of data centers increase, so does the replication cost of full replication, which 
+availability in global services. As the number of data centers increases, so does the replication cost of full replication, which 
 makes partial replication an attractive approach.
 
 This paper presents PotionDB, a novel geo-distributed, partially replicated key-value store.  
 PotionDB transaction management and replication algorithms provide transactional causal consistency 
-for transaction that access local and remote objects. 
+for transactions that access local and remote objects. 
 For supporting recurrent queries over geo-partitioned data, PotionDB provides
 efficient materialized views, that allow these queries to be replied locally at all replicas.
 Our evaluation shows that queries concerning global data can be completed in less than one millisecond 
@@ -247,7 +247,7 @@ To address these requirements, cloud platforms have been adding new data centers
 locations. By allowing users to contact the closest data center, a global service can
 provide low latency to users spread across the globe. 
 The increasing number of data centers also contributes
-for providing high availability,  as a user can access any
+for providing high availability,  as an user can access any
 available data center.
 
 % serviços necessitam de data
@@ -264,7 +264,7 @@ Databases that provide weak consistency \cite{eventual,dynamo,cops} allow any re
 client request, leading to lower latency and high availability. As a consequence, these databases expose
 temporary state divergence to clients, making it more difficult to program a system. 
 
-Either case, geo-replicated databases usually rely on a full replication model, where each data 
+In either case, geo-replicated databases usually rely on a full replication model, where each data 
 center replicates the full database, with data being sharded across multiple partitions in each data 
 center. 
 As both the data managed by these systems increases in size and the number of data centers increases,
@@ -293,7 +293,7 @@ accessing data located at multiple data centers.
 
 This problem can be addressed using different approaches. 
 First, it is possible to have a \emph{main} data center that replicates all data, and forward these queries to such data center.
-This makes the \emph{main} data center both a central point of failure and a performance bottleneck, as it need to execute all queries of this type. 
+This makes the \emph{main} data center both a central point of failure and a performance bottleneck, as it needs to execute all queries of this type. 
 Second, it is possible to execute the query by accessing multiple locations,  using, for example, 
 a distributed processing system for geo-partitioned data \cite{kloudas2015pixida,jetstream}.
 This approach requires running an additional external service and poses challenges for the consistency of the results returned and the data observed by users in other queries.
@@ -310,11 +310,11 @@ To achieve this, we designed a transaction execution and a replication mechanism
 to the base data and views are made visible atomically in each replica.
 
 Second, it is necessary to efficiently support materialized views. 
-As a large number of recurrent queries includes aggregations or limits - e.g. in TPC-H \cite{tpch}
+As a large number of recurrent queries include aggregations or limits - e.g. in TPC-H \cite{tpch}
 all defined queries use aggregations or limits - it is particularly important to support
 this type of views.  For supporting this, we build an incremental view maintenance 
 mechanism that combines and extends CRDTs \cite{crdt} and non-uniform replication \cite{Cabrita17Nonuniform}.
-While CRDTs allow updates to views to be performed in any replica , the latter minimizes
+While CRDTs allow updates to views to be performed in any replica, the latter minimizes
 the updates propagated to other replicas to those that might influence the final result.
 
 
@@ -343,9 +343,9 @@ low overhead when executing asynchronously replicating transactions, particularl
 for views with limits. 
 \nuno{deviamos ter uns micro-benchmarks que comparassem o overhead com limites e sem limites}
 %Additionally, the results show that executing queries by relying on the materialized views is much more 
-efficient than using alternative mechanisms.  
+%efficient than using alternative mechanisms.  
 Furthermore, our algorithms for maintaining materialized views in a decentralized way perform better 
-that alternative approaches where the view is computed in a single data center, while being
+than alternative approaches where the view is computed in a single data center, while being
 able to keep consistency between the base and view data in every replica.
 
 In this paper we make the following contributions:
@@ -364,7 +364,7 @@ The remainder of the paper is organized as follows.
 Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture and API.
 Section~\ref{sec:consistency} describes PotionDB's consistency guarantees.
 Section~\ref{sec:transactions} describes PotionDB's transactional protocol, while Section \ref{sec:replication} describes PotionDB's replication protocol as well as data partitioning.
-Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates the view and its automatic updating.
+Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
 In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section~\ref{sec:related_work} presents related work and Section~\ref{sec:conclusion} concludes.
 
 
@@ -403,14 +403,14 @@ In this context, fully replicating the whole dataset might become too expensive.
 Additionally, as most data is tied to some geographic location, one can expect that the large majority of accesses
 occurs on that location. 
 PotionDB adopts partial geo-replication, with data items being replicated only at some locations.
-This allows PotionDB to reduce replication cost, when
+This allows PotionDB to reduce replication cost when
 compared to solutions featuring full replication, saving on both storage, processing and networking costs.
 
 If some application operations access data objects directly (e.g. user, product or purchase objects),
 other operations require data that is the result of an aggregation over other data (e.g.  top
-selling products overall and for users that bought some other product).  For supporting this latter operations,
+selling products overall and for users that bought some other product).  For supporting the latter, %operations,
 PotionDB provides materialized views that are the result of an aggregation 
-over geo-partitioned data. and provide algorithms to efficiently maintain these views consistent.
+over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
 We note that the key properties in this example - global service with a large database that includes
 data that is mostly access in a single (or few) location,  and some operation accessing the result
@@ -445,7 +445,7 @@ For presentation purposes, we assume the triple is a property of the object and 
 Whenever needed, we represent the aforementioned properties for a given object $o$ as
 $o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
 Objects are stored in $\mathit{buckets}$, which are the unit of replication in PotionDB. 
-Buckets are further logically grouped in containers,as further
+Buckets are further logically grouped in containers, as further
 detailed in Section \ref{subsec:buckets}. An object has a $\mathit{key}$ inside the bucket.
 
 PotionDB supports objects of different data $\mathit{types}$, including registers, counters, averages, sets, maps
@@ -500,12 +500,12 @@ if value \code{el} belongs to the set, and an \code{add(el)} and \code{remove(el
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
 PotionDB also allows an application to issue an one-shot~\cite{} read-only or write-only transaction,
-by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}
-for aborting 
+by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
+%for aborting 
 
 PotionDB also provides a data definition API, including operations to create and delete buckets, and operations
 to create views. As it is common in key-value stores and document databases, buckets have no associated
-data type, i.e., any object type can be stored in any bucket although it is common for application to 
+data type, i.e., any object type can be stored in any bucket although it is common for applications to 
 store objects of the same type in each bucket.
 
 \begin{figure}[t]
@@ -532,9 +532,10 @@ LIMIT 10
 
 
 The operation to create a view receives a view specification defined in a language inspired by SQL \cite{sequel}.
-Figure \ref{fig:viewSQL} shows the specification of a view that maintains the top 10 sales for
-each month. The create view specifies in which bucket and object the  materialized view object will be stored.
-The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, and the \qcr{SELECT} specifies
+Figure \ref{fig:topSalesSQL} shows the specification of a view that maintains the top 10 sales for
+each month. %The create view specifies in which bucket and object the  materialized view object will be stored.
+The create view specifies in which key and bucket the materialized view will be stored.
+The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
 the attributes of the view, which can include simple attributes of the selected objects or aggregations.
 As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause - the example 
 computes, for each month and year, the total profit and number of sales of each product.
