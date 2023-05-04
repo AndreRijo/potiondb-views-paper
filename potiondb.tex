@@ -660,12 +660,12 @@ if $\mathcal{T'}$ is a linear extension of $\mathcal{T}$, i.e., $<$ is a total o
 compatible with $\prec$.
 Under Transactional Causal Consistency, only database snapshots that result from the 
 execution of a valid serialization of transactions to the initial database state can be used, i.e.,
-a transaction always executed in a causally consistent snapshot.
+a transaction is always executed in a causally consistent snapshot.
 
 Transactions can execute concurrently, with each replica
 executing transactions according to a different valid
 serialization.
-To guarantee state convergence, we use CRDTs~\cite{crdts,walter},
+To guarantee state convergence, we use CRDTs~\cite{crdt,walter},
 which guarantee that after executing the same set of transactions according
 to a valid serialization, objects will have to the same state (by relying on the
 deterministic conflict resolution policies defined in the CRDT user for each database object).
@@ -711,13 +711,15 @@ We leave further details for Section \ref{subsec:operationsNonLocal}.
 The internal architecture of each PotionDB server is inspired by Cure~\cite{cure} and is split into three main components.
 
 First, the TransactionManager is responsible for receiving and replying to client's requests.
-	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) which ensures the consistency of reads and updates, as well as transactions' atomicity.
+	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) %which ensures
+	ensuring the consistency of reads and updates, as well as transactions' atomicity.
 	
 Second, the  Materializer stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
-	Garbage collection keeps the amount of metadata in check.
+Garbage collection ensures data to generate versions that are too old is eventually discarded.
+	%Garbage collection keeps the amount of metadata in check.
 	\nuno{André: o que é que esta última frase quer dizer?}
 	
-Third,  the Replicatior ensures that committed transactions are replicated asynchronously to other PotionDB instances.
+Third,  the Replicator ensures that committed transactions are replicated asynchronously to other PotionDB instances.
 	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
 	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
 
