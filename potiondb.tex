@@ -1076,7 +1076,7 @@ Such inference takes out a considerable burden from the application developer.
 We now illustrate how to obtain a materialized view’s specification for a given query. 
 Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
 \footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
-
+	
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
 	SELECT o_orderkey, sum(l_price*(1-l_discount)) AS renevue, o_orderdate, o_shippriority
@@ -1115,20 +1115,35 @@ Finally, the group by cause is not used in PotionDB.
 
 The final materialized view can be specified as follows:
 
+%\begin{figure}[h]
+%	\begin{lstlisting}[language=SQL]
+%CREATE view (Q3, views) AS
+%SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+%FROM lineitem
+%GROUP BY orderkey, orderdate, shippriority
+%
+%
+%WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
+%ORDER BY revenue DESC, orderdate
+%LIMIT 10
+%	\end{lstlisting}
+%\caption{PotionDB specification of a view for TPC-H's Query 3}
+%\label{fig:q3_view}
+%\end{figure}
+
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
-CREATE view (Q3, views) AS
-SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
-FROM lineitem
-GROUP BY orderkey, orderdate, shippriority
-
-
-WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
-ORDER BY revenue DESC, orderdate
-LIMIT 10
+	CREATE VIEW (Q3, views) AS
+	SELECT Segment, OrderKey, SUM(Price * (1 - DISCOUNT)) AS Revenue, OrderDate, ShipPriority
+	FROM Lineitem
+	WHERE orderdate < [DATE] and shipdate > [DATE]
+	GROUP BY OrderKey, OrderDate, ShipPriority
+	GROUP BY DATE, Segment
+	ORDER BY revenue DESC, OrderDate ASC
+	LIMIT 10
 	\end{lstlisting}
-\caption{PotionDB specification of a view for TPC-H's Query 3}
-\label{fig:q3_view}
+	\caption{PotionDB specification of a view for TPC-H's Query 3}
+	\label{fig:q3_view}
 \end{figure}
 
 \subsection{Generated view}
