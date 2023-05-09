@@ -1069,82 +1069,92 @@ Given a recurrent query, the application developer can specify one or more views
 to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
 
 As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
-PotionDB's view API (Section \ref{subsec:viewAPI}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
+PotionDB's view API (Section \ref{subsec:interface}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
 PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
 Such inference takes out a considerable burden from the application developer.
 
 We now illustrate how to obtain a materialized view’s specification for a given query. 
-Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
-\footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
-	
+Consider query 18 (Q18) of TPC-H, defined in Figure \ref{fig:q18}:
+
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
-	SELECT o_orderkey, sum(l_price*(1-l_discount)) AS renevue, o_orderdate, o_shippriority
-	FROM customer, orders,lineitem,
-	WHERE c_mktsegment $=$ [SEGMENT] and c_custkey $=$ o_custkey and o_orderkey $=$ l_orderkey and o_orderdate $<$ [DATE] and l_shipdate $>$ [DATE]
-	GROUP BY l_orderkey, o_orderdate, o_shippriority
-	ORDER BY revenue DESC, o_orderdate
-	LIMIT 10
+	Return the first 100 rows:
+	SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
+	FROM orders
+	WHERE totalquantity > [QUANTITY]
+	ORDER BY totalprice DESC, orderdate ASC
 	\end{lstlisting}
-\caption{SQL of TPC-H's Query 3.}
-\label{fig:q3}
+	\caption{SQL of TPC-H's Query 18.}
+	\label{fig:q18}
 \end{figure}
 
-%\begin{figure}[h]
-%	Return the first 10 rows: \\
-%	SELECT l.orderkey, sum(l.price*(1-l.discount)) AS renevue, \\
-%	\hphantom{SELECT }o.orderdate, o.shippriority \\
-%	FROM lineitem, orders, customer \\
-%	WHERE c.mktsegment = [SEGMENT] and c.custkey = o.custkey and l.orderkey = o.orderkey and o_orderdate < [DATE] and l_shipdate > [DATE]\\
-%	GROUP BY l_orderkey, o_orderdate, o_shippriority
-%	ORDER BY revenue DESC, o_orderdate \\
-%\end{figure}
-
-The idea behind Q3 is to detect orders of high value for a certain market segment that haven't been fully shipped as of a given date.
-The top 10 of such orders is presented, sorted by revenue and using as tiebreaker the orderdate.
-The query has two parameters - DATE and SEGMENT, where date can only take values between 1995-03-01 and 1995-03-31.
-
-For the view, we want to select the same fields as in the query, so that all necessary information is in the view.
-This avoids having to fetch extra data from other objects, which could imply communication with other servers due to partial replication.
-The \emph{from} and \emph{order by} clauses are also unchanged. %Do I need to justify this?
-Since the query only needs to list the top 10 rows, we add a \emph{limit} 10 clause.
-Furthermore, we need to modify the \emph{where} clause to add restrictions to DATE - this query parameter only varies between 1995-03-01 and 1995-03-31, so we add ``and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31''.
-This is necessary so that only lineitem objects whose \emph{where} clause is valid for these ranges are reflected in the view's state.
-No restriction is needed for SEGMENT, as all values of SEGMENT are to be considered for the view.
-Finally, the group by cause is not used in PotionDB.
-
-The final materialized view can be specified as follows:
-
+%Original query
 %\begin{figure}[h]
 %	\begin{lstlisting}[language=SQL]
-%CREATE view (Q3, views) AS
-%SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
-%FROM lineitem
-%GROUP BY orderkey, orderdate, shippriority
-%
-%
-%WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
-%ORDER BY revenue DESC, orderdate
-%LIMIT 10
+%	SELECT c_name, c_custkey, o_orderdate, o_totalprice, sum(l_quantity)
+%	FROM customer, orders, lineitem
+%	WHERE o_orderkey in (
+%		SELECT l_orderkey
+%		FROM lineitem
+%		GROUP BY l_orderkey having sum(l_quantity) > [QUANTITY]
+%	)
+%	and c_custkey $=$ o_custkey and o_orderkey $=$ l_orderkey
+%	GROUP BY c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice
+%	ORDER BY o_totalprice DESC, o_orderdate
 %	\end{lstlisting}
-%\caption{PotionDB specification of a view for TPC-H's Query 3}
-%\label{fig:q3_view}
+%	\caption{SQL of TPC-H's Query 18.}
+%	\label{fig:q18}
 %\end{figure}
+
+The goal of Q18 is to list the top of the most valuable ``large volume orders''.
+That is, for all orders which are considered large, i.e., the amount of units ordered is above a certain value (QUANTITY), it lists the top 100 of those orders, ordering them by their total value (price).
+For each order, it also lists the customer's name and ID.
+QUANTITY is a parameter of the query - the definition of a ``large volume order'' may be changed between query executions.
+TPC-H defines the range of possible values as [312-315].	%In a real life scenario, would this be as changeable?
+
+For the view, we want to \emph{select} the same fields as in the query, so that all necessary information is in the view.
+This avoids having to fetch extra data from other objects, which could imply communication with other servers due to partial replication.
+The \emph{from} and \emph{order by} clauses are also unchanged. %Do I need to justify this?
+We add a \emph{group by}, as the results should be grouped by QUANTITY - the list of most valuable (highest priced) orders may be different depending on QUANTITY. %An example that can be used to justify this if needed: the "most expensive order" could be one whose totalquantity is 313 (even if there's other orders with a larger quantity). Thus it would enter for QUANTITY=312, QUANTITY=313 but not QUANTITY=314 and QUANTITY=315. It really must be different tops.
+We also add a \emph{limit} 100 clause as only the top 100 entries should be listed.
+
+The \emph{where} clause must be modified in order to account for the possible values of the parameter QUANTITY.
+This is necessary for two reasons:
+\begin{enumerate*}
+	\item in order to define what is a ``large volume order'', i.e., which orders should be considered for the view;
+	\item in order to know what values can QUANTITY have and thus which groups should PotionDB make with the \emph{group by}.
+\end{enumerate*}
+We achieve this by defining which values QUANTITY can take, i.e., by adding "and QUANTITY $\geq$ 312 and QUANTITY $\leq$ 315" to the \emph{where} clause.
+
+Figure \ref{fig:q18_view} contains a possible specification for the final %materialized 
+view.
+
+%\footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and lineitem tables are assumed to be available on order.}
+
+%NOTE: For the old query we didn't need to define the values of SEGMENT because we compared the SEGMENT parameter to the customer's segment by equality - thus the matching is direct. 
+%On the other hand, when the field of an object is compared with an inequality (e.g., >, !=) to a parameter, we must define the values possible for the parameter... otherwise how do we know how to group it?
+%An example: if we say that for the view, the totalquantity > [QUANTITY], how can we atest if the statement is true if we don't know the possible values of QUANTITY? We would have to test all possible integer values...
 
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
-	CREATE VIEW (Q3, views) AS
-	SELECT Segment, OrderKey, SUM(Price * (1 - DISCOUNT)) AS Revenue, OrderDate, ShipPriority
-	FROM Lineitem
-	WHERE orderdate < [DATE] and shipdate > [DATE]
-	GROUP BY OrderKey, OrderDate, ShipPriority
-	GROUP BY DATE, Segment
-	ORDER BY revenue DESC, OrderDate ASC
-	LIMIT 10
+	CREATE VIEW (Q18, views) AS
+	SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
+	FROM orders
+	WHERE totalQuantity > [QUANTITY] and [QUANTITY] $\geq$ 312 and [QUANTITY] $\leq$ 315
+	GROUP BY [QUANTITY]
+	ORDER BY totalprice DESC, orderdate ASC
+	LIMIT 100
 	\end{lstlisting}
-	\caption{PotionDB specification of a view for TPC-H's Query 3}
-	\label{fig:q3_view}
+	\caption{PotionDB specification of a view for TPC-H's Query 18}
+	\label{fig:q18_view}
 \end{figure}
+
+%Select custname, custkey, orderkey, orderdate, totalprice, totalquantity
+%From orders
+%Where totalquantity > [QUANTITY]
+%Group by custname, custkey, orderkey, orderdate, totalprice
+%Group by QUANTITY
+%Order by totalprice desc, orderdate asc
 
 \subsection{Generated view}
 \label{subsec:generated_view}
@@ -1152,110 +1162,264 @@ The final materialized view can be specified as follows:
 We now show how PotionDB, given a view specification, generates the right objects to hold the view's data and its updates.
 For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
 
-Recall the view specification in Figure \ref{fig:q3_view}.
+Recall the view specification in Figure \ref{fig:q18_view}.
 \emph{Limit} tells PotionDB that the view's data will be represented by a TopK or TopSum.
-\emph{Order By} specifies how the top's elements will be sorted - first by revenue, then orderdate.
-These elements will be the "value" of each entry.
+\emph{Order By} specifies how the top's elements will be sorted - first by totalprice, then orderdate.
+These elements will be the "value" of each entry. %Our TopK/TopSum implementation only supports ints - the secondary sorting by orderdate would have to be external.
 The id of each entry will be composed by the elements in \emph{select} not used in \emph{order by}. %NOTE: I can change this if we want to use a clause or similar like ID() just for TopK/TopSum
-After analysing select, PotionDB concludes the \emph{revenue} field in \emph{order by} is a sum and, thus, decides to use a TopSum in order to support increments and decrements of an entry.
+After analysing \emph{select}, PotionDB concludes that a TopK can be used given none of the fields in \emph{select} is a SUM or COUNT, thus the increments or decrements provided by TopSum are unnecessary. 
+%Criteria for TopSum vs TopK: at least one of the values of the entry being a SUM/COUNT
+\emph{Group by} tells PotionDB to use one TopK per possible value of QUANTITY.
+In views with two \emph{Group by}, it is the second one that PotionDB uses to decide how many objects it needs to build the complete view. %I think this is poorly explained - basically our grouping (e.g. tops of each month) is done by the 2nd Group By when two Group Bys are present - we don't actually have a use for the first Group By...
 
-The parameters of the query, [SEGMENT] and [DATE], in practice represent different variations of the query.
-That is, the query may be instantiated with different values of both SEGMENT and DATE.
-As such, it is necessary for the materialized view to support all these variations efficiently, without requiring expensive filtering or processing.
-PotionDB accomplishes this by deploying a different object for each value of a parameter - in this case, a different TopSum CRDT for each pair of SEGMENT, DATE. 
-The key of each object is the concatenation of “Q3” with the value of SEGMENT, followed by DATE’s. 
-The order of the parameters in the key is the order of their appearence in \emph{Where}. 
-Executing the right variation of the query is as simple as building the key and executing a single read in the database.
-%For this, a different object is used for each pair of SEGMENT, DATE - the key of the view for each object is the concatenation of "Q3", the value of SEGMENT followed by DATE.
-%The order is the same as the order by which the parameters appear in \emph{Where}.
-%Executing the right variation of the query is as simple as building the key and doing a direct get on the database.
- 
- %There is an alternative solution (which we actually do in our implementation depending on the query) for handling parameters. This different solution consists in using Map CRDTs, one per parameter, and embed them on each other. So the idea is kinda like "levels" of filtering. Should we describe this solution instead? Advantages: easier because only one key for the view, defined by the user. Disadvantages: can't do internal sharding because everything is condensed into a single big object.
- 
- Given the information above, PotionDB decides to support Q3’s materialized view with a TopSum CRDT per pair of SEGMENT, DATE.
- Each pair's CRDT is only initialized when the first respective update is executed, thus it is not necessary to know the possible values of SEGMENT.
- That is, we support parameters whose set of possible values is unknown and remain efficient by only initializing objects as necessary.
- 
- \subsection{Generating updates}
- \label{subsec:generated_updates}
- %NOTE: Important limitation of our algorithm for this view API - we do not support a view based on another view, unless it is a map!!!
- 
- %Should I explain the algorithm in detail? I think for that I would need to present the pseudo-code or at least some parts of it, like e.g. say which structures are needed to gather information collected by parsing the specification, and how triggers are generated from that.
+%Often, the same kind of query may be instantiated with different values
+Q18 may be instantiated with values of QUANTITY in the range [312..315].
+In practice, this represents different variations of the same type of query - PotionDB must support all these variations efficiently without expensive filtering or processing.
+PotionDB achieves this by deploying a TopK object per possible value of QUANTITY - each object's key will be the concatenation of "Q18" with the value of QUANTITY.
+Executing the right variation of Q18 is as simple as building the key and executing a single read in the database.
+
+%When having multiple fields in the GROUP_BY, PotionDB will deploy a CRDT per possible value of the pair. Note that relational databases would need to do something similar too (one materialized view per possible value)... in practice, we're not supporting one query, but many.
+
+%An alternative solution to concatenating the keys is to use a Map CRDTs, one per field in GROUP BY, and embed them in each other, with the final "level" being the actual view objects (e.g., top). The idea is kinda like "levels of filtering". Should we describe this solution instead? Advantages: easier because only one key for the view, defined by the user. Disadvantages: can't do internal sharding because everything is condensed into a single big object.
+
+Given the information above, PotionDB decides to support Q18’s materialized view with a TopK CRDT per value of QUANTITY - i.e., 4 TopKs.
+Each CRDT is only initialized when the first update for it is issued.
+This means that, for fields in \emph{Group by} that come directly from the base objects, or for parameters that are compared with equality (=) to a field of a base object, it is not necessary to define the set of possible values. %e.g., in the old query Q3, we don't need to define the values of SEGMENT because we define SEGMENT = customer.segment
+That is, we support parameters whose set of possible values is unknown and remain efficient by only initializing view objects as necessary.
+%The phrase above is probably not very clear. What I mean to say is:
+%If on the GROUP_BY we use directly a value of an object (e.g., customer's region) - no need to define the set of possible values
+%If on the GROUP_BY we use a parameter but said parameter is compared directly with equality (i.e., =) to a value of an object (e.g., parameter REGION) - also no need to define the set of possible values
+%If on the GROUP_BY we use a parameter but said parameter is compared with inequality (<, >, <=, >=, !=) to some value of an object (e.g., QUANTITY), we must define the set of possible values - as otherwise, everything could be possible!!! E.g., if we say totalquantity >= QUANTITY, there is a non-finite amount of values of QUANTITY for which this condition is true for every object (e.g., every negative value).
+
+\subsection{Generating updates}
+\label{subsec:generated_updates}
+%NOTE: Important limitation of our algorithm for this view API - we do not support a view based on another view, unless it is a map!!!
+
 After determining the view objects used to represent the view, PotionDB generates two triggers that will be used to update those view objects.
-One trigger corresponds to new/updates of objects relevant to the view (base objects), while the other to removals of said objects.	%Is this safe to say? I don't know how updates would do actually.
+One trigger corresponds to new/updates of objects relevant to the view (base objects), while the other to removals of said objects.	%Is this safe to say? I don't know how updates would do actually. TPC-H doesn't define updates, only news.
 The respective trigger is fired when a base object is added/updated/removed, generating the necessary updates for the view.
 These updates are then appended to the current transaction, ensuring views get updated simultaneously with the respective base objects.
 The set of base objects of a view is determined by the \emph{from} clause - only objects with the container specified activate the triggers.
 The conditions in the \emph{where} clause further restrict which objects generate updates for the view.
 
-For the generation of the triggers themselves, for brevity sake we only present the intuition behind update generation and not the full algorithm.
+For the generation of the triggers themselves, for brevity sake, we only present the intuition behind update generation and not the full algorithm.
 For the rest of the explanation, assume \emph{view} refers to all possible variants generated by the parameters, while \emph{subview} refers to one of the variants.
 Assuming the objects in the container are maps, PotionDB uses the field names in \emph{select}, \emph{where} and \emph{order by} as the map's keys to obtain the necessary values.
 
-The fields that are compared to parameters are used to build the key for the subview to be updated - when compared as equality, only a single subview is updated. If inequality, the update is isued for all keys of subviews for which the \emph{where} clause is true. %By inequality I mean, < and >.
+Fields in \emph{group by} or fields which are compared to parameters in \emph{group by} are used to build the key for the subview to be updated.
+If the field is used directly, or compared as equality, only a single subview is updated. 
+If compared with inequality, the update is issued for all keys of subviews for which the \emph{where} clause is true. %By inequality I mean, <, >, <=, >= and !=.
 Testing $=, <, >, \leq, \geq$ and $\neq$ between two fields or between a field and some constant value is straightforward. 
 Comparing with a parameter is done as follows.
-If comparing by equality and no restriction is defined for the parameter (e.g. SEGMENT), the field's value is directly used to build the update's key.
-Otherwise, if a restriction is defined, it is verified if the value respects said restriction (e.g. DATE).
-When comparing by inequality, the condition must be tested for every possible value of the parameter - thus, when \emph{where} has an inequality with a parameter, bounds must be defined for the parameter.
+If comparing by equality and no restriction is defined for the parameter (e.g. parameter REGION compared to customer's region), the field's value is directly used to build the update's key.
+Otherwise, if a restriction is defined, it is verified if the value respects said restriction.
+When comparing by inequality (e.g. QUANTITY), the condition must be tested for every possible value of the parameter - thus, when \emph{where} has an inequality with a parameter, bounds must be defined for the parameter.
 
 Since the objects used to represent a view are known, knowing which type of update to generate is straightforward.
-The matching of fields in select with the view is also straightforward - this was already necessary to do previously to determine the required CRDT(s) to represent the view.
-In the example of Figure \ref{fig:q3_view}, it is known that a new lineitem is an increment to a TopSum, an update an increment or decrement depending on the change, and a remove a decrement.
-This is known as it was previously determined that the view is represented by a TopSum due to limit and the existence of a sum aggregation.
-It is also known which fields compose the id and value parts of the TopSum entry, as this was previously defined too.
-Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectively, the example of two new lineitems and the respective view updates.
+The matching of fields in \emph{select} with the view is also straightforward - this was already necessary to do previously to determine the required CRDT(s) to represent the view.
+In the example of Figure \ref{fig:q18_view}, it is known that a new order corresponds to an insert to the TopK, while deleting an order would correspond to removing its entry from the TopK.
+An update of totalquantity could imply removes and/or inserts - this can be determined by checking the old value of totalquantity, its new value and to which tops the order should now belong, if any.
+Updates to other fields in select will imply removing the old entry and adding a new entry. %Personally I think better comment the previous two phrases.
 
-%%Note: Probably the caption should be of both tables?
-%\begin{table}
-%	\small
-%	%\setlength\tabcolsep{0.1pt}
-%	\setlength\tabcolsep{5pt}
-%	\begin{minipage}{0.26\textwidth}
-%	\begin{tabular}{lcc}
-%		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
-%		orderkey     & 5         & 5         \\
-%		partkey      & 20        & 10        \\
-%		suppkey      & 4         & 3         \\
-%		linenumber   & 1         & 2         \\
-%		quantity     & 10        & 1         \\
-%		orderdate    & 15/03/95  & 15/03/95  \\
-%		shipdate     & 19/03/95  & 17/03/95  \\
-%		shippriority & high      & high      \\
-%		mktsegment   & furniture & furniture \\
-%		price        & 50        & 100       \\
-%		discount     & 10        & 0         \\
-%		...          & ...       & ...       \\ \hline
-%	\end{tabular}
-%		\vspace{1em}
-%		\captionof{table}{New lineitems}
-%		\label{table:new_lineitems}
-%	\end{minipage}
-%	\begin{minipage}{0.2\textwidth}
-%	\begin{tabular}{lc}
-%		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
-%		orderkey     & 5        \\
-%		revenue      & 140      \\
-%		orderdate    & 15/03/95 \\
-%		shippriority & high     \\ \hline
-%		{} & {} \vspace*{-0.4em}    \\ 
-%		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
-%		orderkey     & 5        \\
-%		revenue      & 40       \\
-%		orderdate    & 15/03/95 \\
-%		shippriority & high     \\ \hline
-%		{} & {} \vspace*{-0.4em}    \\
-%		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
-%		orderkey     & 5        \\
-%		revenue      & 40       \\
-%		orderdate    & 15/03/95 \\
-%		shippriority & high    \\ \hline
-%	\end{tabular}
-%\vspace{1em}
-%\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
-%\label{table:view_update}
-%	\end{minipage}
-%\end{table}
+PotionDB knows it needs to issue TopK operations, as it has previously determined the view is a TopK.
+Furthermore, it knows which fields of the object are needed and which ones correspond to the TopK's key and the entries' id and value, as this was all determined previously while deciding how to build the view.
+
+
+%\subsection{Specifying views}
+%\label{subsec:views_for_queries}
+%
+%%Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
+%Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
+%to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
+%
+%As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
+%PotionDB's view API (Section \ref{subsec:viewAPI}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
+%PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
+%Such inference takes out a considerable burden from the application developer.
+%
+%We now illustrate how to obtain a materialized view’s specification for a given query. 
+%Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
+%\footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and order tables are assumed to be available on lineitem.}:
+%	
+%\begin{figure}[h]
+%	\begin{lstlisting}[language=SQL]
+%	SELECT o_orderkey, sum(l_price*(1-l_discount)) AS renevue, o_orderdate, o_shippriority
+%	FROM customer, orders,lineitem,
+%	WHERE c_mktsegment $=$ [SEGMENT] and c_custkey $=$ o_custkey and o_orderkey $=$ l_orderkey and o_orderdate $<$ [DATE] and l_shipdate $>$ [DATE]
+%	GROUP BY l_orderkey, o_orderdate, o_shippriority
+%	ORDER BY revenue DESC, o_orderdate
+%	LIMIT 10
+%	\end{lstlisting}
+%\caption{SQL of TPC-H's Query 3.}
+%\label{fig:q3}
+%\end{figure}
+%
+%%\begin{figure}[h]
+%%	Return the first 10 rows: \\
+%%	SELECT l.orderkey, sum(l.price*(1-l.discount)) AS renevue, \\
+%%	\hphantom{SELECT }o.orderdate, o.shippriority \\
+%%	FROM lineitem, orders, customer \\
+%%	WHERE c.mktsegment = [SEGMENT] and c.custkey = o.custkey and l.orderkey = o.orderkey and o_orderdate < [DATE] and l_shipdate > [DATE]\\
+%%	GROUP BY l_orderkey, o_orderdate, o_shippriority
+%%	ORDER BY revenue DESC, o_orderdate \\
+%%\end{figure}
+%
+%The idea behind Q3 is to detect orders of high value for a certain market segment that haven't been fully shipped as of a given date.
+%The top 10 of such orders is presented, sorted by revenue and using as tiebreaker the orderdate.
+%The query has two parameters - DATE and SEGMENT, where date can only take values between 1995-03-01 and 1995-03-31.
+%
+%For the view, we want to select the same fields as in the query, so that all necessary information is in the view.
+%This avoids having to fetch extra data from other objects, which could imply communication with other servers due to partial replication.
+%The \emph{from} and \emph{order by} clauses are also unchanged. %Do I need to justify this?
+%Since the query only needs to list the top 10 rows, we add a \emph{limit} 10 clause.
+%Furthermore, we need to modify the \emph{where} clause to add restrictions to DATE - this query parameter only varies between 1995-03-01 and 1995-03-31, so we add ``and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31''.
+%This is necessary so that only lineitem objects whose \emph{where} clause is valid for these ranges are reflected in the view's state.
+%No restriction is needed for SEGMENT, as all values of SEGMENT are to be considered for the view.
+%Finally, the group by cause is not used in PotionDB.
+%
+%The final materialized view can be specified as follows:
+%
+%%\begin{figure}[h]
+%%	\begin{lstlisting}[language=SQL]
+%%CREATE view (Q3, views) AS
+%%SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+%%FROM lineitem
+%%GROUP BY orderkey, orderdate, shippriority
+%%
+%%
+%%WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
+%%ORDER BY revenue DESC, orderdate
+%%LIMIT 10
+%%	\end{lstlisting}
+%%\caption{PotionDB specification of a view for TPC-H's Query 3}
+%%\label{fig:q3_view}
+%%\end{figure}
+%
+%\begin{figure}[h]
+%	\begin{lstlisting}[language=SQL]
+%	CREATE VIEW (Q3, views) AS
+%	SELECT Segment, OrderKey, SUM(Price * (1 - DISCOUNT)) AS Revenue, OrderDate, ShipPriority
+%	FROM Lineitem
+%	WHERE orderdate < [DATE] and shipdate > [DATE]
+%	GROUP BY OrderKey, OrderDate, ShipPriority
+%	GROUP BY DATE, Segment
+%	ORDER BY revenue DESC, OrderDate ASC
+%	LIMIT 10
+%	\end{lstlisting}
+%	\caption{PotionDB specification of a view for TPC-H's Query 3}
+%	\label{fig:q3_view}
+%\end{figure}
+%
+%\subsection{Generated view}
+%\label{subsec:generated_view}
+%
+%We now show how PotionDB, given a view specification, generates the right objects to hold the view's data and its updates.
+%For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
+%
+%Recall the view specification in Figure \ref{fig:q3_view}.
+%\emph{Limit} tells PotionDB that the view's data will be represented by a TopK or TopSum.
+%\emph{Order By} specifies how the top's elements will be sorted - first by revenue, then orderdate.
+%These elements will be the "value" of each entry.
+%The id of each entry will be composed by the elements in \emph{select} not used in \emph{order by}. %NOTE: I can change this if we want to use a clause or similar like ID() just for TopK/TopSum
+%After analysing select, PotionDB concludes the \emph{revenue} field in \emph{order by} is a sum and, thus, decides to use a TopSum in order to support increments and decrements of an entry.
+%
+%The parameters of the query, [SEGMENT] and [DATE], in practice represent different variations of the query.
+%That is, the query may be instantiated with different values of both SEGMENT and DATE.
+%As such, it is necessary for the materialized view to support all these variations efficiently, without requiring expensive filtering or processing.
+%PotionDB accomplishes this by deploying a different object for each value of a parameter - in this case, a different TopSum CRDT for each pair of SEGMENT, DATE. 
+%The key of each object is the concatenation of “Q3” with the value of SEGMENT, followed by DATE’s. 
+%The order of the parameters in the key is the order of their appearence in \emph{Where}. 
+%Executing the right variation of the query is as simple as building the key and executing a single read in the database.
+%%For this, a different object is used for each pair of SEGMENT, DATE - the key of the view for each object is the concatenation of "Q3", the value of SEGMENT followed by DATE.
+%%The order is the same as the order by which the parameters appear in \emph{Where}.
+%%Executing the right variation of the query is as simple as building the key and doing a direct get on the database.
+% 
+% %There is an alternative solution (which we actually do in our implementation depending on the query) for handling parameters. This different solution consists in using Map CRDTs, one per parameter, and embed them on each other. So the idea is kinda like "levels" of filtering. Should we describe this solution instead? Advantages: easier because only one key for the view, defined by the user. Disadvantages: can't do internal sharding because everything is condensed into a single big object.
+% 
+% Given the information above, PotionDB decides to support Q3’s materialized view with a TopSum CRDT per pair of SEGMENT, DATE.
+% Each pair's CRDT is only initialized when the first respective update is executed, thus it is not necessary to know the possible values of SEGMENT.
+% That is, we support parameters whose set of possible values is unknown and remain efficient by only initializing objects as necessary.
+% 
+% \subsection{Generating updates}
+% \label{subsec:generated_updates}
+% %NOTE: Important limitation of our algorithm for this view API - we do not support a view based on another view, unless it is a map!!!
+% 
+% %Should I explain the algorithm in detail? I think for that I would need to present the pseudo-code or at least some parts of it, like e.g. say which structures are needed to gather information collected by parsing the specification, and how triggers are generated from that.
+%After determining the view objects used to represent the view, PotionDB generates two triggers that will be used to update those view objects.
+%One trigger corresponds to new/updates of objects relevant to the view (base objects), while the other to removals of said objects.	%Is this safe to say? I don't know how updates would do actually.
+%The respective trigger is fired when a base object is added/updated/removed, generating the necessary updates for the view.
+%These updates are then appended to the current transaction, ensuring views get updated simultaneously with the respective base objects.
+%The set of base objects of a view is determined by the \emph{from} clause - only objects with the container specified activate the triggers.
+%The conditions in the \emph{where} clause further restrict which objects generate updates for the view.
+%
+%For the generation of the triggers themselves, for brevity sake we only present the intuition behind update generation and not the full algorithm.
+%For the rest of the explanation, assume \emph{view} refers to all possible variants generated by the parameters, while \emph{subview} refers to one of the variants.
+%Assuming the objects in the container are maps, PotionDB uses the field names in \emph{select}, \emph{where} and \emph{order by} as the map's keys to obtain the necessary values.
+%
+%The fields that are compared to parameters are used to build the key for the subview to be updated - when compared as equality, only a single subview is updated. If inequality, the update is isued for all keys of subviews for which the \emph{where} clause is true. %By inequality I mean, < and >.
+%Testing $=, <, >, \leq, \geq$ and $\neq$ between two fields or between a field and some constant value is straightforward. 
+%Comparing with a parameter is done as follows.
+%If comparing by equality and no restriction is defined for the parameter (e.g. SEGMENT), the field's value is directly used to build the update's key.
+%Otherwise, if a restriction is defined, it is verified if the value respects said restriction (e.g. DATE).
+%When comparing by inequality, the condition must be tested for every possible value of the parameter - thus, when \emph{where} has an inequality with a parameter, bounds must be defined for the parameter.
+%
+%Since the objects used to represent a view are known, knowing which type of update to generate is straightforward.
+%The matching of fields in select with the view is also straightforward - this was already necessary to do previously to determine the required CRDT(s) to represent the view.
+%In the example of Figure \ref{fig:q3_view}, it is known that a new lineitem is an increment to a TopSum, an update an increment or decrement depending on the change, and a remove a decrement.
+%This is known as it was previously determined that the view is represented by a TopSum due to limit and the existence of a sum aggregation.
+%It is also known which fields compose the id and value parts of the TopSum entry, as this was previously defined too.
+%Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectively, the example of two new lineitems and the respective view updates.
+%
+%%%Note: Probably the caption should be of both tables?
+%%\begin{table}
+%%	\small
+%%	%\setlength\tabcolsep{0.1pt}
+%%	\setlength\tabcolsep{5pt}
+%%	\begin{minipage}{0.26\textwidth}
+%%	\begin{tabular}{lcc}
+%%		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
+%%		orderkey     & 5         & 5         \\
+%%		partkey      & 20        & 10        \\
+%%		suppkey      & 4         & 3         \\
+%%		linenumber   & 1         & 2         \\
+%%		quantity     & 10        & 1         \\
+%%		orderdate    & 15/03/95  & 15/03/95  \\
+%%		shipdate     & 19/03/95  & 17/03/95  \\
+%%		shippriority & high      & high      \\
+%%		mktsegment   & furniture & furniture \\
+%%		price        & 50        & 100       \\
+%%		discount     & 10        & 0         \\
+%%		...          & ...       & ...       \\ \hline
+%%	\end{tabular}
+%%		\vspace{1em}
+%%		\captionof{table}{New lineitems}
+%%		\label{table:new_lineitems}
+%%	\end{minipage}
+%%	\begin{minipage}{0.2\textwidth}
+%%	\begin{tabular}{lc}
+%%		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
+%%		orderkey     & 5        \\
+%%		revenue      & 140      \\
+%%		orderdate    & 15/03/95 \\
+%%		shippriority & high     \\ \hline
+%%		{} & {} \vspace*{-0.4em}    \\ 
+%%		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
+%%		orderkey     & 5        \\
+%%		revenue      & 40       \\
+%%		orderdate    & 15/03/95 \\
+%%		shippriority & high     \\ \hline
+%%		{} & {} \vspace*{-0.4em}    \\
+%%		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
+%%		orderkey     & 5        \\
+%%		revenue      & 40       \\
+%%		orderdate    & 15/03/95 \\
+%%		shippriority & high    \\ \hline
+%%	\end{tabular}
+%%\vspace{1em}
+%%\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
+%%\label{table:view_update}
+%%	\end{minipage}
+%%\end{table}
 
 \subsection{Limitations}	%Not sure if this section is still relevant
 \label{subsec:limitations}
