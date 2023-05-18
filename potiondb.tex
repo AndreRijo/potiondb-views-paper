@@ -506,7 +506,9 @@ by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk
 PotionDB also provides a data definition API, including operations to create and delete buckets, and operations
 to create views. As it is common in key-value stores and document databases, buckets have no associated
 data type, i.e., any object type can be stored in any bucket although it is common for applications to 
-store objects of the same type in each bucket.
+store objects of the same type in each bucket.  A document or a table row can be stored in 
+PotionDB as map CRDT, with each element of the map having its own type. 
+
 
 \begin{figure}[t]
 \small{
@@ -523,20 +525,20 @@ LIMIT 10
 	\label{fig:viewtopsales}
 \end{figure}
 
-\begin{figure}[t]
-\small{
-\begin{lstlisting}[language=SQL]
-CREATE VIEW (MonthlyTopSales, views) AS
-SELECT ProdName, SaleDate.Month AS Month, SaleDate.Year AS Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
-FROM sales
-GROUP BY ProdName, SaleDate.Month,  SaleDate.Year
-GROUP BY SaleDate.Month,  SaleDate.Year
-ORDER BY SumProfit DESC, NumSales DESC
-LIMIT 10
-\end{lstlisting}}
-	\caption{Specification of the view Monthly \emph{TopSales}.}
-	\label{fig:viewtopsales}
-\end{figure}
+%\begin{figure}[t]
+%\small{
+%\begin{lstlisting}[language=SQL]
+%CREATE VIEW (MonthlyTopSales, views) AS
+%SELECT ProdName, SaleDate.Month AS Month, SaleDate.Year AS Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
+%FROM sales
+%GROUP BY ProdName, SaleDate.Month,  SaleDate.Year
+%GROUP BY SaleDate.Month,  SaleDate.Year
+%ORDER BY SumProfit DESC, NumSales DESC
+%LIMIT 10
+%\end{lstlisting}}
+%	\caption{Specification of the view Monthly \emph{TopSales}.}
+%	\label{fig:viewtopsales}
+%\end{figure}
 %CREATE VIEW (TopSales, views) AS 
 %SELECT ProdName., sum(Price - Cost) AS SumProfit,
 %	      count(sales.ID) AS NumSales 
@@ -546,24 +548,34 @@ LIMIT 10
 %LIMIT 10
 
 
-The operation to create a view receives a view specification defined in a language inspired by SQL \cite{sequel}.
+The operation to create a view receives a view specification defined in a language based on SQL \cite{sequel}.
 Figure \ref{fig:topSalesSQL} shows the specification of a view that maintains the top 10 product with most profit in sales for
 each month. %The create view specifies in which bucket and object the  materialized view object will be stored.
-The create view specifies in which key and bucket the materialized view will be stored.
+The create view specifies in which key (prefix) and bucket the materialized view will be stored.
 The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
 the attributes of the view, which can include simple attributes of the selected objects or aggregations.
-As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause - the example 
-computes, for each month and year, the total profit and number of sales of each product.
+As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause,
+restrict the number of elements with a \qcr{LIMIT} clauses, which can be ordered using a \qcr{ORDER BY} clause.
 
-A common requirement when defining views \cite{tpch} is to maintain only the top elements
-of each group.  For simplifying the definition of these views while supporting only a small subset of SQL,
-we extend the standard SQL syntax by allowing the use of a second  \qcr{GROUP BY} clause, combined
-with  \qcr{ORDER BY} and  \qcr{LIMIT} clauses - in the example, for each month and year, only the 10 
-top sold products will be maintained.
+In recurrent queries, it is common that a generic query is instantiated with different values. 
+To support this, our language allows to include variables in the view definition, specified using 
+square bracket. 
+In the example, we have variables \qcr{YEAR} and \qcr{MONTH},  which will lead the system to maintain
+for each pair (year, month) that exists in the database, the top 10 sales.
+
+
+
+, 
+
+%A common requirement when defining views \cite{tpch} is to maintain only the top elements
+%of each group.  For simplifying the definition of these views while supporting only a small subset of SQL,
+%we extend the standard SQL syntax by allowing the use of a second  \qcr{GROUP BY} clause, combined
+%with  \qcr{ORDER BY} and  \qcr{LIMIT} clauses - in the example, for each month and year, only the 10 
+%top sold products will be maintained.
 
 Given a view definition, PotionDB automatically infers which objects will be used to store the view contents and
 which view updates are required to incrementally maintain the materialized view whenever a relevant base object 
-is written. We detail this automated process in Section \ref{subsec:generated_view}.
+is written. We detail this process in Section \ref{subsec:generated_view}.
 The data in a materialized view object is read in the same way as any other object, by issuing read
 operations to the view object.
 
@@ -1071,10 +1083,10 @@ In any case, the elements of the view are maps with multiple columns, one for ea
 of the attributes specified in the  \emph{select} of the view definition.  
 
 For a given view definition, one or multiple objects are defined - in the language we defined for 
-specifying view, a vie that includes two \qcr{GROUP BY} clauses will lead to multiple object,
-one for each value of the second clause. 
+specifying view,  a view that includes variables will lead to multiple object,
+one for each possible value of the variables. 
 In the example of the top sales presented in Figure~\ref{fig:viewtopsales}, one top-K counter
-object will be created (as needed) for each month of the year, and its PotionDB key will include
+object will be created (as needed) for each month of each year, and its PotionDB key will include
 the name of the view and the month and year.   The top-K counter will have a set
 of entries, each one with the identifier of a product and the total sales of the product. The entry
 might have additional information, such as the description of the product if that was defined
