@@ -449,7 +449,7 @@ Buckets are further logically grouped in containers,as further
 detailed in Section \ref{subsec:buckets}. An object has a $\mathit{key}$ inside the bucket.
 
 PotionDB supports objects of different data $\mathit{types}$, including registers, counters, averages, sets, maps
-and top-K ordered maps~\cite{Cabrita17Nonuniform}.
+and top-K objects~\cite{Cabrita17Nonuniform}.
 Objects (both base object and views) are implemented as Conflict-free Replicated 
 Data Types, CRDTs~\cite{crdt}, guaranteeing that object replicas converge to a single state
 in the presence of concurrent updates.
@@ -520,7 +520,7 @@ ORDER BY SumProfit DESC, NumSales DESC
 LIMIT 10
 \end{lstlisting}}
 	\caption{Specification of the view \emph{TopSales}.}
-	\label{fig:topSalesSQL}
+	\label{fig:viewtopsales}
 \end{figure}
 %CREATE VIEW (TopSales, views) AS 
 %SELECT ProdName., sum(Price - Cost) AS SumProfit,
@@ -532,7 +532,7 @@ LIMIT 10
 
 
 The operation to create a view receives a view specification defined in a language inspired by SQL \cite{sequel}.
-Figure \ref{fig:viewSQL} shows the specification of a view that maintains the top 10 sales for
+Figure \ref{fig:viewtopsales} shows the specification of a view that maintains the top 10 sales for
 each month. The create view specifies in which bucket and object the  materialized view object will be stored.
 The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, and the \qcr{SELECT} specifies
 the attributes of the view, which can include simple attributes of the selected objects or aggregations.
@@ -772,9 +772,9 @@ to be replicated and applied everywhere.
 In PotionDB, we support the following NuCRDTs, previously proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}: 
 \begin{inparaenum}[(i)]
 \item maximum and minimum objects, for storing the maximum or minimum of the objects added to the object;
-\item top-K map,  for storing the K map entries with largest values;
-\item top-K counter map,  for storing the K map entries with largest values, where the value associated 
-with a key can be updated by issuing increment/decrement operations.
+\item top-K,  for storing the K entries with largest values;
+\item top-K counter  for storing the K map entries with largest values, where the value
+can be updated by issuing increment/decrement operations.
 \end{inparaenum}
 NuCRDTs can be used directly by application, but are more commonly used for supporting 
 views, as detailed in Section~\ref{sec:views_for_apps}. 
@@ -805,7 +805,7 @@ Third, we also extend NuCRDT specifications to maintain a larger observable stat
 cases in which a replica may be exposing incorrect results in practice.  In our maximum NuCRDT example,
 this means maintaining for example the two largest elements. In this case, if the maximum element
 is deleted, replicas still have the new maximum. 
-Doing this is straightforward for all NuCRDTs we have defined, besides the top-K counter map. 
+Doing this is straightforward for all NuCRDTs we have defined, besides the top-K counter. 
 
 \nuno{explicar como fazer?}
 
@@ -1064,11 +1064,15 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 %Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
 Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
 to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
+An important aspect to consider, when devising the views, is that some queries have parameters and other don't.
+For example, if the goal is to know top seller product of all times (or in a game the leaderboard of the game), the query 
+will have no parameter and the view will
+be exactly the same as the result of the query. However, if the query to be performed by the application has 
+parameters, the view needs to include all values needed to answer the query with the different possible values. 
+The example of top sales view presented in Section~\ref{subsec:interface} exemplifies this, where the view includes
+the top sales products for each month - an application will query the view to get the information for a given month.
 
-As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
-PotionDB's view API (Section \ref{subsec:viewAPI}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
-PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
-Such inference takes out a considerable burden from the application developer.
+\nuno{Qual o objetivo do próximo examplo - mostrar como fazer? neste exemplo não sei bem como especificar...}
 
 We now illustrate how to obtain a materialized view’s specification for a given query. 
 Consider query 3 (Q3) of TPC-H, defined in Figure \ref{fig:q3}
@@ -1111,16 +1115,14 @@ No restriction is needed for SEGMENT, as all values of SEGMENT are to be conside
 Finally, the group by cause is not used in PotionDB.
 
 The final materialized view can be specified as follows:
-
+\nuno{não é isto, mas não é fácil fazer em SQL em poucas linhas}
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
 CREATE view (Q3, views) AS
-SELECT orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
+SELECT mktsegment, orderkey, sum(price*(1-discount)) AS renevue, orderdate, shippriority
 FROM lineitem
-GROUP BY orderkey, orderdate, shippriority
-
-
-WHERE mktsegment $=$ [SEGMENT] and orderdate $<$ [DATE] and shipdate $>$ [DATE] and 1995-03-01 $\leq$ DATE $\leq$ 1995-03-31
+GROUP BY mktsegment, orderkey, orderdate, shippriority
+GROUP BY mktsegment, orderdate
 ORDER BY revenue DESC, orderdate
 LIMIT 10
 	\end{lstlisting}
@@ -1128,47 +1130,66 @@ LIMIT 10
 \label{fig:q3_view}
 \end{figure}
 
-\subsection{Generated view}
+\subsection{Generated objects and triggers}
 \label{subsec:generated_view}
 
-We now show how PotionDB, given a view specification, generates the right objects to hold the view's data and its updates.
-For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
+We now outline how PotionDB, given a view specification, generates the right objects to hold the view's data and its updates.
+%For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
 
-Recall the view specification in Figure \ref{fig:q3_view}.
-\emph{Limit} tells PotionDB that the view's data will be represented by a TopK or TopSum.
-\emph{Order By} specifies how the top's elements will be sorted - first by revenue, then orderdate.
-These elements will be the "value" of each entry.
-The id of each entry will be composed by the elements in \emph{select} not used in \emph{order by}. %NOTE: I can change this if we want to use a clause or similar like ID() just for TopK/TopSum
-After analysing select, PotionDB concludes the \emph{revenue} field in \emph{order by} is a sum and, thus, decides to use a TopSum in order to support increments and decrements of an entry.
+\noindent
+\textbf{Generated objects:}
+The object used for storing the view's data depends on the type of query being performed. 
+If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar,such as count or average), the view will be stored in a map CRDT, where the full materialized view is maintained. 
+If the query has a  \emph{limit} clause or includes an aggregation of type maximum (or minimum),
+the top-K is used.
+If the query has a  \emph{limit} clause and an aggregation of type sum (or similar,such as count or average),
+the top-K counter is used.
 
-The parameters of the query, [SEGMENT] and [DATE], in practice represent different variations of the query.
-That is, the query may be instantiated with different values of both SEGMENT and DATE.
-As such, it is necessary for the materialized view to support all these variations efficiently, without requiring expensive filtering or processing.
-PotionDB accomplishes this by deploying a different object for each value of a parameter - in this case, a different TopSum CRDT for each pair of SEGMENT, DATE. 
-The key of each object is the concatenation of “Q3” with the value of SEGMENT, followed by DATE’s. 
-The order of the parameters in the key is the order of their appearence in \emph{Where}. 
-Executing the right variation of the query is as simple as building the key and executing a single read in the database.
-%For this, a different object is used for each pair of SEGMENT, DATE - the key of the view for each object is the concatenation of "Q3", the value of SEGMENT followed by DATE.
-%The order is the same as the order by which the parameters appear in \emph{Where}.
-%Executing the right variation of the query is as simple as building the key and doing a direct get on the database.
- 
- %There is an alternative solution (which we actually do in our implementation depending on the query) for handling parameters. This different solution consists in using Map CRDTs, one per parameter, and embed them on each other. So the idea is kinda like "levels" of filtering. Should we describe this solution instead? Advantages: easier because only one key for the view, defined by the user. Disadvantages: can't do internal sharding because everything is condensed into a single big object.
- 
- Given the information above, PotionDB decides to support Q3’s materialized view with a TopSum CRDT per pair of SEGMENT, DATE.
- Each pair's CRDT is only initialized when the first respective update is executed, thus it is not necessary to know the possible values of SEGMENT.
- That is, we support parameters whose set of possible values is unknown and remain efficient by only initializing objects as necessary.
- 
- \subsection{Generating updates}
- \label{subsec:generated_updates}
- %NOTE: Important limitation of our algorithm for this view API - we do not support a view based on another view, unless it is a map!!!
- 
- %Should I explain the algorithm in detail? I think for that I would need to present the pseudo-code or at least some parts of it, like e.g. say which structures are needed to gather information collected by parsing the specification, and how triggers are generated from that.
-After determining the view objects used to represent the view, PotionDB generates two triggers that will be used to update those view objects.
-One trigger corresponds to new/updates of objects relevant to the view (base objects), while the other to removals of said objects.	%Is this safe to say? I don't know how updates would do actually.
-The respective trigger is fired when a base object is added/updated/removed, generating the necessary updates for the view.
-These updates are then appended to the current transaction, ensuring views get updated simultaneously with the respective base objects.
-The set of base objects of a view is determined by the \emph{from} clause - only objects with the container specified activate the triggers.
-The conditions in the \emph{where} clause further restrict which objects generate updates for the view.
+Each value of the objects used in a view will be a map with multiple columns, one for each
+of the attributes specified in the  \emph{select} of the view definition. 
+For a given view definition, one or multiple objects can be defined, depending on whether a 
+view has parameters or not. If it has parameters, the values of the parameters will be used in the name
+of the view. object
+In the example of the top sales presented before, one top-K counter
+object will be created (as needed) for each month of the year, and its PotionDB key will include
+the name of the view and the month and year.   
+
+\noindent
+\textbf{Generated triggers:}
+After determining the objects used to represent the view, PotionDB generates a trigger to to update 
+the contents of the view, as base objects are created, updated or deleted (referred simply as updates). 
+The trigger will be set for the container (or bucket) specified in the \emph{from} clause of the view
+definition.
+If a \emph{where} clause is included in the view definition, updates to objects that do not match the 
+defined condition will be ignored.
+
+As a view may be composed by multiple objects, the first thing is to 
+determine which view object must be updated - this is achieved from the values in the updated base 
+object.
+
+
+
+used for defining the name of view object.
+
+. This is done by using the values of the base object
+to deter  
+that determine which 
+
+
+
+
+An update in a base objects may lead to a new new view objects
+
+
+When a base object is created, it may 
+
+An update
+
+When a base object is updated, this update may lead to a n 
+
+Given an update to a base object, the 
+Depending on the values 
+
 
 For the generation of the triggers themselves, for brevity sake we only present the intuition behind update generation and not the full algorithm.
 For the rest of the explanation, assume \emph{view} refers to all possible variants generated by the parameters, while \emph{subview} refers to one of the variants.
@@ -1188,56 +1209,7 @@ This is known as it was previously determined that the view is represented by a 
 It is also known which fields compose the id and value parts of the TopSum entry, as this was previously defined too.
 Tables \ref{table:new_lineitems} and \ref{table:view_update} showcase, respectively, the example of two new lineitems and the respective view updates.
 
-%%Note: Probably the caption should be of both tables?
-%\begin{table}
-%	\small
-%	%\setlength\tabcolsep{0.1pt}
-%	\setlength\tabcolsep{5pt}
-%	\begin{minipage}{0.26\textwidth}
-%	\begin{tabular}{lcc}
-%		\multicolumn{1}{c}{}               & Item1                          & Item2                          \\ \hline
-%		orderkey     & 5         & 5         \\
-%		partkey      & 20        & 10        \\
-%		suppkey      & 4         & 3         \\
-%		linenumber   & 1         & 2         \\
-%		quantity     & 10        & 1         \\
-%		orderdate    & 15/03/95  & 15/03/95  \\
-%		shipdate     & 19/03/95  & 17/03/95  \\
-%		shippriority & high      & high      \\
-%		mktsegment   & furniture & furniture \\
-%		price        & 50        & 100       \\
-%		discount     & 10        & 0         \\
-%		...          & ...       & ...       \\ \hline
-%	\end{tabular}
-%		\vspace{1em}
-%		\captionof{table}{New lineitems}
-%		\label{table:new_lineitems}
-%	\end{minipage}
-%	\begin{minipage}{0.2\textwidth}
-%	\begin{tabular}{lc}
-%		\multicolumn{2}{c}{furniture, 16/03/95}                            \\ \hline
-%		orderkey     & 5        \\
-%		revenue      & 140      \\
-%		orderdate    & 15/03/95 \\
-%		shippriority & high     \\ \hline
-%		{} & {} \vspace*{-0.4em}    \\ 
-%		\multicolumn{2}{c}{furniture, 17/03/95}                            \\ \hline
-%		orderkey     & 5        \\
-%		revenue      & 40       \\
-%		orderdate    & 15/03/95 \\
-%		shippriority & high     \\ \hline
-%		{} & {} \vspace*{-0.4em}    \\
-%		\multicolumn{2}{c}{furniture, 18/03/95}                            \\ \hline
-%		orderkey     & 5        \\
-%		revenue      & 40       \\
-%		orderdate    & 15/03/95 \\
-%		shippriority & high    \\ \hline
-%	\end{tabular}
-%\vspace{1em}
-%\captionof{table}{Updated views. Note that none of the other pairs of (SEGMENT, DATE) get updated.}
-%\label{table:view_update}
-%	\end{minipage}
-%\end{table}
+
 
 \subsection{Limitations}	%Not sure if this section is still relevant
 \label{subsec:limitations}
