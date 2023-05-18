@@ -511,7 +511,22 @@ store objects of the same type in each bucket.
 \begin{figure}[t]
 \small{
 \begin{lstlisting}[language=SQL]
-CREATE VIEW (TopSales, views) AS
+CREATE VIEW (MonthlyTopSales, views) AS
+SELECT ProdName, SaleDate.Month AS Month, SaleDate.Year AS Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
+FROM sales
+WHERE SaleDate.Month = [MONTH] AND SaleDate.Year = [YEAR]
+GROUP BY ProdName
+ORDER BY SumProfit DESC, NumSales DESC
+LIMIT 10
+\end{lstlisting}}
+	\caption{Specification of the view Monthly \emph{TopSales}.}
+	\label{fig:viewtopsales}
+\end{figure}
+
+\begin{figure}[t]
+\small{
+\begin{lstlisting}[language=SQL]
+CREATE VIEW (MonthlyTopSales, views) AS
 SELECT ProdName, SaleDate.Month AS Month, SaleDate.Year AS Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
 FROM sales
 GROUP BY ProdName, SaleDate.Month,  SaleDate.Year
@@ -519,7 +534,7 @@ GROUP BY SaleDate.Month,  SaleDate.Year
 ORDER BY SumProfit DESC, NumSales DESC
 LIMIT 10
 \end{lstlisting}}
-	\caption{Specification of the view \emph{TopSales}.}
+	\caption{Specification of the view Monthly \emph{TopSales}.}
 	\label{fig:viewtopsales}
 \end{figure}
 %CREATE VIEW (TopSales, views) AS 
@@ -532,7 +547,7 @@ LIMIT 10
 
 
 The operation to create a view receives a view specification defined in a language inspired by SQL \cite{sequel}.
-Figure \ref{fig:topSalesSQL} shows the specification of a view that maintains the top 10 sales for
+Figure \ref{fig:topSalesSQL} shows the specification of a view that maintains the top 10 product with most profit in sales for
 each month. %The create view specifies in which bucket and object the  materialized view object will be stored.
 The create view specifies in which key and bucket the materialized view will be stored.
 The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
@@ -1384,9 +1399,83 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 \subsection{Specifying views}
 \label{subsec:views_for_queries}
 
-%Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
+%%Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
+%Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
+%to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
+%An important aspect to consider, when devising the views, is that some queries have parameters and other don't.
+%For example, if the goal is to know top seller product of all times (or in a game the leaderboard of the game), the query 
+%will have no parameter and the view will
+%be exactly the same as the result of the query. However, if the query to be performed by the application has 
+%parameters, the view needs to include all values needed to answer the query with the different possible values. 
+%The example of top sales view presented in Section~\ref{subsec:interface} exemplifies this, where the view includes
+%the top sales products for each month - an application will query the view to get the information for a given month.
+%
+%\nuno{Qual o objetivo do próximo examplo - mostrar como fazer? neste exemplo não sei bem como especificar...}
+%As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
+%PotionDB's view API (Section \ref{subsec:interface}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
+%PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
+%Such inference takes out a considerable burden from the application developer.
+
+
+
+
 Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
 to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
+As in relational databases, the challenge is to specify the right views for the application's queries.
+PotionDB's view API (introduced in Section \ref{subsec:interface}) and its similarities with SQL makes this challenge somewhat 
+similar to the one faced when using relational databases.
+
+When devising the views, an important aspect to consider is that some generic queries performed by applications
+have parameters that are instantiated when executing the query. In the example of the top sales of 
+Figure~\ref{fig:viewtopsales}, the application will typically use the query for a specific month 
+(as specified in the TPC-H benchmark). 
+
+ For example, the application will 
+are param
+
+ have parameters 
+that will be instantiated when the query is performed by the application. 
+
+
+For example, the monthly top sales view 
+presented in Figure~\ref{fig:viewtopsales} maintain the can be used to access the top products in each month, but the application
+will typically perform the query for a specific month.
+
+
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+	CREATE VIEW (Q18, views) AS
+	SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
+	FROM orders
+	WHERE totalQuantity > [QUANTITY]
+	ORDER BY totalprice DESC, orderdate ASC
+	LIMIT 100
+	\end{lstlisting}
+	\caption{PotionDB specification of a view for TPC-H's Query 18}
+	\label{fig:q18_view}
+\end{figure}
+
+
+
+ queries have parameters that  parameterized when 
+
+
+
+ and other don't.
+For example, if the goal is to know top seller product of all times (or in a game the leaderboard of the game), the query 
+will have no parameter and the view will
+be exactly the same as the result of the query. However, if the query to be performed by the application has 
+parameters, the view needs to include all values needed to answer the query with the different possible values. 
+The example of top sales view presented in Section~\ref{subsec:interface} exemplifies this, where the view includes
+the top sales products for each month - an application will query the view to get the information for a given month.
+
+
+
+
+
+PotionDB's view API (Section \ref{subsec:interface}) and its similarities with SQL make this challenge somewhat 
+similar to the one faced when using relational databases.
+
 An important aspect to consider, when devising the views, is that some queries have parameters and other don't.
 For example, if the goal is to know top seller product of all times (or in a game the leaderboard of the game), the query 
 will have no parameter and the view will
@@ -1395,11 +1484,96 @@ parameters, the view needs to include all values needed to answer the query with
 The example of top sales view presented in Section~\ref{subsec:interface} exemplifies this, where the view includes
 the top sales products for each month - an application will query the view to get the information for a given month.
 
-\nuno{Qual o objetivo do próximo examplo - mostrar como fazer? neste exemplo não sei bem como especificar...}
-As in relational databases, the challenge is, thus, to specify the right views for the application's queries.
-PotionDB's view API (Section \ref{subsec:interface}) and its similarities with SQL make this challenge somewhat similar to the one faced when using relational databases.
-PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
+
+PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are 
+correctly updated when any base object is inserted/updated/deleted.
 Such inference takes out a considerable burden from the application developer.
+
+We now illustrate how to obtain a materialized view’s specification for a given query. 
+Consider query 18 (Q18) of TPC-H, defined in Figure \ref{fig:q18}:
+
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+	Return the first 100 rows:
+	SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
+	FROM orders
+	WHERE totalquantity > [QUANTITY]
+	ORDER BY totalprice DESC, orderdate ASC
+	\end{lstlisting}
+	\caption{SQL of TPC-H's Query 18.}
+	\label{fig:q18}
+\end{figure}
+
+%Original query
+%\begin{figure}[h]
+%	\begin{lstlisting}[language=SQL]
+%	SELECT c_name, c_custkey, o_orderdate, o_totalprice, sum(l_quantity)
+%	FROM customer, orders, lineitem
+%	WHERE o_orderkey in (
+%		SELECT l_orderkey
+%		FROM lineitem
+%		GROUP BY l_orderkey having sum(l_quantity) > [QUANTITY]
+%	)
+%	and c_custkey $=$ o_custkey and o_orderkey $=$ l_orderkey
+%	GROUP BY c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice
+%	ORDER BY o_totalprice DESC, o_orderdate
+%	\end{lstlisting}
+%	\caption{SQL of TPC-H's Query 18.}
+%	\label{fig:q18}
+%\end{figure}
+
+The goal of Q18 is to list the top of the most valuable ``large volume orders''.
+That is, for all orders which are considered large, i.e., the amount of units ordered is above a certain value (QUANTITY), it lists the top 100 of those orders, ordering them by their total value (price).
+For each order, it also lists the customer's name and ID.
+QUANTITY is a parameter of the query - the definition of a ``large volume order'' may be changed between query executions.
+TPC-H defines the range of possible values as [312-315].	%In a real life scenario, would this be as changeable?
+
+For the view, we want to \emph{select} the same fields as in the query, so that all necessary information is in the view.
+This avoids having to fetch extra data from other objects, which could imply communication with other servers due to partial replication.
+The \emph{from} and \emph{order by} clauses are also unchanged. %Do I need to justify this?
+We add a \emph{group by}, as the results should be grouped by QUANTITY - the list of most valuable (highest priced) orders may be different depending on QUANTITY. %An example that can be used to justify this if needed: the "most expensive order" could be one whose totalquantity is 313 (even if there's other orders with a larger quantity). Thus it would enter for QUANTITY=312, QUANTITY=313 but not QUANTITY=314 and QUANTITY=315. It really must be different tops.
+We also add a \emph{limit} 100 clause as only the top 100 entries should be listed.
+
+The \emph{where} clause must be modified in order to account for the possible values of the parameter QUANTITY.
+This is necessary for two reasons:
+\begin{enumerate*}
+	\item in order to define what is a ``large volume order'', i.e., which orders should be considered for the view;
+	\item in order to know what values can QUANTITY have and thus which groups should PotionDB make with the \emph{group by}.
+\end{enumerate*}
+We achieve this by defining which values QUANTITY can take, i.e., by adding "and QUANTITY $\geq$ 312 and QUANTITY $\leq$ 315" to the \emph{where} clause.
+
+Figure \ref{fig:q18_view} contains a possible specification for the final %materialized 
+view.
+
+%\footnote{For simplicity of the example, we assume data is not normalized. Thus, some fields from customer and lineitem tables are assumed to be available on order.}
+
+%NOTE: For the old query we didn't need to define the values of SEGMENT because we compared the SEGMENT parameter to the customer's segment by equality - thus the matching is direct. 
+%On the other hand, when the field of an object is compared with an inequality (e.g., >, !=) to a parameter, we must define the values possible for the parameter... otherwise how do we know how to group it?
+%An example: if we say that for the view, the totalquantity > [QUANTITY], how can we atest if the statement is true if we don't know the possible values of QUANTITY? We would have to test all possible integer values...
+
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+	CREATE VIEW (Q18, views) AS
+	SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
+	FROM orders
+	WHERE totalQuantity > [QUANTITY] and [QUANTITY] $\geq$ 312 and [QUANTITY] $\leq$ 315
+	GROUP BY [QUANTITY]
+	ORDER BY totalprice DESC, orderdate ASC
+	LIMIT 100
+	\end{lstlisting}
+	\caption{PotionDB specification of a view for TPC-H's Query 18}
+	\label{fig:q18_view}
+\end{figure}
+
+%Select custname, custkey, orderkey, orderdate, totalprice, totalquantity
+%From orders
+%Where totalquantity > [QUANTITY]
+%Group by custname, custkey, orderkey, orderdate, totalprice
+%Group by QUANTITY
+%Order by totalprice desc, orderdate asc
+
+
+
 
 We now illustrate how to obtain a materialized view’s specification for a given query. 
 Consider query 18 (Q18) of TPC-H, defined in Figure \ref{fig:q18}:
