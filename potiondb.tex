@@ -514,9 +514,9 @@ PotionDB as map CRDT, with each element of the map having its own type.
 \small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (MonthlyTopSales, views) AS
-SELECT ProdName, SaleDate.Month AS Month, SaleDate.Year AS Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
+SELECT ProdName, SaleDate.Month, SaleDate.Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
 FROM sales
-WHERE SaleDate.Month = [MONTH] AND SaleDate.Year = [YEAR]
+WHERE SaleDate.Month == [MONTH] AND SaleDate.Year == [YEAR]
 GROUP BY ProdName
 ORDER BY SumProfit DESC, NumSales DESC
 LIMIT 10
@@ -971,7 +971,7 @@ propagated. This is done in the context of the replication process and explained
 %\label{subsec:triggers}
 PotionDB has an after update trigger mechanism that can be associated with 
 objects in a given bucket or container.
-When a transaction is being executed at the initial replica, after an update the code
+When a transaction is being executed at the initial replica, after an update, the code
 of the trigger will run and it may issue reads and updates to the same or to a different object.
 These updates are part of the transaction, being committed and propagated to other replicas
 as part of the transaction.
@@ -1068,7 +1068,7 @@ discuss how experience in defining views for the queries of the TPC-H benchmark~
 \subsection{Generated objects and triggers}
 \label{subsec:generated_view}
 
-We now outline how PotionDB, given a view specification, generates the right objects to hold the view's data and its updates.
+We now outline how PotionDB, given a view specification, generates the right objects to hold the view's data and updates the views.
 %For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
 
 \noindent
@@ -1117,6 +1117,21 @@ The underlying functionality of the top-K counter guarantees that the updated en
 will be propagated to other replicas when necessary, and that every replica keeps the correct top-K
 elements.
 
+\subsection{Developer-defined views}
+\label{subsec:programmer_view}
+
+Besides using the view language supported in PotionDB, an application developer can
+maintain the data of a view in specific PotionDB objects and define triggers to update
+these view objects.
+
+The top-K and top-K counter NuCRDTs include the logic for replicating only the necessary 
+updates to maintain in all replicas the top elements for data that is updated using set value 
+or increment operations.
+When the view does not consist in the topmost elements, the Map CRDT can be used.  
+Aggregations defined in the views - e.g. average, maximum - are supported by using CRDT and NuCRDT 
+objects, such as the counter CRDT and maximum NuCRDT.
+After defining the objects to be used, the application should define the triggers that (populate and) 
+update the view objects. 
 
 
 %Recall the view specification in Figure \ref{fig:q18_view}.
@@ -1408,7 +1423,7 @@ Each columns is represented as a CRDT - e.g. the counter CRDT is used for number
 LWW register is used for strings and other numbers.
 When useful, we de-normalize the data model (as it is common in key-value stores and document databases). 
 
-\subsection{Specifying views}
+\subsection{TPC-H views}
 \label{subsec:views_for_queries}
 
 %%Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
@@ -1428,7 +1443,27 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 %PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
 %Such inference takes out a considerable burden from the application developer.
 
+TPC-H defines 20 queries and we have defined views for each of these queries. We now describe 
+the lessons learned. 
 
+First, PotionDB is a key-value store and does not directly support advanced database functionality,
+such as joins. 
+
+
+Given this, it was necessary  
+
+
+we do not support joins in our view definition languages.  To make it possible to 
+define views using our language, in most cases it was necessary to use a 
+
+t was necessary to 
+
+
+ our view definition language
+
+having a non-normalized 
+
+ a number of que views. 
 
 
 Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
@@ -1462,6 +1497,8 @@ will typically perform the query for a specific month.
 	WHERE totalQuantity > [QUANTITY]
 	ORDER BY totalprice DESC, orderdate ASC
 	LIMIT 100
+	VIEW KEY orderkey
+	VIEW ID totalquantity
 	\end{lstlisting}
 	\caption{PotionDB specification of a view for TPC-H's Query 18}
 	\label{fig:q18_view}
