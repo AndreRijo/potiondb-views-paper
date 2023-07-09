@@ -1708,10 +1708,73 @@ view.
 	ORDER BY totalprice DESC, orderdate ASC
 	LIMIT 100
 	\end{lstlisting}
-	\caption{PotionDB specification of a view for TPC-H's Query 18}
+	\caption{PotionDB specification of a view for TPC-H's Query 18.}
 	\label{fig:q18_view}
 \end{figure}
 
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+	SELECT 100.00 * sum(CASE
+			WHEN type like "PROMO%"
+			THEN extendedprice * (1 - discount)
+			ELSE 0
+		END) / SUM(extendedprice * (1 - discount)) AS promo_revenue
+	FROM lineitem
+	WHERE shipdate.year == [YEAR] and shipdate.month == [MONTH]
+	\end{lstlisting}
+	\caption{SQL of TPC-H's Query 14.}
+	\label{fig:q14}
+\end{figure}
+
+Figure \ref{fig:q14} contains the specification of TPC-H's Q14.
+This query determines, for a given month and year, the percentage of revenue that comes from products on sale - thus it is useful to evaluate the effectiveness of promotions.
+In TPC-H, revenue is defined as the sum of the following expression for all sales: extendedprice $*$ (1 $-$ discount).
+MONTH and YEAR are the parameters of this query.
+
+Despite our specification language not supporting embedded queries nor \emph{case} clauses, efficient views can still be specified for this query with ease.
+One possible solution is to define two views: %per pair of year, month:
+one with the sum of all sales and another with the sum of only the products that were sold in promotion.
+To answer the query, both views are queried - let $v_1$ and $v_2$ be, respectively, the result of the query to the view of all sales and view of only the sales with promotion.
+The final result can be obtained by calculating $100 * v_1 / v_2$.
+
+\begin{figure}[h]
+	\begin{subfigure}{\linewidth}
+		\begin{lstlisting}[language=SQL]
+			CREATE VIEW (Q14_all, views) WITH YEAR IN [1993-1997], MONTH IN [1-12] AS
+			SELECT sum(extendedprice * (1 - discount)) AS revenue
+			FROM lineitem
+			WHERE shipdate.year == [YEAR] and shipdate.month == [MONTH]
+			GROUP BY [YEAR], [MONTH]
+		\end{lstlisting}
+		\caption{View 1 - Revenue of all sales.}
+	\end{subfigure}
+	\begin{subfigure}{\linewidth}
+		\begin{lstlisting}[language=SQL]
+		CREATE VIEW (Q14_promo, views) WITH YEAR IN [1993-1997], MONTH IN [1-12] AS
+		SELECT sum(extendedprice * (1 - discount)) AS promo_revenue
+		FROM lineitem
+		WHERE shipdate.year == [YEAR] and shipdate.month == [MONTH] and type starts with "PROMO"
+		GROUP BY [YEAR], [MONTH]
+		\end{lstlisting}
+		\caption{View 2 - Revenue of sales on promotion.}
+	\end{subfigure}
+	\caption{PotionDB specification of a view for TPC-H's Query 14.} %Technically it's two views so maybe this caption should state something different?
+	\label{fig:q14_view}
+\end{figure}
+
+Figure \ref{fig:q14_view} contains the specification of the two aforementioned views.
+To specify the views, we can proceed as follows.
+First, the \emph{with} clause defines the possible values of the parameters - for this query, TPC-H defines that all sales made between the start of 1993 and the end of 1997 should be considered.
+In terms of information for this query, we are only interested in the revenue - thus, the \emph{select} clause contains only \emph{sum}(extendedprice $*$ (1 - discount)). %Maybe in this explanation we could replace the sum of the formula with something else (sum of profits?)
+The \emph{from} clause remains unchanged from the query.
+For \emph{where}, on both views we keep the condition of shipdate matching the parameters MONTH and YEAR - this ensures that only sales done in the period considered will generate view updates, and that only the two views respective to the sales' month and year will be updated.
+Furthermore, on the view referring to the products on promotion, we add another restriction: type \emph{starts with} "PROMO".
+This ensures only products sold on sale are considered for said view.
+Our specification language supports other operations on strings, such as \emph{ends with} and \emph{contains}, which boost our language's expressiveness.	%If there's any more that should be supported please tell me - it's actually easy to support more of these.
+Furthermore, our language can be extended with ease to support more operations on any supported datatype.
+Finally, we add a \emph{group by} [YEAR], [MONTH] clause to both specifications, which ensures that for each specification, results are grouped by pair of YEAR, MONTH. %I think this is not very clear but the idea is that we add the group by so that PotionDB generates a different view for each value possible for the pair (year, month).
+
+PotionDB implements both views above by deploying a Counter CRDT per view and per pair of (year, month). %It may be worth saying that little extra storage is used to support this query despite it referring to the majority of the objects in the database (not all lineitems are on promotion but the majority of lineitems were sold between 1993 and 1997).
 
 \subsection{Limitations}	%Not sure if this section is still relevant
 \label{subsec:limitations}
@@ -1725,11 +1788,42 @@ First, our support for joins is limited. While our join support at least helps f
 Note however this shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. Many do not support any form of join for materialized views \cite{???}.
 %First, joins of containers are not supported.
 %This shortcoming is common in other databases too with materialized views \cite{???}, as it is challenging to automatically generate efficient updates when joins are considered. %Check oracle paper, I think some others like the documents one also had this limitation
-Furthermore, the specification language is also not as expressive as SQL in other clauses like \emph{select} and \emph{where} - for instance, it does not support embedded queries.
+Furthermore, the specification language is also not as expressive as SQL in other clauses like \emph{select} and \emph{where} - for instance, it does not support embedded queries or \emph{exists} clauses.
 This may difficult the specification of certain advanced views or make some cases not possible.
 However, we note most TPC-H queries can be specified with some ease by using our specification language.
 Moreover, they are all supported by manually supplying the triggers to the database, which also goes around the limitation of joins.
 %Thus, PotionDB's data types are expressive enough to fully support all TPC-H queries with efficient views, demonstrating PotionDB's adequaty for OLAP
+
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+	SELECT orderpriority, count(*) as order_count
+	FROM orders as o
+	WHERE orderdate $\geq$ [DATE] and orderdate < [DATE] + 3 month and exists (
+		SELECT *
+		FROM lineitem as l
+		WHERE l.orderkey = o.orderkey and l.commitdate < l.receiptdate
+	)
+	GROUP BY orderpriority
+	ORDER BY orderpriority
+	\end{lstlisting}
+	\caption{SQL of TPC-H's Query 4}
+	\label{fig:query4}
+\end{figure}
+
+Figure \ref{fig:query4} contains the specification of Q4 of TPC-H.
+The goal of Q4 is to count, for each shipping priority (orderpriority), the number of orders in a given quarter in which at least one item was delivered late.
+DATE is defined as being the start of any quarter of a year between 1993 and 1997, inclusive.
+This query contains an \emph{exists} clause, which is not directly supported in our specification language.
+
+This query could however be supported with triggers as follows.
+When a new order is added, check if any of the lineitems of the order was delivered late - if at least one was, issue an update to the view.
+Similarly, when an order is deleted, check if any of its lineitems was delivered late - if at least one was, update the view.
+Note that in TPC-H the granularity of updating is a complete order - thus, all lineitems of said order are included in any transaction that adds or removes an order.
+%Not sure if it is worth mentioning: even if the granularity was in lineitems, it would still be possible to support this: we would need an auxiliary view that keeps count of how many items in an order were delivered late. Then, on a new lineitem, the main view would only be updated if it was the first item delivered late - on lineitem deletion, the main view would only be updated if it was the last item delivered late. Similar logic would apply to modifications of lineitems.
+The view itself could be implemented using a TopSum CRDT per value of quarter with a limit of 100 - this would work as the query is only defined for quarters in the years between 1993 and 1997. %In precision, this would require a limit of exactly 15.
+Even if not, an unbound limit could be used in order for the TopSum to be fully replicated. %Unbound limit: no value for the "K" of TopSum - in practice (i.e. in code) we would just define a TopK with a K value of MAX_INTEGER. Not sure if we really need to talk about the size of the limit. Or maybe alternatively we could say: "a limit of 100 would be enough to support 25 years of data - if more was needed, the limit could be increased."
+Alternatively, a Map CRDT whose values are Counter CRDTs would also work, but the client would need to sort the entries corresponding to the queried quarter - this sorting would be inexpensive given only a few values (5 in TPC-H) are defined for orderpriority. %Maybe just remove this option of Map CRDT
+
 
 %I don't think I need to mention this shotcoming anymore.
 %Finally, manually supplied triggers raise security and safety concerns due to the usage of custom code. However this is a shortcoming of our implementation and not of triggers themselves - it would be possible to use an existing data manipulation language (e.g., \cite{oracleTriggers}) instead of custom code.
