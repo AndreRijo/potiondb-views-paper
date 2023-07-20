@@ -513,7 +513,9 @@ PotionDB as map CRDT, with each element of the map having its own type.
 \begin{figure}[t]
 \small{
 \begin{lstlisting}[language=SQL]
-CREATE VIEW (MonthlyTopSales, views) AS
+CREATE VIEW (MonthlyTopSales, views) WITH 
+		SaleDate.Year == ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
+		SaleDate.Month == ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
 SELECT ProdName, SaleDate.Month, SaleDate.Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
 FROM sales
 WHERE SaleDate.Month == [MONTH] AND SaleDate.Year == [YEAR]
@@ -560,12 +562,10 @@ restrict the number of elements with a \qcr{LIMIT} clauses, which can be ordered
 In recurrent queries, it is common that a generic query is instantiated with different values. 
 To support this, our language allows to include variables in the view definition, specified using 
 square bracket. 
-In the example, we have variables \qcr{YEAR} and \qcr{MONTH},  which will lead the system to maintain
+In the example, we have variables \qcr{YEAR} and \qcr{MONTH}, 
+which will lead the system to maintain
 for each pair (year, month) that exists in the database, the top 10 sales.
 
-
-
-, 
 
 %A common requirement when defining views \cite{tpch} is to maintain only the top elements
 %of each group.  For simplifying the definition of these views while supporting only a small subset of SQL,
@@ -808,6 +808,8 @@ can be updated by issuing increment/decrement operations.
 \end{inparaenum}
 NuCRDTs can be used directly by application, but are more commonly used for supporting 
 views, as detailed in Section~\ref{sec:views_for_apps}. 
+
+\nuno{Dar mais detalhes de como funcionam?}
 
 By not propagating all operations,in some cases, a NuCRDT may temporarily expose an incorrect state.
 Consider the maximum NuCRDT.  Each replica keeps only the maximum element and 
@@ -1396,7 +1398,10 @@ update the view objects.
 %%%\end{table}
 
 
-\subsection{TPC-H data model in PotionDB}
+\subsection{TPC-H in PotionDB}
+
+
+\subsubsection{Data model}
 \label{subsec:dataset}
 
 We now describe our experience applying our proposed model to the queries defined in TPC-H.
@@ -1423,7 +1428,7 @@ Each columns is represented as a CRDT - e.g. the counter CRDT is used for number
 LWW register is used for strings and other numbers.
 When useful, we de-normalize the data model (as it is common in key-value stores and document databases). 
 
-\subsection{TPC-H views}
+\subsubsection{Views}
 \label{subsec:views_for_queries}
 
 %%Should we make it clear somewhere our PotionDB prototype does not have this specification implemented/supported?
@@ -1443,96 +1448,129 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 %PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
 %Such inference takes out a considerable burden from the application developer.
 
-TPC-H defines 20 queries and we have defined views for each of these queries. We now describe 
-the lessons learned. 
+We have analyzed how to define views in PotionDB for the the 20 queries in TPC-H, with different views using different
+underlying CRDTs.
+We now describe the lessons learned. In the next section we present the evaluation of how PotionDB performs on supporting
+the different types of queries.
 
-First, PotionDB is a key-value store and does not directly support advanced database functionality,
-such as joins. 
+\paragraph{De-normalization:} PotionDB is a key-value store and does not directly support advanced database functionality,
+such as joins.  To address this issue, we de-normalize the database whenever necessary.  
+The view presented in Figure~\ref{fig:viewtopsales} is an example of such de-normalization, with
+the product name (\texttt{prodname}) stored in the sales record, instead of the identifier of the product.
 
-
-Given this, it was necessary  
-
-
-we do not support joins in our view definition languages.  To make it possible to 
-define views using our language, in most cases it was necessary to use a 
-
-t was necessary to 
-
-
- our view definition language
-
-having a non-normalized 
-
- a number of que views. 
-
-
-Given a recurrent query, the application developer can specify one or more views that hold the necessary data 
-to answer the query directly, without requiring to read multiple objects, do joins or other resource-consuming processing.
-As in relational databases, the challenge is to specify the right views for the application's queries.
-PotionDB's view API (introduced in Section \ref{subsec:interface}) and its similarities with SQL makes this challenge somewhat 
-similar to the one faced when using relational databases.
-
-When devising the views, an important aspect to consider is that some generic queries performed by applications
-have parameters that are instantiated when executing the query. In the example of the top sales of 
-Figure~\ref{fig:viewtopsales}, the application will typically use the query for a specific month 
-(as specified in the TPC-H benchmark). 
-
- For example, the application will 
-are param
-
- have parameters 
-that will be instantiated when the query is performed by the application. 
+\begin{figure}[t]
+\small{
+\begin{lstlisting}[language=SQL]
+CREATE VIEW (Q5, views) WITH REGION == ANY (SELECT DISTINCT region FROM regions) AS
+SELECT N_Name, SUM(Extendedprice * (1 - Discount)) AS Revenue
+FROM Lineitem
+WHERE C_Nationkey == S_Nationkey AND R_Name == [REGION]
+GROUP BY N_Name
+ORDER BY Revenue DESC
+\end{lstlisting}}
+	\caption{Revenue of local suppliers (Q5).}
+	\label{fig:viewlocalsupliers}
+\end{figure}
 
 
-For example, the monthly top sales view 
-presented in Figure~\ref{fig:viewtopsales} maintain the can be used to access the top products in each month, but the application
-will typically perform the query for a specific month.
+% diferentes tipos de dados
+\paragraph{Data types:} Different types of view require different support from PotionDB underlying data types.
+Figure~\ref{fig:viewlocalsupliers} shows the view to support TPC-H query 5, which computes
+for each nation in a given region, the revenue from local suppliers. 
+This view can be supported by using for each region a map that stores for each nation the sum of the 
+revenue for each \emph{LineItem}. The map of each region is a CRDT map, with the name of the nation mapping
+directly to a CRDT counter with the revenue for that nation. When a new \emph{LineItem} is added (or deleted), 
+the corresponding counter is updated. All replicas will have all the values for all nations.
+
+This contrast with the top sales presented in Figure~\ref{fig:viewtopsales}, that uses a
+top-K counter NuCRDT. In this case, whenever a new sale is inserted, the counters associated with the products are
+updated, but each replica maintains only a partial view of the top-K object - as explained before, replicas only propagate 
+to all replicas the updates for elements that may belong to the top-K.
+
+Finally,  some view are supported by top-K objects. Figure~\ref{fig:q18_view} presents the view to 
+support TPC-H query 18, which can be used to return the top 100 most valuable orders larger than 
+some given quantity.  In this case, a top-K object is sufficient - the difference with a top-K counter is that,
+while in the top-K an entry in the view is completely defined by the value of an order and can be derived 
+from the insert (or update) of an order, in the top-K counter, the value of an entry is the result of an 
+aggregation over multiple values (in the previous example, \texttt{LineItem}s).
 
 
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
-	CREATE VIEW (Q18, views) AS
-	SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
-	FROM orders
-	WHERE totalQuantity > [QUANTITY]
-	ORDER BY totalprice DESC, orderdate ASC
-	LIMIT 100
-	VIEW KEY orderkey
-	VIEW ID totalquantity
+CREATE VIEW (Q18, views) WITH QUANTITY == [312..315] AS
+SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
+FROM orders
+WHERE totalQuantity > [QUANTITY]
+ORDER BY totalprice DESC, orderdate ASC
+LIMIT 100
 	\end{lstlisting}
-	\caption{PotionDB specification of a view for TPC-H's Query 18}
+	\caption{Large volume customer query (Q18).}
 	\label{fig:q18_view}
 \end{figure}
 
 
+% definição de variáveis
+\paragraph{Variables:} As introduced in Section~\ref{subsec:interface}, it is possible to define 
+variables in the specification of views. In some cases, it is important that the view includes information 
+for every possible value of the variables - in this case, a different object if maintained for each
+value of the variable (or combination of values of multiple variables). 
+For example, for the view presented in Figure~\ref{fig:viewlocalsupliers}, there
+will be a database object for each region and for the view presented in Figure~\ref{fig:viewtopsales}, there 
+will be a database object for each combination of month and year.
 
- queries have parameters that  parameterized when 
+In other cases, the application will only query the database using some specific values of the
+variables. For example,  the specification of the TPC-H query 18 states that quantity will be instantiated with values
+from 312 to 315. In general, it is common for application interfaces to limit the queries a use can perform, 
+leading to a similar situation - e.g. hotel reservation applications allow users to check hotels with an average 
+rating larger than some predefined values.
+Figure~\ref{fig:q18_view} shows how this can be specified in PotionDB for TPC-H query 18. 
+In this case, four objects will be created, one for each value of \texttt{quantity}. Whenever a new
+order is inserted (or updated), the four objects are updated.
 
+% limitações
+\paragraph{Limitations:} The language for specifying views in PotionDB has several limitations, when
+compared with support for defining views in relational databases. The main limitations concern the 
+lack of support for joins and sub-queries, and the limited expressiveness in clauses like select and where. 
+This makes more difficult the specification of views for some complex queries and might even make it 
+impossible to use our view definition language.  In this latter case, the programmer can resort to \emph{manually}
+define a view, by selecting the appropriate objects to store the information and defining the necessary triggers
+to update these objects.
 
+\begin{figure}[h]
+	\begin{lstlisting}[language=SQL]
+CREATE VIEW (Q11_p1, views) WITH NATION == ANY (...) AS
+SELECT Partkey, SUM(Supplycost * Availqty) AS Value
+FROM Partsupp
+WHERE N_Name == [NATION]
+GROUP BY Partkey
+LIMIT 1000
 
- and other don't.
-For example, if the goal is to know top seller product of all times (or in a game the leaderboard of the game), the query 
-will have no parameter and the view will
-be exactly the same as the result of the query. However, if the query to be performed by the application has 
-parameters, the view needs to include all values needed to answer the query with the different possible values. 
-The example of top sales view presented in Section~\ref{subsec:interface} exemplifies this, where the view includes
-the top sales products for each month - an application will query the view to get the information for a given month.
+CREATE VIEW (Q11_p2, views) WITH NATION == ANY (...)  AS
+SELECT SUM(Supplycost * Availqty) AS Value
+FROM Partsupp
+WHERE N_Name == [NATION]
+\end{lstlisting}
+	\caption{Important stock identification query (Q5).}
+	\label{fig:q5_view}
+\end{figure}
 
+In general, it is possible to circumvent the limitations by defining additional views.
+For example, TPC-H query 5 finds the suppliers stocks in a given nation that represent a significant percentage of the total
+value of available parts in the nation. In the TPC-H specification, this 
+is computed using a having clause with a condition expressed as a subquery.
+In PotionDB, it is necessary to specify two views, as presented in Figure~\ref{fig:q5_view}.
+The \texttt{Q11\_p2} view maintains the total value for each nation, while the \texttt{Q11\_p1} view
+maintains the top parts for each nation. For reaching the result of TPC-H Q5, the application needs
+to read the total value for the nation, and use this value for filtering the top parts (as some of these part may not
+reach the percentage ratio specified in the query).
 
-
-
-
-PotionDB's view API (Section \ref{subsec:interface}) and its similarities with SQL make this challenge somewhat 
-similar to the one faced when using relational databases.
-
-An important aspect to consider, when devising the views, is that some queries have parameters and other don't.
-For example, if the goal is to know top seller product of all times (or in a game the leaderboard of the game), the query 
-will have no parameter and the view will
-be exactly the same as the result of the query. However, if the query to be performed by the application has 
-parameters, the view needs to include all values needed to answer the query with the different possible values. 
-The example of top sales view presented in Section~\ref{subsec:interface} exemplifies this, where the view includes
-the top sales products for each month - an application will query the view to get the information for a given month.
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\if 0
 
 PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are 
 correctly updated when any base object is inserted/updated/deleted.
@@ -1867,7 +1905,13 @@ Even though only 6 of TPC-H’s queries were implemented in PotionDB, all were a
 Our specification language can provide views for most queries - the few that it can not, manually supplying triggers does the trick.
 Thus, PotionDB's data types are expressive enough to fully support TPC-H queries' efficiently, demonstrating PotionDB's expressivety and adequaty for OLAP scenarios. %Maybe replace OLAP with analytical.
 
-
+\fi
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Evaluation}
 \label{sec:evaluation}
