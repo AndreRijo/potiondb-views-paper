@@ -361,11 +361,12 @@ In this paper we make the following contributions:
 \end{compactitem}
 
 The remainder of the paper is organized as follows.
-Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture and API.
-Section~\ref{sec:consistency} describes PotionDB's consistency guarantees.
-Section~\ref{sec:transactions} describes PotionDB's transactional protocol, while Section \ref{sec:replication} describes PotionDB's replication protocol as well as data partitioning.
-Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
+Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
+Section~\ref{sec:transactions} describes PotionDB's transactional and replication protocols.
+Section~\ref{sec:views_for_apps} discusses details on how PotionDB generates views and their automatic updating, as well as how we adapted TPC-H to PotionDB.
+%Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
 In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section~\ref{sec:related_work} presents related work and Section~\ref{sec:conclusion} concludes.
+\andre{On the description of Section \ref{sec:views_for_apps}, maybe change "their automatic updating" to "keeps them automatically up-to-date"?}
 
 
 %\outline{topicos
@@ -445,8 +446,8 @@ For presentation purposes, we assume the triple is a property of the object and 
 Whenever needed, we represent the aforementioned properties for a given object $o$ as
 $o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
 Objects are stored in $\mathit{buckets}$, which are the unit of replication in PotionDB. 
-Buckets are further logically grouped in containers, as further
-detailed in Section \ref{subsec:buckets}. An object has a $\mathit{key}$ inside the bucket.
+Buckets are further logically grouped in containers. %, as further detailed in Section \ref{subsec:buckets}. 
+An object has a $\mathit{key}$ inside the bucket.
 
 PotionDB supports objects of different data $\mathit{types}$, including registers, counters, averages, sets, maps
 and top-K objects~\cite{Cabrita17Nonuniform}.
@@ -514,10 +515,10 @@ PotionDB as map CRDT, with each element of the map having its own type.
 \small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (MonthlyTopSales, views) WITH 
-		SaleDate.Year == ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
-		SaleDate.Month == ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
+		YEAR == ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
+		MONTH ==  ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
 SELECT ProdName, SaleDate.Month, SaleDate.Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
-FROM sales
+FROM Sales
 WHERE SaleDate.Month == [MONTH] AND SaleDate.Year == [YEAR]
 GROUP BY ProdName
 ORDER BY SumProfit DESC, NumSales DESC
@@ -551,17 +552,18 @@ LIMIT 10
 
 
 The operation to create a view receives a view specification defined in a language based on SQL \cite{sequel}.
-Figure \ref{fig:topSalesSQL} shows the specification of a view that maintains the top 10 product with most profit in sales for
+Figure \ref{fig:viewtopsales} shows the specification of a view that maintains the top 10 products with the most profit in sales for
 each month. %The create view specifies in which bucket and object the  materialized view object will be stored.
-The create view specifies in which key (prefix) and bucket the materialized view will be stored.
+\qcr{CREATE VIEW} specifies in which key (prefix) and bucket the materialized view will be stored.
 The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
 the attributes of the view, which can include simple attributes of the selected objects or aggregations.
 As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause,
-restrict the number of elements with a \qcr{LIMIT} clauses, which can be ordered using a \qcr{ORDER BY} clause.
+restrict the number of elements with a \qcr{LIMIT} clause and
+order the results using an \qcr{ORDER BY} clause. %which can be ordered using a \qcr{ORDER BY} clause.
 
 In recurrent queries, it is common that a generic query is instantiated with different values. 
 To support this, our language allows to include variables in the view definition, specified using 
-square bracket. 
+square brackets. 
 In the example, we have variables \qcr{YEAR} and \qcr{MONTH}, 
 which will lead the system to maintain
 for each pair (year, month) that exists in the database, the top 10 sales.
@@ -646,7 +648,7 @@ A transaction accesses a causally-consistent database snapshot taken in the repl
 at the time the transaction starts. 
 As in snapshot isolation~\cite{Berenson95Critique},  the snapshot reflects all updates of a transaction or none.   
 Furthermore, if a transaction $t$ is included in the snapshot, all transactions that 
-happened-before~\cite{lamport78} before $t$ are also included in the snapshot.
+happened-before~\cite{lamport78}  $t$ are also included in the snapshot.
 Unlike snapshot isolation, and similarly to parallel snapshot isolation~\cite{walter}, it is
 possible for two concurrent transactions to modify the same object, with updates
 being merged using CRDT rules.
@@ -694,8 +696,8 @@ executing transactions according to a different valid
 serialization.
 To guarantee state convergence, we use CRDTs~\cite{crdt,walter},
 which guarantee that after executing the same set of transactions according
-to a valid serialization, objects will have to the same state (by relying on the
-deterministic conflict resolution policies defined in the CRDT user for each database object).
+to a valid serialization, objects will have the same state (by relying on the
+deterministic conflict resolution policies defined in the CRDT used for each database object).
 
 \nuno{Temos de dizer algums coisa sobre relaxado}
 %\noindent
@@ -720,7 +722,7 @@ deterministic conflict resolution policies defined in the CRDT user for each dat
 \end{figure}
 
 We designed PotionDB with geo-replication in mind.
-Thus, we assume PotionDB instances are spread at different locations across the globe (Figure \ref{fig:arch}).
+Thus, we assume PotionDB instances to be spread at different locations across the globe (Figure \ref{fig:arch}).
 Each location only replicates a subset of the whole datastore's data.
 The system administrator has control over where each object is replicated.
 This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
@@ -733,22 +735,24 @@ A client's transactions are locally executed in the PotionDB's location the clie
 Updates are propagated asynchronously to other locations.
 If a client's transaction accesses objects not locally replicated, other locations with said objects are contacted and involved in the transaction.
 We note this should be an exceptional case, not the norm.
-We leave further details for Section \ref{subsec:operationsNonLocal}.
+We leave further details for Section \ref{subsec:txnproc}.
 
 The internal architecture of each PotionDB server is inspired by Cure~\cite{cure} and is split into three main components.
 
-First, the TransactionManager is responsible for receiving and replying to client's requests.
-	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{sec:transactions}) %which ensures
+First, the Transaction Manager is responsible for receiving and replying to client's requests.
+	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{subsec:txnproc}) %which ensures
 	ensuring the consistency of reads and updates, as well as transactions' atomicity.
 	
 Second, the  Materializer stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
-Garbage collection ensures data to generate versions that are too old is eventually discarded.
+Garbage collection ensures data related with versions that are too old is eventually discarded.
+%Garbage collection ensures data to generate versions that are too old is eventually discarded.
 	%Garbage collection keeps the amount of metadata in check.
 	\nuno{André: o que é que esta última frase quer dizer?}
+	%O meu objectivo era mencionar que temos um mecanismo de GC que apaga os dados relacionados com a reconstrução de versões que já não são relevantes (versões muito antigas)
 	
 Third,  the Replicator ensures that committed transactions are replicated asynchronously to other PotionDB instances.
-	It is also responsible for receiving remote transactions and forwarding them to the TransactionManager for local execution.
-	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{subsec:partial}.
+	It is also responsible for receiving remote transactions and forwarding them to the Transaction Manager for local execution.
+	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{sec:replication}.
 
 
 
@@ -765,7 +769,7 @@ Third,  the Replicator ensures that committed transactions are replicated asynch
 This Section presents the underlying protocols used to maintain the state of objects
 and execute transactions with TCC in PotionDB. The transaction processing and replication
 algorithm can be seen as an adaptation of Cure protocols~\cite{cure} to a partial replication
-setting. In the following Section we show how PotionDB mechanism are used to maintain
+setting. In the following Section we show how PotionDB's mechanisms are used to maintain
 the state of materialized views.
 
 \subsection{Objects}
@@ -807,17 +811,17 @@ In PotionDB, we support the following NuCRDTs, previously proposed by Cabrita et
 can be updated by issuing increment/decrement operations.
 \end{inparaenum}
 NuCRDTs can be used directly by application, but are more commonly used for supporting 
-views, as detailed in Section~\ref{sec:views_for_apps}. 
+views, as detailed in Section~\ref{sec:views_for_apps}.
 
 \nuno{Dar mais detalhes de como funcionam?}
 
-By not propagating all operations,in some cases, a NuCRDT may temporarily expose an incorrect state.
+By not propagating all operations, in some cases, a NuCRDT may temporarily expose an incorrect state.
 Consider the maximum NuCRDT.  Each replica keeps only the maximum element and 
 the elements that were inserted locally. If the maximum NuCRDT also includes a \code{remove(n)} operation,
 and the maximum element is removed in a given replica, the replica might not have the new maximum element,
 because it might have been inserted in some other replica.  All replicas of the maximum NuCRDT eventually 
 converge to the maximum value, as every replica will propagate the local maximum element after receiving the 
-delete operation, guaranteeing that all replica will receive the new maximum value.
+delete operation, guaranteeing that all replicas will receive the new maximum value.
 
 In our work we extended the NuCRDTs specifications proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}
 in three ways to make them practical to be used in a database.
@@ -827,7 +831,7 @@ As such, a top-K object consists in a set of CRDT maps, rows, with two special e
 row and the ordered value used for selecting the top rows.
 An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
 and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
-row, with the operations of the data type associated with the tow element.
+row, with the operations of the data type associated with the row element. \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
 
 Second, we extend NuCRDT specifications to include information that allows a replica to know
 if it might be exposing incorrect results. 
@@ -835,7 +839,7 @@ This information consists in the timestamps of operations (transactions) that co
 cause the anomaly - e.g. in our maximum NuCRDT example, this is the timestamp of the transaction with the 
 \emph{remove} operation that deleted the previous maximum. 
 With this information, and the information of which replicas have seen which updates (which is maintained
-by PotionDB), a replica knows that no anomaly can occur if the operation have been seen in all replicas of the object, 
+by PotionDB), a replica knows that no anomaly can occur if the operation has been seen in all replicas of the object, 
 which would have triggered replica to send the operations that could be relevant for the observable state, if any.
  
 Third, we also extend NuCRDT specifications to maintain a larger observable state to minimize the 
@@ -852,7 +856,7 @@ Doing this is straightforward for all NuCRDTs we have defined, besides the top-K
 
 PotionDB adopts a shared model, where objects replicated in a location are 
 split into multiple shards. For durability, each shard can be replicated in multiple
-server using some replication protocol \cite{paxos,raft,chainreplication}.
+servers using some replication protocol \cite{paxos,raft,chainreplication}.
 
 In each server,  a shard has a dedicated thread, adopting an approach used in other
 database systems, such as H-store~\cite{h-store}. This avoids the use of locks when 
@@ -860,6 +864,7 @@ accessing objects, simplifying the implementation and avoiding other issues
 such as lock contention.
 
 \subsection{Metadata}
+\label{subsec:metadata}
 
 Let $L_1$, ..., $L_n$ be the set of locations in the system. 
 Each location $L_j$ keeps a global vector clock $\mathit{vc}_G$, with one entry for each $L_k \in L_1, ..., L_n$.
@@ -871,7 +876,7 @@ Any shard can access the server's physical clock, $\mathit{pc}$.
 
 A transaction $t$ has an associated read vector clock, $t\!.\mathit{rc}$,  that represent the snapshot
 to be read by the transaction. On commit, a transaction is assigned a commit clock, $t\!.\mathit{ct}$, consisting in a 
-pair (timestamp, location identifier).  A transaction with commit clock $(n,r_i)$ is snapshot $\mathit{vc}_G$ iff
+pair (timestamp, location identifier).  A transaction with commit clock $(n,r_i)$ is in snapshot $\mathit{vc}_G$ iff
 $\mathit{vc}_G[r_i] \geq n$.
 
 Each shard maintains an hybrid logical clock (HLC)~\cite{hlc} used to assign timestamps. An HLC uses the 
@@ -886,15 +891,16 @@ Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $prep
 
 
 \subsection{Transaction processing}
+\label{subsec:txnproc}
 
-A client executes a transaction interactively contacting a PotionDB server.
-The transaction execution is managed by the transaction manager (TM).
+A client executes a transaction by interactively contacting a PotionDB server.
+The transaction execution is managed by the Transaction Manager (TM).
 
 When the TM receives the \emph{begin} operation, it decides which snapshot the
 transaction will access - this will be the latest snapshot available at the current location,
 which is represented by the global vector clock $\mathit{vc}_G$.
 
-When receiving an update operations, the TM asks the materializer to execute the update in
+When receiving an update operation, the TM asks the Materializer to execute the update in
 a private copy of the object for the transaction snapshot. When receiving a read operation, 
 the TM asks the materializer to execute the read operation in the private copy 
 of the object - if no update has been executed before in the object, a shared copy with the version 
@@ -904,6 +910,7 @@ and read in transaction $t$.
 When the TM receives a commit, it needs to assign the commit timestamp to the transaction. 
 For assigning the commit timestamp, the TM runs a two phase protocol with the shards of the objects
 updated in the transaction. 
+\andre{shouldn't it be named "two phase commit protocol"?}
 
 In the first phase,  the TM sends a \emph{prepare} message to all shards in $t.WS$.
 A shard $\mathit{sh}_i$ replies with a timestamp proposal, $(n,i)$, where $n$ is the timestamp
@@ -919,12 +926,12 @@ When receiving a commit message for transaction $t$, a shard proceeds as follows
 First, it checks if the commit can be applied,  by checking that no prepared transaction or commit on hold have a 
 smaller timestamp.
 If so, updates from $t$ are marked as committed and the shard's local vector clock $\mathit{vc}_i[j]$ is 
-updated with $t\!.\mathit{ct}$. From this point, the materializer of the shard will generate versions of the object that
+updated with $t\!.\mathit{ct}$. From this point, the Materializer of the shard will generate versions of the object that
 include the committed updates.
 Otherwise, the commit is queued to be applied later, as other transactions may commit with a lower
 $\mathit{ct}$ than $t\!.\mathit{ct}$.
 In either case,  the transaction is removed from $\mathit{prep}_i$. If $t$'s proposed value was the lowest, 
-then the TM verifies if any commit on hold can now be executed.
+then the Materializer verifies if any commit on hold can now be executed.
 
 The client is informed of the commit as soon as all shards in $t.WS$ acknowledge the commit message, even if 
 some shards queued the commit. Additionally, the TM sends information to update the global vector clock to
@@ -955,10 +962,10 @@ there will be no update, as $L_i$ does not replicate $o$.
 
 \noindent
 \textbf{Reads on NuCRDTs:}
-As mentioned in the previous Section, due to the way as NuCRDTs work, they may temporarily expose 
+As mentioned in the previous Section, due to the way NuCRDTs work, they may temporarily expose 
 incorrect results when the execution of an operation $o$ changes the set of relevant operations.  
 As explained before, PotionDB maintains information for a replica to know if this is the case and
-this is expected to be a rare situation. 
+this is expected to be a rare situation. \andre{Shouldn't we mention again we have mechanisms to make this situation even more rare to happen? (e.g., maintaining a top of double the size.)}
 Applications may select two behaviors when they start a transactions.
 First, to ignore the potential anomalies and immediately execute the read operation in the local replica.
 This guarantees fast replies at the cost of potential anomalies. 
@@ -980,7 +987,7 @@ as part of the transaction.
 
 Triggers can be used directly by applications, but its primary purpose is to support
 incremental view maintenance, as detailed in Section~\ref{sec:views_for_apps}.
-In the next section
+%In the next section
 
 \subsection{Replication}
 \label{sec:replication}
@@ -993,7 +1000,7 @@ in one or more additional locations for fault tolerance.
 
 PotionDB adopts an operation-based replication approach, where updates performed in 
 transactions are propagated to other replicas. To be more precise, in the context of CRDTs, an update
-operation executed in a CRDT generates a \emph{effects} operation, and it is this effect update that is
+operation executed in a CRDT generates an \emph{effects} operation, and it is this effect update that is
 propagated and applied in other replicas. We now start by describing how the replication process works to
 guarantee that the updates of a transaction are propagated to all relevant locations. In the end of this section 
 we discuss the special case of NuCRDTs.
@@ -1007,7 +1014,7 @@ no parts of transactions for the shard until the current timestamp, obtained fro
 
 The replicator processes the parts of transactions received from the shards in timestamp order. 
 For each transaction, the replicator groups the updates of the transactions and repartitions the
-updates, one for each buckets updated. The new parts of the transaction are then queued 
+updates, one for each bucket updated. The new parts of the transaction are then queued 
 for replication, one part for each bucket, being propagated in order to all other locations that 
 replicate the bucket. 
 We note that a location has a logical stream of updates not only for all buckets the location replicates,
@@ -1024,7 +1031,7 @@ the logical streams from other locations. If so, the replicator repartitions the
 the local shards and forwards the transaction updates to the shards, where they are executed. 
 After all shards involved notify that they have executed their part of the transaction,  the global
 vector clock is updated to include the timestamp of $t$.
-Additionally, the replicator records the information that the transactions has been executed locally,
+Additionally, the replicator records the information that the transactions have been executed locally,
 which will be piggybacked to other locations.
 
 \textbf{Support for NuCRDTs:}
@@ -1035,7 +1042,7 @@ updates might not need to be propagated, as explained in Section~\ref{sec:tx:obj
 Not immediately propagating some updates is straightforward - as update operations generate 
 the \emph{effect} update to be propagated to other replicas, if an update operation has no
 effect in the observable state of the object, and hence does not need to be propagated to other replicas, 
-the update operation just generate a null effect.
+the update operation just generates a null effect.
 
 As explained before, in NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{prv}$
 relevant, requiring this previous operation to be propagated to other replicas  
@@ -1064,8 +1071,9 @@ PotionDB adopts an incremental view maintenance approach, where
 view objects are updated in the context of transactions that update the database. 
 To this end, from the definition of the view, PotionDB generates code that runs as triggers.
 
-In this section we start by discussing how view are supported in PotionDB and proceed to 
-discuss how experience in defining views for the queries of the TPC-H benchmark~\cite{tpch}. 
+In this section we start by discussing how views are supported in PotionDB and proceed to 
+discuss %how 
+our experience in defining views for the queries of the TPC-H benchmark~\cite{tpch}. 
 
 \subsection{Generated objects and triggers}
 \label{subsec:generated_view}
@@ -1076,16 +1084,19 @@ We now outline how PotionDB, given a view specification, generates the right obj
 \noindent
 \textbf{Generated objects:}
 The object used for storing the view's data depends on the type of query being performed. 
-If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar,such as count or average), the view will be stored in a map CRDT, where the full materialized view is maintained. 
-If the query has a  \emph{limit} clause or includes an aggregation of type maximum (or minimum),
-the top-K is used.
-If the query has a  \emph{limit} clause and an aggregation of type sum (or similar,such as count or average),
-the top-K counter is used.
+%If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar, such as count or average), the view will be stored in a map CRDT, where the full materialized view is maintained. 
+%If the query has a  \emph{limit} clause or includes an aggregation of type maximum (or minimum),
+%the top-K is used.
+%If the query has a  \emph{limit} clause and an aggregation of type sum (or similar, such as count or average),
+%the top-K counter is used.
+If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar, such as count or average), maximum or minimum, the view will be stored in a map CRDT, where the full materialized view is maintained. 
+If the query has a  \emph{limit} clause and no aggregation, or an aggregation of type maximum (or minimum), the top-K is used.
+If the query has a \emph{limit} clause and an aggregation of type sum (or similar, such as count or average), the top-K counter is used.
 In any case, the elements of the view are maps with multiple columns, one for each
 of the attributes specified in the  \emph{select} of the view definition.  
 
 For a given view definition, one or multiple objects are defined - in the language we defined for 
-specifying view,  a view that includes variables will lead to multiple object,
+specifying view,  a view that includes variables will lead to multiple objects,
 one for each possible value of the variables. 
 In the example of the top sales presented in Figure~\ref{fig:viewtopsales}, one top-K counter
 object will be created (as needed) for each month of each year, and its PotionDB key will include
@@ -1130,7 +1141,7 @@ The top-K and top-K counter NuCRDTs include the logic for replicating only the n
 updates to maintain in all replicas the top elements for data that is updated using set value 
 or increment operations.
 When the view does not consist in the topmost elements, the Map CRDT can be used.  
-Aggregations defined in the views - e.g. average, maximum - are supported by using CRDT and NuCRDT 
+Aggregations defined in the views - e.g. sum, maximum - are supported by using CRDT and NuCRDT 
 objects, such as the counter CRDT and maximum NuCRDT.
 After defining the objects to be used, the application should define the triggers that (populate and) 
 update the view objects. 
@@ -1448,7 +1459,7 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 %PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
 %Such inference takes out a considerable burden from the application developer.
 
-We have analyzed how to define views in PotionDB for the the 20 queries in TPC-H, with different views using different
+We have analyzed how to define views in PotionDB for the 22 queries in TPC-H, with different views using different
 underlying CRDTs.
 We now describe the lessons learned. In the next section we present the evaluation of how PotionDB performs on supporting
 the different types of queries.
@@ -1462,9 +1473,9 @@ the product name (\texttt{prodname}) stored in the sales record, instead of the 
 \small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (Q5, views) WITH REGION == ANY (SELECT DISTINCT region FROM regions) AS
-SELECT N_Name, SUM(Extendedprice * (1 - Discount)) AS Revenue
+SELECT N_Name, SUM(ExtendedPrice * (1 - Discount)) AS Revenue
 FROM Lineitem
-WHERE C_Nationkey == S_Nationkey AND R_Name == [REGION]
+WHERE C_NationKey == S_NationKey AND R_Name == [REGION]
 GROUP BY N_Name
 ORDER BY Revenue DESC
 \end{lstlisting}}
@@ -1487,7 +1498,7 @@ top-K counter NuCRDT. In this case, whenever a new sale is inserted, the counter
 updated, but each replica maintains only a partial view of the top-K object - as explained before, replicas only propagate 
 to all replicas the updates for elements that may belong to the top-K.
 
-Finally,  some view are supported by top-K objects. Figure~\ref{fig:q18_view} presents the view to 
+Finally,  some views are supported by top-K objects. Figure~\ref{fig:q18_view} presents the view to 
 support TPC-H query 18, which can be used to return the top 100 most valuable orders larger than 
 some given quantity.  In this case, a top-K object is sufficient - the difference with a top-K counter is that,
 while in the top-K an entry in the view is completely defined by the value of an order and can be derived 
@@ -1498,10 +1509,10 @@ aggregation over multiple values (in the previous example, \texttt{LineItem}s).
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
 CREATE VIEW (Q18, views) WITH QUANTITY == [312..315] AS
-SELECT custname, custkey, orderkey, orderdate, totalprice, totalquantity
-FROM orders
-WHERE totalQuantity > [QUANTITY]
-ORDER BY totalprice DESC, orderdate ASC
+SELECT CustName, CustKey, OrderKey, OrderDate, TotalPrice, TotalQuantity
+FROM Orders
+WHERE TotalQuantity > [QUANTITY]
+ORDER BY TotalPrice DESC, OrderDate ASC
 LIMIT 100
 	\end{lstlisting}
 	\caption{Large volume customer query (Q18).}
@@ -1520,7 +1531,7 @@ will be a database object for each combination of month and year.
 
 In other cases, the application will only query the database using some specific values of the
 variables. For example,  the specification of the TPC-H query 18 states that quantity will be instantiated with values
-from 312 to 315. In general, it is common for application interfaces to limit the queries a use can perform, 
+from 312 to 315. In general, it is common for application interfaces to limit the queries a user can perform, 
 leading to a similar situation - e.g. hotel reservation applications allow users to check hotels with an average 
 rating larger than some predefined values.
 Figure~\ref{fig:q18_view} shows how this can be specified in PotionDB for TPC-H query 18. 
@@ -1550,17 +1561,17 @@ SELECT SUM(Supplycost * Availqty) AS Value
 FROM Partsupp
 WHERE N_Name == [NATION]
 \end{lstlisting}
-	\caption{Important stock identification query (Q5).}
+	\caption{Important stock identification query (Q11).}
 	\label{fig:q5_view}
 \end{figure}
 
 In general, it is possible to circumvent the limitations by defining additional views.
-For example, TPC-H query 5 finds the suppliers stocks in a given nation that represent a significant percentage of the total
+For example, TPC-H query 11 finds the suppliers stocks in a given nation that represent a significant percentage of the total
 value of available parts in the nation. In the TPC-H specification, this 
 is computed using a having clause with a condition expressed as a subquery.
 In PotionDB, it is necessary to specify two views, as presented in Figure~\ref{fig:q5_view}.
 The \texttt{Q11\_p2} view maintains the total value for each nation, while the \texttt{Q11\_p1} view
-maintains the top parts for each nation. For reaching the result of TPC-H Q5, the application needs
+maintains the top parts for each nation. For reaching the result of TPC-H Q11, the application needs
 to read the total value for the nation, and use this value for filtering the top parts (as some of these part may not
 reach the percentage ratio specified in the query).
 
@@ -1809,7 +1820,7 @@ For \emph{where}, on both views we keep the condition of shipdate matching the p
 Furthermore, on the view referring to the products on promotion, we add another restriction: type \emph{starts with} "PROMO".
 This ensures only products sold on sale are considered for said view.
 Our specification language supports other operations on strings, such as \emph{ends with} and \emph{contains}, which boost our language's expressiveness.	%If there's any more that should be supported please tell me - it's actually easy to support more of these.
-Furthermore, our language can be extended with ease to support more operations on any supported datatype.
+Furthermore, our language can be extended with ease to support more operations on any supported data type.
 Finally, we add a \emph{group by} [YEAR], [MONTH] clause to both specifications, which ensures that for each specification, results are grouped by pair of YEAR, MONTH. %I think this is not very clear but the idea is that we add the group by so that PotionDB generates a different view for each value possible for the pair (year, month).
 
 PotionDB implements both views above by deploying a Counter CRDT per view and per pair of (year, month). %It may be worth saying that little extra storage is used to support this query despite it referring to the majority of the objects in the database (not all lineitems are on promotion but the majority of lineitems were sold between 1993 and 1997).
@@ -3396,7 +3407,7 @@ Experiments presented in this paper were carried out using the Grid'5000 testbed
 
 
 \section{Transactions}
-\label{sec:transactions}
+%\label{sec:transactions}
 PotionDB employs a transactional protocol in order to ensure the database's state evolves correctly and that transactions observe casually consistent snapshots.
 This is necessary as internally PotionDB is sharded for performance, thus coordination is required.
 Furthermore, our transactional protocol is also responsible for ensuring transaction's atomicity, as well as ensure views and their base objects are updated simultaneously and kept consistent.
@@ -3415,7 +3426,7 @@ In this section we describe PotionDB's sharding, our commit and reading protocol
 %Let $clk^p_i$ be the value of the physical
 
 \subsection{Sharding}
-\label{subsec:sharding}
+%\label{subsec:sharding}
 
 %Maybe I can mention doing sharding based on some other criteria (e.g., to make better usage of views + objects) is left as future work/orthogonal line of research.
 
@@ -3832,7 +3843,7 @@ We believe for most use cases, good data locality when doing partial replication
 We note that data which may be revelant everywhere can be fully replicated if so is desired.
 
 \section{Replication}
-\label{sec:replication}
+%\label{sec:replication}
 Replication in PotionDB is asynchronous and partial.
 Operations are executed locally, without needing to contact other replicas.
 Periodically, new updates are propagated asynchronously to other replicas, according to causal order.
@@ -3914,7 +3925,7 @@ This could be achieved with the following steps:
 		\State \textbf{send} (CLK, safeTs) \textbf{to all servers}
 		\State lastSentTs $\leftarrow$ safeTs
 		\EndFunction
-		\LeftComment{I don't think it's needed for this function's pseudo-code to be here.}
+		\LeftComment{I don't think it is needed for this function's pseudo-code to be here.}
 		\LeftComment{parameter is a set}
 		
 		\Function{splitTxPerBucket}{updsPerShard: shID $\to$ \textsf{list}$\langle$Update$\rangle$}
