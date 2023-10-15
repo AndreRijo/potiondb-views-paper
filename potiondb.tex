@@ -116,7 +116,7 @@
 \definecolor{blue}{RGB}{0,0,200}
 \usepackage{ifthen}
 \newboolean{showcomments}
-\setboolean{showcomments}{true} %
+\setboolean{showcomments}{false} %
 \ifthenelse{\boolean{showcomments}}
 {\newcommand{\nbnote}[3]{
   %
@@ -263,21 +263,21 @@ available data center.
 Global services running at multiple geographic locations need 
 to rely on a geo-replicated database~\cite{dynamo}.
 %A number of geo-replicated databases have been proposed, providing different consistency semantics.
-Databases \cite{spanner,cockroachdb,mdcc} that provide strong consistency give the illusion that 
+Databases~\cite{spanner,cockroachdb,mdcc} that provide strong consistency give the illusion that 
 a single replica exists, requiring coordination among
 replicas for executing (update) operations. This leads to high latency and may compromise 
 availability in the presence of network partitions.
-Databases that provide weak consistency \cite{eventual,dynamo,cops} allow any replica to process a
+Databases that provide weak consistency~\cite{eventual,dynamo,cops} allow any replica to process a
 client request, leading to lower latency and high availability. As a consequence, these databases expose
 temporary state divergence to clients, making it more difficult to program a system. 
 
 In either case, geo-replicated databases usually rely on a full replication model, where each data 
 center replicates the full database, with data being sharded across multiple partitions in each data 
 center. 
-As both the data managed by these systems increases in size and the number of data centers increases,
+As both the data managed by these systems and the number of data centers increases,
 this approach leads to a number of problems.
 First, storing all data in all data centers imposes a large overhead in terms of storage. 
-Furthermore, storing some data in all data centers may be unnecessary, as data is only needed at some
+Furthermore, storing all data in all data centers may be unnecessary, as some data is only needed at some
 geographic locations.
 Second, increasing the number of data centers makes replication 
 %process 
@@ -287,7 +287,8 @@ as each update needs to be propagated to all other data centers.
 For addressing these problems, partial replication is an attractive approach, with each data center
 replicating only a subset of the data.
 A number of works have been addressing the challenges of 
-partial replication, for example by proposing algorithms to manage partially replicated data \cite{spanner,saturn,sipre, practi} and to decide which data is replicated in which replica \cite{slog, sipre}.
+partial replication, for example by proposing algorithms to manage partially 
+replicated data~\cite{spanner,saturn,sipre, practi} and to decide which data is replicated in each replica~\cite{slog, sipre}.
 
 In this paper we address the problem of querying data in a weakly consistent partially geo-replicated database, 
 focusing on recurrent queries for which the application could use a (materialized) view.
@@ -304,8 +305,8 @@ This problem can be addressed using different approaches.
 First, it is possible to have a \emph{main} data center that replicates all data, and forward these queries to such data center.
 This makes the \emph{main} data center both a central point of failure and a performance bottleneck, as it needs to execute all queries of this type. 
 Second, it is possible to execute the query by accessing multiple locations,  using, for example, 
-a distributed processing system for geo-partitioned data \cite{kloudas2015pixida,jetstream}.
-This approach requires running an additional external service and poses challenges for the consistency of the results returned and the data observed by users in other queries.
+a distributed processing system for geo-partitioned data~\cite{kloudas2015pixida,jetstream}.
+This approach requires running an additional external service, posing challenges for the consistency of the results returned and the data observed by users in other queries.
 %, mostly when adopting weak consistency models (a local update that should
 %be reflected in the result of the query may not be returned, as the update might have not been read by the 
 %external service that accessed a different replica).
@@ -315,16 +316,17 @@ Implementing such feature efficiently in a partially geo-replicated database req
 addressing two main challenges. 
 First, it is necessary to guarantee that materialized views are kept consistent with the remaining data
 accessed by the application. 
-To achieve this, we designed a transaction execution and a replication mechanism where updates 
+To achieve this, we designed mechanisms for transaction execution and replication where updates 
 to the base data and views are made visible atomically in each replica.
 
 Second, it is necessary to efficiently support materialized views. 
-As a large number of recurrent queries include aggregations or limits - e.g. in TPC-H \cite{tpch}
-all defined queries use aggregations or limits - it is particularly important to support
-this type of views.  For supporting this, we build an incremental view maintenance 
-mechanism that combines and extends CRDTs \cite{crdt} and non-uniform replication \cite{Cabrita17Nonuniform}.
+As a large number of recurrent queries include aggregations or limits (e.g. TPC-H~\cite{tpch} queries)
+%all defined queries use aggregations or limits
+it is particularly important to support
+this type of views. Therefore, we have build an incremental view maintenance 
+mechanism that combines and extends Conflict-free Replicated Data Types (CRDTs)~\cite{crdt} and non-uniform replication~\cite{Cabrita17Nonuniform}.
 While CRDTs allow updates to views to be performed in any replica, the latter minimizes
-the updates propagated to other replicas to those that might influence the final result.
+the updates propagated to other replicas to only those that might influence the final result.
 
 
 %limits, used for example to support \emph{topK} 
@@ -338,7 +340,7 @@ the updates propagated to other replicas to those that might influence the final
 We present the design and implementation of PotionDB, a geo-replicated memory key-value store with support  
 for partial replication and materialized views. 
 PotionDB provides weak consistency, for improved latency and availability,  with transactional 
-causal consistency \cite{cure}, for improved consistency.
+causal consistency~\cite{cure}, for improved consistency.
 Views are kept up-to-date automatically without requiring any extra coding or update logic from 
 the application programmer.
 %Maybe mention about how the view is kept up-to-date even without any of the base data present in the replica?  
@@ -346,7 +348,7 @@ To our knowledge, our work is the first to address the problem of maintaining ma
 
 \andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
-We evaluated our system using micro-benchmarks and \mbox{TPC-H} queries \cite{tpch}.
+We evaluated our system using micro-benchmarks and \mbox{TPC-H} queries~\cite{tpch}.
 The results show that our algorithms for maintaining materialized views impose 
 low overhead when executing asynchronously replicating transactions, particularly
 for views with limits. 
@@ -407,25 +409,25 @@ As a running example, we will consider a large e-commerce company with online st
 and clients spread across the world. 
 The service includes data for millions of products, with some products available 
 only at some locations. The service also maintains information about customers and their purchases, 
-with clients being associated with one of the online stores.
+with clients being associated with one online store.
 
 In this context, fully replicating the whole dataset might become too expensive.
-Additionally, as most data is tied to some geographic location, one can expect that the large majority of accesses
+Additionally, as most data is tied to some geographic location, one can expect that the majority of accesses
 occurs on that location. 
 PotionDB adopts partial geo-replication, with data items being replicated only at some locations.
 This allows PotionDB to reduce replication cost when
-compared to solutions featuring full replication, saving on both storage, processing and networking costs.
+compared to solutions featuring full replication, saving on both storage, processing, and networking costs.
 
-If some application operations access data objects directly (e.g. user, product or purchase objects),
-other operations require data that is the result of an aggregation over other data (e.g.  top
-selling products overall and for users that bought some other product).  For supporting the latter, %operations,
+While some application operations access data objects directly (e.g. user, product, or purchase objects),
+other operations require data that is the result of an aggregation over  data (e.g.  top
+selling products worldwide and users that bought some product).  For supporting the latter, %operations,
 PotionDB provides materialized views that are the result of an aggregation 
 over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
-We note that the key properties in this example - global service with a large database that includes
-data that is mostly access in a single (or few) location,  and some operation accessing the result
-of global aggregation - are common to other global services, such as multi-user online games,
-social news aggregation (e.g.  Reddit), etc.
+The key features of this example - global service with a large database with
+data that is mostly access in a single (or few) location,  and some operations accessing the result
+of a global aggregation - are common to other global services, such as multi-user online games, and
+social news aggregation.
 
 
 %What do I want to define?
@@ -440,28 +442,27 @@ social news aggregation (e.g.  Reddit), etc.
 
 PotionDB is a distributed key-value database.
 We identify two types of values: base objects, $\mathit{Objs}$, and derived objects, $\mathit{Views}$.
-We define the set of objects of a database, $\mathit{DB}$, as $\mathit{DB}$ = $\mathit{Objs} \cup \mathit{Views}$.
-Informally, we classify as an object ($o$) any value that is either a base object ($b$) or view ($v$).
+The set of objects of a database is defined as $\mathit{DB} = \mathit{Objs} \cup \mathit{Views}$.
+Informally, an object ($o$) is any value that is either a base object ($b$) or view ($v$).
 We distinguish between base objects and views whenever necessary for clarity.
 
-The value of a view is defined as a function of the values of other object(s), i.e., 
+The value of a view is defined as a function over the values of other object(s), i.e., 
 $\forall\, v \in \mathit{Views} : v = \mathit{fun}_v(D_v)$, 
 where $D_v$ is the set of objects (potentially both base objects and other views) used to compute $v$.
 We assume the computation is non-recursive, i.e., the value of a view is never based on its own value or, formally, 
 $\forall\, v \in \mathit{Views} : v \notin D_v$.
 
-Objects are uniquely identified by the triple $\mathit{(key, bucket, type)}$.
-For presentation purposes, we assume the triple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
+Objects are uniquely identified by a tuple $\mathit{(key, bucket, type)}$.
+For presentation purposes, we assume this tuple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
 Whenever needed, we represent the aforementioned properties for a given object $o$ as
 $o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
 Objects are stored in $\mathit{buckets}$, which are the unit of replication in PotionDB. 
 Buckets are further logically grouped in containers. %, as further detailed in Section \ref{subsec:buckets}. 
 An object has a $\mathit{key}$ inside the bucket.
 
-PotionDB supports objects of different data $\mathit{types}$, including registers, counters, averages, sets, maps
+PotionDB supports objects of different data types, including registers, counters, averages, sets, maps
 and top-K objects~\cite{Cabrita17Nonuniform}.
-Objects (both base object and views) are implemented as Conflict-free Replicated 
-Data Types, CRDTs~\cite{crdt}, guaranteeing that object replicas converge to a single state
+Both base object and views are implemented as CRDTs~\cite{crdt}, guaranteeing that object replicas converge to a single state
 in the presence of concurrent updates.
 
 \subsection{Interface}
@@ -478,6 +479,7 @@ in the presence of concurrent updates.
 %		& \\
 %		\hspace*{-0.35em}readTx(clk, read(s)) $\rightarrow$ clk, value(s) & updateTx(clk, update(s)) $\rightarrow$ clk \\
 %=======
+\begin{small}
 \begin{table}[t]
 \center
 	\begin{tabular}{ll} 
@@ -495,25 +497,27 @@ in the presence of concurrent updates.
 	\caption{PotionDB's data manipulation API.}
 	\label{table:PotionDB_API}
 \end{table}
+\end{small}
 
 PotionDB offers a key-value  transactional interface, as summarized in Table \ref{table:PotionDB_API}.
-An application can issue interactive transactions, by starting to execute the \code{begin(clk)} operation,
+An application can issue interactive transactions, by starting to execute operation \code{begin(clk)},
 where \code{clk} is used to enforce causality between consecutive transactions.
 A transaction proceeds with a sequence of operations: 
 \begin{inparaenum}[(i)] 
 \item \code{get(txId, id)}, which returns the full state of the object;
 \item \code{read(txId, id,op)}, which returns the result of read-only operation \code{op} executed in the object; and
-\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist; an object is deleted by issuing the delete operation.
+\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist; 
+\item an object is deleted by issuing the \code{delete}  operation.
 \end{inparaenum}
-The operations defined in each object are type-specific - e.g. a set object includes a \code{contains(el)} operation to check
+Operations defined in each object are type-specific - e.g. a set object includes a \code{contains(el)} operation to check
 if value \code{el} belongs to the set, and an \code{add(el)} and \code{remove(el)} to add or remove \code{el} from the set.
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
-PotionDB also allows an application to issue an one-shot~\cite{} read-only or write-only transaction,
-by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
+PotionDB also allows an application to issue an one-shot~\cite{??????} read-only or write-only transaction,
+by executing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
 %for aborting 
 
-PotionDB also provides a data definition API, including operations to create and delete buckets, and 
+PotionDB provides a data definition API, including operations to create and delete buckets, and 
 to create views. As it is common in key-value stores and document databases, buckets have no associated
 data type, i.e., any object type can be stored in any bucket although it is common for applications to 
 store objects of the same type in each bucket.  A document or a table row can be stored in 
@@ -524,8 +528,8 @@ PotionDB as map CRDT, with each element of the map having its own type.
 \small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (MonthlyTopSales, views) WITH 
-		YEAR == ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
-		MONTH ==  ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
+YEAR == ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
+MONTH ==  ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
 SELECT ProdName, SaleDate.Month, SaleDate.Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
 FROM Sales
 WHERE SaleDate.Month == [MONTH] AND SaleDate.Year == [YEAR]
@@ -560,14 +564,14 @@ LIMIT 10
 %LIMIT 10
 
 
-The operation to create a view receives a view specification defined in a language based on SQL \cite{sequel}.
-Figure \ref{fig:viewtopsales} shows the specification of a view that maintains the top 10 products with the most profit in sales for
+The operation to create a view receives a view specification defined in a language based on SQL~\cite{sequel}.
+Figure \ref{fig:viewtopsales} shows the specification of a view that maintains the top 10 products with  most profit in sales for
 each month. %The create view specifies in which bucket and object the  materialized view object will be stored.
 \qcr{CREATE VIEW} specifies in which key (prefix) and bucket the materialized view will be stored.
 The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
-the attributes of the view, which can include simple attributes of the selected objects or aggregations.
+the attributes of the view, which can include simple attributes or aggregations.
 As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause,
-restrict the number of elements with a \qcr{LIMIT} clause and
+restrict the number of elements with a \qcr{LIMIT} clause, and
 order the results using an \qcr{ORDER BY} clause. %which can be ordered using a \qcr{ORDER BY} clause.
 
 In recurrent queries, it is common that a generic query is instantiated with different values. 
@@ -836,6 +840,8 @@ In our work we extended the NuCRDTs specifications proposed by Cabrita et. al.~\
 in three ways to make them practical to be used in a database.
 First, in top-K objects,  instead of keeping only the value associated with an element,  we keep multiple
 attributes, as needed for maintaining the attributes of a view with a limit clause.
+
+\carla{I don't understand the next paragraph!}
 As such, a top-K object consists in a set of CRDT maps, rows, with two special elements - the key of the 
 row and the ordered value used for selecting the top rows.
 An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
@@ -850,10 +856,11 @@ a replica knows that no anomaly can occur if the operation has been seen by all 
 which would have triggered replica to send the operations that could be relevant for the observable state, if any.
  
 Third, we also extend NuCRDT specifications to maintain a larger observable state to minimize the 
-cases in which a replica may be exposing incorrect results in practice.  In our maximum NuCRDT example,
-this means maintaining for example the two largest elements. In this case, if the maximum element
+cases in which a replica may be exposing incorrect results in practice. In our example, the maximum NuCRDT
+maintains the two largest elements. Therefore, if the maximum element
 is deleted, replicas still have the new maximum. 
 Doing this is straightforward for all NuCRDTs we have defined, besides the top-K counter. 
+\carla{What is "this" is the above sentence?}
 
 \nuno{explicar como fazer?}
 
@@ -866,9 +873,9 @@ split into multiple shards. For durability, each shard can be replicated in mult
 servers using some replication protocol \cite{paxos,raft,chainreplication}.
 
 In each server,  a shard has a dedicated thread, adopting an approach used in other
-database systems, such as H-store~\cite{h-store}. This avoids the use of locks when 
-accessing objects, simplifying the implementation and avoiding other issues 
-such as lock contention.
+database systems, such as H-store~\cite{h-store}. This avoids using locks when 
+accessing objects, simplifying the implementation and avoiding issues 
+ as lock contention.
 
 \subsection{Metadata}
 \label{subsec:metadata}
@@ -893,7 +900,7 @@ This guarantees that timestamps generated are monotonically increasing.
 %Different shards may concurrently generate the same timestamp - in this case, the shard's id is used to break the tie.
 %In fact, any monotonically increasing clock would suffice for implementing $\mathit{pc}$.
 
-Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $prep_i$, and a list of commits on hold, $\mathit{hold}_i$.
+Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $\mathit{prep_i}$, and a list of commits on hold, $\mathit{hold}_i$.
 %While we leverage on physical clocks for our protocols, the correctness of our protocols is independent of the skew of physical clocks between servers.
 
 
@@ -1479,7 +1486,8 @@ the product name (\texttt{prodname}) stored in the sales record, instead of the 
 \begin{figure}[t]
 \small{
 \begin{lstlisting}[language=SQL]
-CREATE VIEW (Q5, views) WITH REGION == ANY (SELECT DISTINCT region FROM regions) AS
+CREATE VIEW (Q5, views) WITH REGION == 
+ANY (SELECT DISTINCT region FROM regions) AS
 SELECT N_Name, SUM(ExtendedPrice * (1 - Discount)) AS Revenue
 FROM Lineitem
 WHERE C_NationKey == S_NationKey AND R_Name == [REGION]
