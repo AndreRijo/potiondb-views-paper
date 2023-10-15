@@ -194,7 +194,7 @@ makes partial replication an attractive approach.
 This paper presents PotionDB, a novel geo-distributed, partially replicated key-value store.  
 PotionDB transaction management and replication algorithms provide transactional causal consistency 
 for transactions that access local and remote objects. 
-For supporting recurrent queries over geo-partitioned data, PotionDB provides
+To enable the support of recurrent queries over geo-partitioned data, PotionDB provides
 efficient materialized views, that allow these queries to be replied locally at all replicas.
 Our evaluation shows that queries concerning global data can be completed in less than one millisecond 
 while maintaining high throughput, despite the extra operations required to keep views up-to-date. 
@@ -279,7 +279,9 @@ this approach leads to a number of problems.
 First, storing all data in all data centers imposes a large overhead in terms of storage. 
 Furthermore, storing some data in all data centers may be unnecessary, as data is only needed at some
 geographic locations.
-Second, increasing the number of data centers makes the replication process more complex and costly, 
+Second, increasing the number of data centers makes replication 
+%process 
+more complex and costly, 
 as each update needs to be propagated to all other data centers.
 
 For addressing these problems, partial replication is an attractive approach, with each data center
@@ -511,7 +513,7 @@ PotionDB also allows an application to issue an one-shot~\cite{} read-only or wr
 by issuing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
 %for aborting 
 
-PotionDB also provides a data definition API, including operations to create and delete buckets, and operations
+PotionDB also provides a data definition API, including operations to create and delete buckets, and 
 to create views. As it is common in key-value stores and document databases, buckets have no associated
 data type, i.e., any object type can be stored in any bucket although it is common for applications to 
 store objects of the same type in each bucket.  A document or a table row can be stored in 
@@ -734,7 +736,7 @@ Each location only replicates a subset of the whole datastore's data.
 The system administrator has control over where each object is replicated.
 This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
 Objects without locality on their access pattern can be replicated everywhere if desired.
-We detail this more in Section \ref{sec:replication}.
+We detail this more in Section~\ref{sec:replication}.
 
 %I think details on how transactions work and guarantees do not belong here. So this is OK (but still needs to be explained somewhere).
 Clients communicate with the nearest PotionDB location to ensure low latency.
@@ -792,10 +794,10 @@ in which the convergence of replicas is guaranteed if operations are applied res
 This is the case in PotionDB, as a valid serialization of transaction must respect the happens-before
 relation, i.e., the causal order.
 
-The current prototype supports the following CRDTs: last-writer-wins register, for storing opaque values;
-add-wins set, for maintaining a set where adding an elements wins over a concurrent removal of that element;
+Our prototype supports the following CRDTs: last-writer-wins register, for storing opaque values;
+add-wins set, for keeping a set where adding an elements wins over a concurrent removal of that element;
 add-wins map, for maintaining a map of values;
-counter, for maintaining a number that accepts concurrent increment/decrement operations;
+counter, for maintaining a number that accepts concurrent increment and decrement operations;
 average, for maintaining the average of values added to this object.
 
 \noindent
@@ -803,7 +805,7 @@ average, for maintaining the average of values added to this object.
 the \emph{observable state} of all replicas is the same. 
 Two observable states are defined as equivalent iff, for each possible read operation, the result is equivalent when executed on either state.
 
-Unlike normal CRDTs, in NuCRDTs, during the replication process, it is only necessary necessary to propagate
+Unlike normal CRDTs, in NuCRDTs, during the replication process, it is only necessary to propagate
 updates that may affect the observable state. For example, consider a maximum object with a \code{insert(n)} and 
 \code{getMax()} operations. An \emph{insert} executed in a replica only needs to be propagated 
 to other replicas if the inserted value can be the new maximum. 
@@ -840,13 +842,11 @@ An application can update the ordered value associated with a key by issuing a s
 and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
 row, with the operations of the data type associated with the row element. \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
 
-Second, we extend NuCRDT specifications to include information that allows a replica to know
-if it might be exposing incorrect results. 
-This information consists in the timestamps of operations (transactions) that could 
-cause the anomaly - e.g. in our maximum NuCRDT example, this is the timestamp of the transaction with the 
-\emph{remove} operation that deleted the previous maximum. 
-With this information, and the information of which replicas have seen which updates (which is maintained
-by PotionDB), a replica knows that no anomaly can occur if the operation has been seen in all replicas of the object, 
+Second, we extend NuCRDT specifications to include information that allows a replica to know if it might be exposing incorrect results. 
+This information consists in the timestamps of operations (transactions) that could cause the anomaly - e.g. in our maximum NuCRDT example, 
+this is the timestamp of the transaction with the \emph{remove} operation that deleted the previous maximum. 
+Given this information, and knowing the updates that replicas have seen (which is maintained by PotionDB), 
+a replica knows that no anomaly can occur if the operation has been seen by all replicas of the object, 
 which would have triggered replica to send the operations that could be relevant for the observable state, if any.
  
 Third, we also extend NuCRDT specifications to maintain a larger observable state to minimize the 
@@ -921,11 +921,11 @@ updated in the transaction.
 
 In the first phase,  the TM sends a \emph{prepare} message to all shards in $t.WS$.
 A shard $\mathit{sh}_i$ replies with a timestamp proposal, $(n,i)$, where $n$ is the timestamp
-generated by the shard's local HLC and $i$ is the identifier of the shard. Additionally, the shard adds the information
+generated by the shard's local HLC and $i$ is the shard identifier. Additionally, the shard adds the information
 about the transaction, including the proposed timestamp, to the list of locally prepared transactions, $prep_i$.
 
 The TM collects the replies and sets the commit timestamp of the transaction,  $t\!.\mathit{ct} = (\mathit{mts}, j)$,
-with $\mathit{mts}$ the largest received timestamp (with the shard identifier breaking the ties), and $j$ the 
+with $\mathit{mts}$ the largest received timestamp (the shard identifier breaks ties), and $j$ the 
 identifier of the location.
 A commit message is then sent to all shards in $t.WS$ with the commit timestamp for the transaction.
 
@@ -946,8 +946,8 @@ include the timestamp of the committed transaction.
 Updating the local entry of the global vector clock with the timestamp of committed transactions immediately, 
 promotes freshness, as new transactions will always use the latest committed snapshot.
 
-However, this also raises a problem, as it is possible that some shards (not involved in the committed transaction) 
-still have transactions to commit with smaller timestamps. 
+However, this raises a problem, as some shards (not involved in the committed transaction) 
+may still have transactions to commit with smaller timestamps. 
 If a transaction that starts in the most recent snapshot issues a read (or update) operation on object $o$ in a shard that has
 pending transactions with smaller timestamps, the operation needs to block if there is a transaction prepared or on hold 
 that had modified $o$. 
@@ -987,7 +987,7 @@ propagated. This is done in the context of the replication process and explained
 %\label{subsec:triggers}
 PotionDB has an after update trigger mechanism that can be associated with 
 objects in a given bucket or container.
-When a transaction is being executed at the initial replica, after an update, the code
+When a transaction is executed at the initial replica, after an update, the code
 of the trigger will run and it may issue reads and updates to the same or to a different object.
 These updates are part of the transaction, being committed and propagated to other replicas
 as part of the transaction.
@@ -1056,7 +1056,7 @@ relevant, requiring this previous operation to be propagated to other replicas
 (e.g. the \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
 maximum element relevant). There are two cases that need to be considered.
 
-The first case is what happens when operation $o$ is executed initially. In this case, the effect of
+The first case is when operation $o$ is executed initially. In this case, the effect of
 $o$ will include also the effect of $o_{prv}$. Thus, as the combined effects are propagated and applied in 
 the context of the same transaction, no anomaly is generated.
 
