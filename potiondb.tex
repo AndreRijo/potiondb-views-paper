@@ -1105,9 +1105,9 @@ of the attributes specified in the  \emph{select} of the view definition.
 For a given view definition, one or multiple objects are defined - in the language we defined for 
 specifying view,  a view that includes variables will lead to multiple objects,
 one for each possible value of the variables. 
-In the example of the top sales presented in Figure~\ref{fig:viewtopsales}, one top-K counter
-object will be created (as needed) for each month of each year, and its PotionDB key will include
-the name of the view and the month and year.   The top-K counter will have a set
+In the top sales example presented in Figure~\ref{fig:viewtopsales}, one top-K counter
+object is created (as needed) for each month of each year, and its PotionDB key includes
+the name of the view plus the month and year.  The top-K counter will have a set
 of entries, each one with the identifier of a product and the total sales of the product. The entry
 might have additional information, such as the description of the product if that was defined
 in the view.
@@ -1469,12 +1469,12 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 We have analyzed how to define views in PotionDB for the 22 queries in TPC-H, with different views using different
 underlying CRDTs.
 We now describe the lessons learned. In the next section we present the evaluation of how PotionDB performs on supporting
-the different types of queries.
+ different types of queries.
 
 \paragraph{De-normalization:} PotionDB is a key-value store and does not directly support advanced database functionality,
 such as joins.  To address this issue, we de-normalize the database whenever necessary.  
-The view presented in Figure~\ref{fig:viewtopsales} is an example of such de-normalization, with
-the product name (\texttt{prodname}) stored in the sales record, instead of the identifier of the product.
+The view in Figure~\ref{fig:viewtopsales} is an example of such de-normalization, with
+the product name (\texttt{prodname}) stored in the sales record, instead of the product identifier.
 
 \begin{figure}[t]
 \small{
@@ -1500,12 +1500,13 @@ revenue for each \emph{LineItem}. The map of each region is a CRDT map, with the
 directly to a CRDT counter with the revenue for that nation. When a new \emph{LineItem} is added (or deleted), 
 the corresponding counter is updated. All replicas will have all the values for all nations.
 
-This contrast with the top sales presented in Figure~\ref{fig:viewtopsales}, that uses a
+This contrast with the top sales shown in Figure~\ref{fig:viewtopsales}, that uses a
 top-K counter NuCRDT. In this case, whenever a new sale is inserted, the counters associated with the products are
 updated, but each replica maintains only a partial view of the top-K object - as explained before, replicas only propagate 
-to all replicas the updates for elements that may belong to the top-K.
+%to all replicas 
+the updates for elements that may belong to the top-K.
 
-Finally,  some views are supported by top-K objects. Figure~\ref{fig:q18_view} presents the view to 
+Finally,  some views are supported by top-K objects. Figure~\ref{fig:q18_view} shows the view to 
 support TPC-H query 18, which can be used to return the top 100 most valuable orders larger than 
 some given quantity.  In this case, a top-K object is sufficient - the difference with a top-K counter is that,
 while in the top-K an entry in the view is completely defined by the value of an order and can be derived 
@@ -3278,9 +3279,9 @@ Weak consistency can help avoid both problems but lacks the useful consistency g
 
 %\andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
 
-Partial replication allows to reduce storage costs and can potencially improve a system's performance, e.g., due to less operations being applied on each server \cite{sipre, optimisticPartial, coda}, and are thus of interest for geo distribution.
-The partitioning of data must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency \cite{sipre, optimisticPartial, coda}.
-However, one common problem with partial replication is that, sometimes, it is necessary to query data sharded among different data centers \cite{sipre}.
+Partial replication reduces storage costs and can potentially improve a system's performance, e.g., due to less operations being applied on each server~\cite{sipre, optimisticPartial, coda}, and are thus of interest for geo-distribution.
+Data partitioning must be carefully done by considering where each object is relevant, as otherwise clients may need to access far away servers and thus experience high latency~\cite{sipre, optimisticPartial, coda}.
+However, one common problem with partial replication is that, sometimes, it is necessary to query data sharded among different data centers~\cite{sipre}.
 %Many systems provide partial replication \cite{???}.
 %However, a problem not often analyzed in these kind of systems is that some analytic queries may need to consult objects sharded between different data centers.
 Without views, this process can be slow, specially when trying to provide a consistent snapshot of the database.
@@ -3305,7 +3306,7 @@ They do not make usage of views.
 
 SLOG \cite{slog} provides ACID transactions in a geo-replicated scenario.
 They share one of PotionDB's insights - not all data is relevant everywhere and clients will often access data relevant in their region.
-Thus, SLOG achieves low latency ACID transactions for transactions that can be served by a single data center.
+Thus, SLOG achieves low latency for ACID transactions that can be served by a single data center.
 However, unlike PotionDB, queries regarding data partitioned across multiple data centers has considerably higher latency.
 We leverage on views of global data to prevent this.
 
@@ -3323,7 +3324,7 @@ It may also be unfeasable to predict changes for some data.
 Finally, since a strong consistency scenario is assumed, care is needed to specify treaties in such a way that synchronization is kept to close-by replicas, which may make it difficult or unfeasible to specify treaties concerning global data.
 
 Noria \cite{noria} is a streaming data-flow system. 
-It leverages on views and partial data to provide fast query reply with reasonable memory usage.
+It leverages views and partial data to provide fast query reply with reasonable memory usage.
 While it features high throughput, it is only able to provide eventual consistency, which is tougher to work with than casual consistency.
 There is also concerns on the performance of queries when a view needs to be rebuilt and data is sharded.
 
@@ -3381,9 +3382,12 @@ PotionDB is a weakly consistent, partially geo-replicated database geared to eff
 PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
 PotionDB’s view can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
 Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
-Transactional causal consistency, alongside our rich library of data types, view API and usage of CRDTs to automatically handle concurrency conflicts, ease the programmer’s difficulty on developing distributed applications using PotionDB when compared to other weakly consistent solutions.
+PotionDB transactional causal consistency, alongside a rich library of data types, view API and usage of CRDTs to automatically handle concurrency conflicts, ease the programmer’s complexity on developing distributed applications 
+%using PotionDB 
+when compared to other weakly consistent solutions.
 
-Our evaluation shows that PotionDB can answer complex queries with very low latency and high throughput, even under scenarios with considerable update ratios.
+Our evaluation shows that PotionDB can answer complex queries with low latency and high throughput, 
+even under scenarios with considerable update ratios.
 Our implementation and analysis of TPC-H benchmark showcases both the expressivity and efficiency of PotionDB.
 
 %Anything else I should mention? Like the replication/transaction algorithms?
