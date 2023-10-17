@@ -116,7 +116,7 @@
 \definecolor{blue}{RGB}{0,0,200}
 \usepackage{ifthen}
 \newboolean{showcomments}
-\setboolean{showcomments}{false} %
+\setboolean{showcomments}{true} %
 \ifthenelse{\boolean{showcomments}}
 {\newcommand{\nbnote}[3]{
   %
@@ -3388,9 +3388,9 @@ CouchDB \cite{couchDB} provides both indexes and materialized views, however the
 
 PotionDB is a weakly consistent, partially geo-replicated database geared to efficiently support OLAP queries.
 PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
-PotionDB’s view can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
+PotionDB’s views can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build a view is partitioned across multiple servers.
 Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
-PotionDB transactional causal consistency, alongside a rich library of data types, view API and usage of CRDTs to automatically handle concurrency conflicts, ease the programmer’s complexity on developing distributed applications 
+PotionDB transactional causal consistency, alongside a rich library of data types, view API, and usage of CRDTs to automatically handle concurrency conflicts, ease the programmer’s complexity on developing distributed applications 
 %using PotionDB 
 when compared to other weakly consistent solutions.
 
