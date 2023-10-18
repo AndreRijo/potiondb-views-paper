@@ -3259,6 +3259,7 @@ PotionDB's replication mechanism groups remote transactions together, allowing f
 %However, PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed more efficiently.
 %\andre{No idea why topK has a bit more performance with 25\% updates. I'm not sure why update-only has better throughput than query+update, but I can think of two possible reasons: a) updates make queries wait; b) updates reply quicker as a reply is sent as soon as the partitions confirm they will commit (and not after the commit is executed), unlike queries which must wait for the result to be ready.}
 
+\newpage
 \section{Related Work}
 \label{sec:related_work}
 
@@ -3267,7 +3268,7 @@ PotionDB's replication mechanism groups remote transactions together, allowing f
 %Maybe should use only "Consistency" as the paragraph title?
 \noindent
 \textbf{Consistency in geo-replication.}
-Database systems can offer different levels of consistency, with systems usually labelled as either strongly or weakly consistent.
+Database systems can offer different levels of consistency, and are usually labelled as either strongly or weakly consistent.
 Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
 Strong consistency requires coordination between data centers, which leads to high latency in geo-distributed scenarios and, as implied by the CAP theorem \cite{cap}, network partitions compromise the system's availability.
 %However, the CAP theorem \cite{cap} implies that network partitions compromise availability.
@@ -3275,20 +3276,21 @@ Strong consistency requires coordination between data centers, which leads to hi
 %Furthermore, high latency is to be expected in geo-distributed scenarios as multiple data centers must be contacted for committing a transaction.
 By relaxing the provided consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
-Causal consistency is a sub-form of weak consistency that alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
+Causal consistency is a weak consistency model that alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
 
 \noindent
-\textbf{Indexes, views.}
+\textbf{Indexes and views.}
 Both indexes and materialized views speed up query execution.
 Indexes provide quick access to a table or an object using a non-primary key, and are often used by queries requiring sorting or a given range of values.
-Multiple systems implement indexes \cite{dynamo, couchDB, cassandra, megastore} and research on efficient usage and storage of those is a common research topic \cite{lee2020asymmetric, lisa, alex, bindex, slik}.
+Multiple systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} and there are several proposals on efficient usage and storage of indexes~\cite{lee2020asymmetric, lisa, alex, bindex, slik}.
 On the other hand, 
 %Conversely, 
 materialized views work as a cache for the result of a large query, thus avoiding expensive data recalculations.
 However, maintaining views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria}, %even though they can speed up queries considerably.
 despite their %considerable 
 query speed-up potential and usefulness for analytic queries \cite{analyticdb, hadad}.
-To the best of our knowledge, PotionDB is the first system to support materialized views of global data in a partially geo-replicated scenario.
+%To the best of our knowledge, 
+PotionDB is the first system to support materialized views of global data in a partially geo-replicated scenario.
 
 %The paragraph below does not add anything new compared to the first paragraph. But maybe I could use it as inspiration to shorten the first paragraph
 %Geo-distributed scenarios imply high latency when acessing far away data centers, which is required for strong consistency \cite{chronocache, slog, cops, eiger}. 
@@ -3298,10 +3300,10 @@ To the best of our knowledge, PotionDB is the first system to support materializ
 %\andre{I still need to find citations for partial replication. Any suggestion/starting point is more than welcome}
 
 \noindent
-\textbf{Partial Replication.}
-Partial replication reduces storage costs and can potentially improve a system's performance, e.g., due to less operations being applied on each server~\cite{sipre, optimisticPartial, coda}, and is thus of interest for geo-distribution.
-Careful data partitioning is essential to avoid clients having to contact far away servers and thus experience high latency~\cite{sipre, optimisticPartial, coda}.
-However, queries concerning data sharded across data centers is challenging and slow, specially when trying to provide a consistent snapshot.
+\textbf{Partial replication.}
+Partial replication reduces storage costs and can potentially improve a system's performance, as less operations are applied on each server~\cite{sipre, optimisticPartial, coda}, and is thus of interest for geo-distribution.
+Careful data partitioning is essential to avoid clients having to contact far away servers, thus experience high latency~\cite{sipre, optimisticPartial, coda}.
+However, queries over data sharded across data centers is challenging and slow, specially when trying to provide a consistent snapshot.
 PotionDB tackles this problem by providing views that summarize partially replicated data and directly answer such queries.
 
 %\noindent
@@ -3317,10 +3319,9 @@ PotionDB tackles this problem by providing views that summarize partially replic
 %I made the CRDT paragraph shorter since we already talk about them in detail in other sections. Maybe should just remove it altogether?
 
 \noindent
-\textbf{CRDTs.}
-Conflict-free Replicated Data Types, CRDTs \cite{crdt}, are replicated data types that guarantee state convergence after applying the same set of operations.
+\textbf{CRDTs.} These replicated data types~ \cite{crdt} guarantee state convergence after applying the same set of operations.
 Thus they are often used in weakly consistent systems, e.g., Redis \cite{redisCRDT} and Riak \cite{riak}.
-Computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform} are of particular interest for views in PotionDB, as the former summarizes data using aggregations (e.g., average), while the later minimizes data stored and replicated between replicas while still ensuring queries are answered correctly.
+Computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform} are of particular interest for views in PotionDB, as the former summarizes data using aggregations, while the later minimizes the data stored and replicated between replicas while still ensuring queries are answered correctly.
 %Maybe add example for Nu-CRDT? (e.g., a top-K CRDT does not need all entries to be replicated)
 %\noindent
 %\textbf{CRDTs.}
@@ -3337,9 +3338,9 @@ While the caching can speed up future requests, complex queries may still need t
 
 AnalyticDB \cite{analyticdb} focus on optimizing analytic queries. 
 It separates write and read paths to prevent complex queries from slowing down writes. 
-It also makes usage of indexes to speed up queries.
-However, complex queries still take hundreds of milliseconds to execute and may slow down other simpler queries.
-They do not make usage of views.
+It also uses indexes to speed up queries. 
+However, complex queries still take hundreds of milliseconds to execute and may slow down  simpler queries.
+%They do not make usage of views.
 
 SLOG \cite{slog} provides ACID transactions in a geo-replicated scenario.
 By leveraging on partial replication and data locality (as in PotionDB), SLOG achieves low latency on transactions served by a single data center.
@@ -3357,7 +3358,7 @@ PotionDB's global views prevent both issues from happening.
 %Preciso de rever este melhor (local/remoto?)
 Marviq \cite{marviq} tackles the specific situation of efficiently providing a visualization (e.g., scatterplot) of a large data set.
 While a very specific scenario, it showcases the need of summarizing large datasets.
-Marviq leverates on materialized views for handling range queries.
+Marviq leverages on materialized views for handling range queries.
 %While a more specific scenario than the one PotionDB aims for, it showcases similar challenges - large datasets that need to be sumarized and queried efficiently.
 %They make usage of materialized views to handle range queries on the datasets.
 
