@@ -116,7 +116,7 @@
 \definecolor{blue}{RGB}{0,0,200}
 \usepackage{ifthen}
 \newboolean{showcomments}
-\setboolean{showcomments}{true} %
+\setboolean{showcomments}{false} %
 \ifthenelse{\boolean{showcomments}}
 {\newcommand{\nbnote}[3]{
   %
@@ -779,10 +779,12 @@ Third,  the Replicator ensures that committed transactions are replicated asynch
 \section{Transaction and replication protocols}
 \label{sec:transactions}
 
-This Section presents the underlying protocols used to maintain the state of objects
+This section presents the 
+%underlying 
+protocols used to maintain the state of objects
 and execute transactions with TCC in PotionDB. The transaction processing and replication
 algorithm can be seen as an adaptation of Cure protocols~\cite{cure} to a partial replication
-setting. In the following Section we show how PotionDB's mechanisms are used to maintain
+setting. Next, we show how PotionDB's mechanisms are used to maintain
 the state of materialized views.
 
 \subsection{Objects}
@@ -3259,7 +3261,7 @@ PotionDB's replication mechanism groups remote transactions together, allowing f
 %However, PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed more efficiently.
 %\andre{No idea why topK has a bit more performance with 25\% updates. I'm not sure why update-only has better throughput than query+update, but I can think of two possible reasons: a) updates make queries wait; b) updates reply quicker as a reply is sent as soon as the partitions confirm they will commit (and not after the commit is executed), unlike queries which must wait for the result to be ready.}
 
-\newpage
+%\newpage
 \section{Related Work}
 \label{sec:related_work}
 
