@@ -362,22 +362,22 @@ able to keep consistency between the base and view data in every replica.
 In this paper we make the following contributions:
 %\begin{enumerate*}[(label=\roman*)]
 \begin{compactitem}
-	\item the design of a geo-replicated key-value store  with support for partial replication
-	and views over partially replicated data; 
+	\item design of a geo-replicated key-value store  with support for partial replication
+	and views over partially replicated data (Section~\ref{sec:transactions}); 
 	\item replication algorithms for efficiently maintaining consistent materialized views over 
-	partially replicated data;
+	partially replicated data (Section~\ref{sec:views_for_apps});
 %	\item a language inspired in SQL for view specification in key-value stores, with view maintenance code automatically inferred from the specification;
-	 \item an implementation and evaluation of the proposed approach with micro-benchmarks
-	 and TPC-H.
+	 \item implementation and evaluation of the proposed approach with micro-benchmarks
+	 and TPC-H (Section~\ref{sec:evaluation}).
 \end{compactitem}
 
-The remainder of the paper is organized as follows.
-Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
-Section~\ref{sec:transactions} describes PotionDB's transactional and replication protocols.
-Section~\ref{sec:views_for_apps} discusses details on how PotionDB generates views and their automatic updating, as well as how we adapted TPC-H to PotionDB.
-%Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
-In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section~\ref{sec:related_work} presents related work and Section~\ref{sec:conclusion} concludes.
-\andre{On the description of Section \ref{sec:views_for_apps}, maybe change "their automatic updating" to "keeps them automatically up-to-date"?}
+%The remainder of the paper is organized as follows.
+%Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
+%Section~\ref{sec:transactions} describes PotionDB's transactional and replication protocols.
+%Section~\ref{sec:views_for_apps} discusses details on how PotionDB generates views and their automatic updating, as well as how we adapted TPC-H to PotionDB.
+%%Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
+%In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section~\ref{sec:related_work} presents related work and Section~\ref{sec:conclusion} concludes.
+%\andre{On the description of Section \ref{sec:views_for_apps}, maybe change "their automatic updating" to "keeps them automatically up-to-date"?}
 
 
 %\outline{topicos
