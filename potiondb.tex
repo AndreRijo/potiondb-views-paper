@@ -1,5 +1,5 @@
  \documentclass[sigplan,review,anonymous]{acmart}
- \acmSubmissionID{0} %TODO: Update this after submitting the abstract.
+ \acmSubmissionID{370} %TODO: Update this after submitting the abstract.
  \renewcommand\footnotetextcopyrightpermission[1]{}
  % Optional: Remove the ACM reference between the abstract and the main text.
  \settopmatter{printfolios=true,printacmref=false}
@@ -50,7 +50,7 @@
 \definecolor{gray}{rgb}{0.5,0.5,0.5}
 \definecolor{mauve}{rgb}{0.58,0,0.82}
 \lstset{language=SQL,
-  basicstyle={\footnotesize\ttfamily},
+  basicstyle={\scriptsize\ttfamily},
   deletekeywords={key}, %not working
   belowskip=0mm,
   breakatwhitespace=true,
@@ -965,11 +965,17 @@ pending transactions with smaller timestamps, the operation needs to block if th
 that had modified $o$. 
 
 \noindent
-\textbf{Operations on objects not locally replicated:}
+\textbf{Operations on objects not locally replicated.}
 %\label{subsec:operationsNonLocal}
-As PotionDB is partially replicated, it is possible that a transaction tries to access an object $o$
-that is not replicated in the current location, $L_i$. In this case, the shard that should hold $o$ 
-will fetch a copy of the object from a remote replica. The version of the object reqeusted is that
+As PotionDB is partially replicated, a transaction may try to access an object $o$
+%that is 
+not replicated in the current location.
+%, $L_i$. 
+In this case, the shard that should hold $o$ 
+fetches 
+a copy of the object from a remote replica. The version of the object 
+%requested 
+is that
 of the transaction snapshot,  $t\!.\mathit{rc}$ ignoring the entry for the current location.
 
 It is important to ignore the current location to guarantee a quick reply. 
