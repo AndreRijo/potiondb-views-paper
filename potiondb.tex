@@ -509,11 +509,13 @@ A transaction proceeds with a sequence of operations:
 \item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist; 
 \item an object is deleted by issuing the \code{delete}  operation.
 \end{inparaenum}
-Operations defined in each object are type-specific - e.g. a set object includes a \code{contains(el)} operation to check
-if value \code{el} belongs to the set, and an \code{add(el)} and \code{remove(el)} to add or remove \code{el} from the set.
+Operations defined in each object are type-specific - e.g. a set object includes a \code{contains(e)} operation to check
+if value \code{e} belongs to the set, and an \code{add(e)} and \code{remove(e)} to add or remove \code{e} from the set.
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
-PotionDB also allows an application to issue an one-shot~\cite{??????} read-only or write-only transaction,
+PotionDB also allows an application to issue an one-shot
+%~\cite{??????} 
+read-only or write-only transaction,
 by executing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
 %for aborting 
 
@@ -765,7 +767,8 @@ Garbage collection ensures data related with versions that are too old is eventu
 	
 Third,  the Replicator ensures that committed transactions are replicated asynchronously to other PotionDB instances.
 	It is also responsible for receiving remote transactions and forwarding them to the Transaction Manager for local execution.
-	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. We detail this in Section \ref{sec:replication}.
+	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. 
+	Further details are given in Section~\ref{sec:replication}.
 
 
 
@@ -794,7 +797,7 @@ PotionDB stores two types of CRDTs: common CRDTs~\cite{crdt} and non-uniform CRD
 We now explain the guarantees and uses of each type of objects.
 
 \noindent
-\textbf{CRDTs:} CRDTs are replicated objects that are guaranteed to converge
+\textbf{CRDTs.} CRDTs are replicated objects that are guaranteed to converge
 after applying the same set of operations. In particular, PotionDB uses operation-based CRDTs,
 in which the convergence of replicas is guaranteed if operations are applied respecting causality. 
 This is the case in PotionDB, as a valid serialization of transaction must respect the happens-before
@@ -807,7 +810,7 @@ counter, for maintaining a number that accepts concurrent increment and decremen
 average, for maintaining the average of values added to this object.
 
 \noindent
-\textbf{NuCRDTs:} Non-uniform CRDTs~\cite{Cabrita17Nonuniform} are CRDTs that guarantee that in a quiescent state, 
+\textbf{NuCRDTs.} Non-uniform CRDTs~\cite{Cabrita17Nonuniform} are CRDTs that guarantee that in a quiescent state, 
 the \emph{observable state} of all replicas is the same. 
 Two observable states are defined as equivalent iff, for each possible read operation, the result is equivalent when executed on either state.
 
@@ -911,14 +914,14 @@ Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $\mat
 
 A client executes a transaction by interactively contacting a PotionDB server.
 The transaction execution is managed by the Transaction Manager (TM).
-
-When the TM receives the \emph{begin} operation, it decides which snapshot the
-transaction will access - this will be the latest snapshot available at the current location,
+%
+When the TM receives a \emph{begin} operation, it decides which snapshot the
+transaction will access, i.e., the latest snapshot available at the current location,
 which is represented by the global vector clock $\mathit{vc}_G$.
 
 When receiving an update operation, the TM asks the Materializer to execute the update in
 a private copy of the object for the transaction snapshot. When receiving a read operation, 
-the TM asks the materializer to execute the read operation in the private copy 
+the TM asks the Materializer to execute the read operation in the private copy 
 of the object - if no update has been executed before in the object, a shared copy with the version 
 of the transaction snapshot is used. We represent by $t.WS$ and $t.RS$ the sets of objects updated 
 and read in transaction $t$.
@@ -966,15 +969,15 @@ that had modified $o$.
 %\label{subsec:operationsNonLocal}
 As PotionDB is partially replicated, it is possible that a transaction tries to access an object $o$
 that is not replicated in the current location, $L_i$. In this case, the shard that should hold $o$ 
-will fetch a copy of the object from a remote replica. The version of the object asked is that
+will fetch a copy of the object from a remote replica. The version of the object reqeusted is that
 of the transaction snapshot,  $t\!.\mathit{rc}$ ignoring the entry for the current location.
 
-It is important to ignore the entry for the current location to guarantee a quick reply. 
-Otherwise, as updates are propagated asynchronously, the remote replica would need to wait to 
+It is important to ignore the current location to guarantee a quick reply. 
+Otherwise, as updates are propagated asynchronously, the remote replica would need to wait for 
 receive all transactions from $L_i$ reflected in the transaction snapshot before returning a copy
 of $o$.
-After receiving the copy of the object, the shard will apply any updates performed to $o$ at $L_i$ - typically,
-there will be no update, as $L_i$ does not replicate $o$.
+After receiving the copy of the object, the shard will apply any updates performed to $o$ at $L_i$. Typically,
+there will be no updates, as $L_i$ does not replicate $o$.
 
 \noindent
 \textbf{Reads on NuCRDTs:}
@@ -1022,7 +1025,7 @@ guarantee that the updates of a transaction are propagated to all relevant locat
 we discuss the special case of NuCRDTs.
 
 The replication process works as follows. 
-When a transaction commits at a shard, the shard sends its part of the transaction to the replicator.  
+When a transaction commits at a shard, that shard sends its part of the transaction to the replicator.  
 Given the way transactions are committed at a shard, it is guaranteed that a shard sends the transactions
 ordered by the commit timestamp.
 If the shard processes no transaction for some time, it sends a message notifying the replicator that there are
@@ -1094,7 +1097,9 @@ our experience in defining views for the queries of the TPC-H benchmark~\cite{tp
 \subsection{Generated objects and triggers}
 \label{subsec:generated_view}
 
-We now outline how PotionDB, given a view specification, generates the right objects to hold the view's data and updates the views.
+Next, we outline how PotionDB, given a view specification, generates the 
+%right 
+objects to hold the view's data and its updates. % the views.
 %For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
 
 \noindent
@@ -1149,7 +1154,7 @@ elements.
 \subsection{Developer-defined views}
 \label{subsec:programmer_view}
 
-Besides using the view language supported in PotionDB, an application developer can
+Besides using PotionDB's view language, an application developer can
 maintain the data of a view in specific PotionDB objects and define triggers to update
 these view objects.
 
@@ -1442,7 +1447,9 @@ For each table that will be partially replicated, we define a bucket for each re
 For tables that are fully replicated, there is a single bucket and container. 
 We do the following mapping from tables to buckets: 
 \begin{inparaenum}[(i)]
-\item Customers, suppliers, nations and regions have a nation or region directly
+\item Customers, suppliers, nations and regions have 
+%a nation or 
+region directly
 associated with it, which is used to select the bucket to use;
 \item Orders are stored in the region of the customer;
 \item Partsupplies are stored in the supplier's region;
@@ -1480,7 +1487,7 @@ underlying CRDTs.
 We now describe the lessons learned. In the next section we present the evaluation of how PotionDB performs on supporting
  different types of queries.
 
-\paragraph{De-normalization:} PotionDB is a key-value store and does not directly support advanced database functionality,
+\paragraph{De-normalization.} PotionDB is a key-value store and does not directly support advanced database functionality,
 such as joins.  To address this issue, we de-normalize the database whenever necessary.  
 The view in Figure~\ref{fig:viewtopsales} is an example of such de-normalization, with
 the product name (\texttt{prodname}) stored in the sales record, instead of the product identifier.
@@ -1502,7 +1509,7 @@ ORDER BY Revenue DESC
 
 
 % diferentes tipos de dados
-\paragraph{Data types:} Different types of view require different support from PotionDB underlying data types.
+\paragraph{Data types.} Different types of view require different support from PotionDB underlying data types.
 Figure~\ref{fig:viewlocalsupliers} shows the view to support TPC-H query 5, which computes
 for each nation in a given region, the revenue from local suppliers. 
 This view can be supported by using for each region a map that stores for each nation the sum of the 
