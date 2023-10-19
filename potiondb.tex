@@ -1556,7 +1556,7 @@ the product name (\texttt{prodname}) stored in the sales record, instead of the 
 \small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (Q5, views) WITH REGION == 
-ANY (SELECT DISTINCT region FROM regions) AS
+ANY (SELECT DISTINCT R_name FROM region) AS
 SELECT N_Name, SUM(ExtendedPrice * (1 - Discount)) AS Revenue
 FROM Lineitem
 WHERE C_NationKey == S_NationKey AND R_Name == [REGION]
@@ -2191,7 +2191,7 @@ Our work was influenced by works in several different areas.
 \noindent
 \textbf{Consistency in geo-replication.}
 Database systems can be classified as being either strongly or weakly consistent.
-Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} provide a total order for transactions and are easier to work with.
+Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, megastore, sconekv, lu2021epoch} provide a total order for transactions and are easier to work with.
 However, coordination between data centers is required, leading to high latency in geo-distributed scenarios and compromised availability under network partitions \cite{cap}.
 By relaxing consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
@@ -2212,7 +2212,7 @@ alleviates this problem, however anomalies can still be observed even with cross
 \textbf{Indexes and views.}
 Both indexes and materialized views speed up query execution.
 Indexes provide quick access to a table or an object using a non-primary key, and are often used by queries requiring sorting or a given range of values.
-Multiple systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} and there are several proposals on efficient usage and storage of indexes~\cite{lee2020asymmetric, lisa, alex, bindex, slik}.
+Multiple systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} and there are several proposals on efficient usage and storage of indexes~\cite{lee2020asymmetric, lisa, bindex, slik, abtree, kreachquery}.
 %On the other hand, 
 %Conversely, 
 Materialized views work as a cache for the result of a large query, thus avoiding expensive data recalculations.
