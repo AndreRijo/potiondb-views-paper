@@ -1827,7 +1827,7 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 	\hspace*{0.2em}
 	\begin{subfigure}{.52\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_tc_global_vs_single}
-		\caption{\textbf{P}otionDB and \textbf{S}ingle configurations.}
+		\caption{PotionDB and \textit{Single} configurations.}
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
@@ -2023,13 +2023,13 @@ Unless stated otherwise, each transaction consists in a batch of 5 operations.
 
 \begin{figure}
 	\centering
-	\begin{subfigure}{.481\linewidth}
+	\begin{subfigure}{.471\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_upd}
 		\caption{1 read per txn.}
 		\label{fig:topSize_single}
 	\end{subfigure}%
 	\hspace*{0.2em}
-	\begin{subfigure}{.499\linewidth}
+	\begin{subfigure}{.509\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_upd_5b}
 		\caption{5 reads per txn (log scale).}
 		\label{fig:topSize_batch}
@@ -2040,8 +2040,6 @@ Unless stated otherwise, each transaction consists in a batch of 5 operations.
 	\vspace*{-0.2em} %TODO: Increase this once we can pull higher the text
 \end{figure}
 
-%TODO: Need to replace the data for Top1 or Top10 in single read.
-%For 5 batch: 8.339676e+06, 8.194999e+06, 2.211799e+06	, 2.676134e+05
 %TODO: Maybe not focus so much on serialization/deserialization: it may not be easy to justify/not the real cause
 
 \paragraph{Scalability of Top-K and Top-K Counter:} %\hspace{0em}
@@ -2137,9 +2135,10 @@ Multi-update transactions lock multiple shards instead of just one, so they redu
 
 \paragraph{Impact of the number of replicas:}
 We now evaluate how NuCRDTs that support views scale with the number of replicas. 
-Figure \ref{fig:crdts} shows the throughput of NuCRDTs with different numbers of replicas per NuCRDT 
+Figure \ref{fig:crdts:perf} shows the throughput of NuCRDTs with different numbers of replicas per NuCRDT 
 (for top K,  we used K = 10). 
-Results are presented in Figure~\ref{fig:crdts:perf}. The first observation is that, 
+%Results are presented in Figure~\ref{fig:crdts:perf}. 
+The first observation is that, 
 for each configuration the performance is similar.  This seems to show that the internal implementation of
 the CRDT has little impact in the overall performance of the system, even if internally NuCRDTs are
 considerably different.
@@ -4357,11 +4356,11 @@ In short, PotionDB is efficient for both global and local queries, while Local P
 	\hspace*{0.2em}
 	\begin{subfigure}{.52\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_tc_global_vs_single}
-		\caption{\textbf{P}otionDB and \textbf{S}ingle PotionDB}
+		\caption{PotionDB and \textit{Single} PotionDB}
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Performance with multiple update rates}
+	\caption{Performance with multiple update rates.}
 	\label{fig:upds_tc}
 	\vspace*{-1.2em}
 \end{figure}
@@ -4523,10 +4522,10 @@ Even when factoring in all global and local queries (Figure \ref{fig:all_queries
 \begin{figure}
 	\centering
 	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
-	\vspace*{-0.65em}
+	%\vspace*{-0.65em}
 	\caption{PotionDB and Local PotionDB's performance with multiple update rates, without added latency.}
 	\label{fig:update_rates_global_vs_local_noTC}
-	\vspace*{-1.3em}
+	%\vspace*{-0em}
 \end{figure}
 
 %TODO: Would be really nice if I could trim this one further
@@ -4706,10 +4705,10 @@ Unless stated otherwise, each client executes 5 operations per transaction, in o
 		\caption{5 reads per txn (log scale).}
 		\label{fig:topSize_batch}
 	\end{subfigure}%
-	\vspace*{-0.65em}
+	%\vspace*{-0.65em}
 	\caption{TopK query performance for multiple top sizes.}
 	\label{fig:topSize}
-	\vspace*{-0.2em} %TODO: Increase this once we can pull higher the text
+	%\vspace*{-0.2em} %TODO: Increase this once we can pull higher the text
 \end{figure}
 
 %TODO: Need to replace the data for Top1 or Top10 in single read.
