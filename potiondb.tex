@@ -428,9 +428,9 @@ For supporting the latter, %operations,
 PotionDB provides materialized views that are the result of an aggregation 
 over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
-The key features of this example -- global service with a large database with
+The key features of this example - global service with a large database with
 data that is mostly access in a single (or few) location,  and some operations accessing the result
-of a global aggregation -- are common to other global services, such as multi-user online games, and
+of a global aggregation - are common to other global services, such as multi-user online games, and
 social news aggregation.
 
 
@@ -856,10 +856,11 @@ attributes, as needed for maintaining the attributes of a view with a limit clau
 
 \carla{I don't understand the next paragraph!}
 As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
-row and the ordered value used for selecting the top rows.
+row and the ordered value used to select the top rows.
 An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
 and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
-row, with the operations of the data type associated with the row element. \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
+row, with the operations of the data type.% associated with the row element.
+ \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
 
 Second, we extend NuCRDT specifications to include information that allows a replica to know if it might be exposing incorrect results. 
 This information consists in the timestamps of operations (transactions) that could cause the anomaly - e.g. in our maximum NuCRDT example, 
@@ -868,11 +869,13 @@ Given this information, and knowing the updates that replicas have seen (which i
 a replica knows that no anomaly can occur if the operation has been seen by all replicas of the object, 
 which would have triggered replicas to send the operations that could be relevant for the observable state, if any.
  
-Third, we also extend NuCRDT specifications to maintain a larger observable state to minimize the 
-cases in which a replica may be exposing incorrect results in practice. In our example, the maximum NuCRDT
+Third, we extend NuCRDT specifications to maintain a larger observable state to reduce the instances
+ in which a replica may be exposing incorrect results.
+ % in practice. 
+ In our example, the maximum NuCRDT
 maintains the two largest elements. Therefore, if the maximum element
 is deleted, replicas still have the new maximum. 
-Doing this extension is straightforward for all NuCRDTs we have defined, besides the top-K counter. 
+This extension is simple for all NuCRDTs we have defined, besides the top-K counter. 
 \carla{What is "this" is the above sentence?}
 
 \nuno{explicar como fazer?}
@@ -1589,7 +1592,7 @@ In this case, four objects will be created, one for each value of \texttt{quanti
 order is inserted (or updated), the four objects are updated.
 
 % limitações
-\paragraph{Limitations:} The language for specifying views in PotionDB has several limitations, when
+\paragraph{Limitations.} The language for specifying views in PotionDB has several limitations, when
 compared with support for defining views in relational databases. The main limitations concern the 
 lack of support for joins and sub-queries, and the limited expressiveness in clauses like select and where. 
 This makes more difficult the specification of views for some complex queries and might even make it 
