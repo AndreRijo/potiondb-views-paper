@@ -756,12 +756,7 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 
 \begin{figure}
 	\centering
-<<<<<<< HEAD
-	\includegraphics[width=0.9\linewidth]{PotionDBArch}
-	\vspace{-5pt}
-=======
 	\includegraphics[width=0.8\linewidth]{PotionDBArch}
->>>>>>> 8aa9e497f245c7f18bc5cf884b8de57a2872cca4
 	\caption{PotionDB Architecture}
 	\vspace{-20pt}
 	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
@@ -769,11 +764,11 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 	\label{fig:arch}
 \end{figure}
 
-We designed PotionDB with geo-replication in mind.
+We designed PotionDB with partial geo-replication in mind.
 Thus, we assume PotionDB instances to be spread at different locations across the globe (Figure \ref{fig:arch}).
-Each location only replicates a subset of the whole datastore's data.
+Each location only replicates a subset of the whole data.
 The system administrator has control over where each object is replicated.
-This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs in check.
+This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs controlled.
 Objects without locality on their access pattern can be replicated everywhere if desired.
 We detail this more in Section~\ref{sec:replication}.
 
@@ -787,9 +782,8 @@ We leave further details for Section \ref{subsec:txnproc}.
 
 The internal architecture of each PotionDB server is inspired by Cure~\cite{cure} and is split into three main components.
 
-First, the Transaction Manager is responsible for receiving and replying to client's requests.
-	It coordinates transactions, implementing a transactional protocol (details shown in Section \ref{subsec:txnproc}) %which ensures
-	ensuring the consistency of reads and updates, as well as transactions' atomicity.
+First, the Transaction Manager coordinates transactions execution, implementing a transactional protocol (Section \ref{subsec:txnproc}) %which ensures
+	ensuring the consistency of reads and updates. %  as well as transactions' atomicity.
 	
 Second, the  Materializer stores the objects on their latest version, alongside the necessary data to generate previous versions when necessary.
 Garbage collection ensures data related with versions that are too old is eventually discarded.
@@ -800,8 +794,8 @@ Garbage collection ensures data related with versions that are too old is eventu
 	
 Third,  the Replicator ensures that committed transactions are replicated asynchronously to other PotionDB instances.
 	It is also responsible for receiving remote transactions and forwarding them to the Transaction Manager for local execution.
-	The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. 
-	Further details are given in Section~\ref{sec:replication}.
+	%The replication component is aware of each instances' replication scheme, ensuring each one only receives updates for objects it replicates. 
+	Further details are presented in Section~\ref{sec:replication}.
 
 
 
@@ -819,15 +813,16 @@ This section presents the
 %underlying 
 protocols used to maintain the state of objects
 and execute transactions with TCC in PotionDB. The transaction processing and replication
-algorithm can be seen as an adaptation of Cure protocols~\cite{cure} to a partial replication
-setting. Next, we show how PotionDB's mechanisms are used to maintain
-the state of materialized views.
+algorithms are an adaptation of Cure protocols~\cite{cure} to partial replication.
+%setting. 
+%Next, we show how PotionDB's mechanisms are used to maintain
+%the state of materialized views.
 
 \subsection{Objects}
 \label{sec:tx:objs}
 
 PotionDB stores two types of CRDTs: common CRDTs~\cite{crdt} and non-uniform CRDTs (NuCRDTs)~\cite{Cabrita17Nonuniform}.
-We now explain the guarantees and uses of each type of objects.
+%We now explain the guarantees and uses of each type of objects.
 
 \noindent
 \textbf{CRDTs.} CRDTs are replicated objects that are guaranteed to converge
@@ -860,10 +855,10 @@ In PotionDB, we support the following NuCRDTs, previously proposed by Cabrita et
 \begin{inparaenum}[(i)]
 \item maximum and minimum objects, for storing the maximum or minimum of the objects added to the object;
 \item top-K,  for storing the K entries with largest values;
-\item top-K counter  for storing the K map entries with largest values, where the value
+\item top-K counter  for storing the K map key, value entries with largest values, where the value
 can be updated by issuing increment/decrement operations.
 \end{inparaenum}
-NuCRDTs can be used directly by application, but are more commonly used for supporting 
+NuCRDTs can be used directly by applications, but are more commonly used for supporting 
 views, as detailed in Section~\ref{sec:views_for_apps}.
 
 \nuno{Dar mais detalhes de como funcionam?}
@@ -876,10 +871,10 @@ because it might have been inserted in some other replica.  All replicas of the 
 converge to the maximum value, as every replica will propagate the local maximum element after receiving the 
 delete operation, guaranteeing that all replicas will receive the new maximum value.
 
-In our work we extended the NuCRDTs specifications proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}
-in three ways to make them practical to be used in a database.
-First, in top-K objects,  instead of keeping only the value associated with an element,  we keep multiple
-attributes, as needed for maintaining the attributes of a view with a limit clause.
+Our work extends the NuCRDTs specifications proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}
+in three ways to make them practical for PotionDB.
+First,  top-K objects,  instead of keeping only the value associated with an element,  keep multiple
+attributes, as needed for storing the attributes of a view entry.
 
 \carla{I don't understand the next paragraph!}
 As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
