@@ -290,7 +290,7 @@ partial replication, for example by proposing algorithms to manage partially
 replicated data~\cite{spanner,saturn,sipre, practi} and to decide which data is replicated in each replica~\cite{slog, sipre}.
 
 This paper addresses the problem of querying data in a weakly consistent partially geo-replicated database, 
-focusing on recurrent queries.% for which the application could use a (materialized) view.
+focusing on recurrent queries. % for which the application could use a (materialized) view.
 For example, consider an e-commerce system with users from multiple geographic locations.
 In this case, the data pertaining users of a given location does not need to be replicated in all data centers
 (but only in a few for fault tolerance). The same applies to other information, such as data on orders and 
@@ -443,7 +443,7 @@ PotionDB provides materialized views that are the result of an aggregation
 over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
 The key features of this example - global service with a large database with
-data that is mostly access in a single (or few) location,  and some operations accessing the result
+data that is mostly accessed in a single (or few) location,  and some operations accessing the result
 of a global aggregation - are common to other global services, such as multi-user online games, and
 social news aggregation.
 
@@ -461,7 +461,7 @@ social news aggregation.
 PotionDB is a distributed key-value database.
 We identify two types of values: base objects, $\mathit{Objs}$, and derived objects, $\mathit{Views}$.
 The set of objects of a database is defined as $\mathit{DB} = \mathit{Objs} \cup \mathit{Views}$.
-Informally, an object, $o$, is any value that is either a base object, $b$, or view,$v$.
+Informally, an object, $o$, is any value that is either a base object, $b$, or view, $v$.
 We distinguish between base objects and views whenever necessary for clarity.
 
 The value of a view is defined as a function over the values of other object(s), i.e., 
@@ -470,7 +470,7 @@ where $D_v$ is the set of objects (potentially both base objects and other views
 We assume the computation is non-recursive, i.e., the value of a view is never based on its own value or, formally, 
 $\forall\, v \in \mathit{Views} : v \notin D_v$.
 
-Objects are uniquely identified by a tuple $\mathit{id} = \mathit{(key, bucket, type)}$.
+Objects are uniquely identified by a tuple $\mathit{id} = \mathit{(key, bucket}$, $\mathit{type)}$.
 %For presentation purposes, we assume this tuple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
 %When needed, we represent these properties for an object $o$ as
 %$o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
@@ -869,7 +869,7 @@ the elements that were inserted locally. If the maximum NuCRDT also includes a \
 and the maximum element is removed in a given replica, the replica might not have the new maximum element,
 because it might have been inserted in some other replica.  All replicas of the maximum NuCRDT eventually 
 converge to the maximum value, as every replica will propagate the local maximum element after receiving the 
-delete operation, guaranteeing that all replicas will receive the new maximum value.
+remove operation, guaranteeing that all replicas will receive the new maximum value.
 
 Our work extends the NuCRDTs specifications proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}
 in three ways to make them practical for PotionDB.
