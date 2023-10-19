@@ -1756,8 +1756,6 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 %	\item when executing local-only queries (Q5), local PotionDB performs similarly to PotionDB - no redirection of requests is needed (clients only ask for data of their region), thus local PotionDB can efficiently reply to queries with only its local data views. Our solution "does not lose" to the local view solution.
 %\end{itemize}
 
-\subsubsection{PotionDB scaling with updates}
-
 %\begin{figure*}
 %	\begin{subfigure}{0.31\linewidth}
 %		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_global}
@@ -1785,13 +1783,13 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 	\centering
 	\begin{subfigure}{.47\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc_short}
-		\caption{Local PotionDB}
+		\caption{Local configuration.}
 		\label{fig:update_rates_local_tc}
 	\end{subfigure}%
 	\hspace*{0.2em}
 	\begin{subfigure}{.52\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_tc_global_vs_single}
-		\caption{\textbf{P}otionDB and \textbf{S}ingle PotionDB}
+		\caption{\textbf{P}otionDB and \textbf{S}ingle configurations.}
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
@@ -1801,43 +1799,26 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 \end{figure}
 
 
-We now evaluate the impact of executing updates alongside queries on PotionDB's throughput for multiple update/read ratios.
-Clients pick randomly
-%In this scenario, when a client wants to execute an operation, it picks randomly
-whenever to execute a single query or an update transaction.
-An update transaction consists in the creation of a new order, of its ordered items and all associated view updates.
-%An update transaction consists in the creation of a new order, which also includes the necessary updates to create the items that were ordered and associated view updates.
-%View updates are not counted for throughput.
-The latter however is not counted towards throughput.
-A 25\%/75\% ratio means that 25\% of all executed operations (including view updates) are updates.%, not that 25\% of the transactions are write-transactions.
+\paragraph{Impact of updates:}
+PotionDB approach of maintaining a copy of the views in every server imposes additional load on the system
+for keeping view updated,  when compared with the \textit{Local} and \textit{Single} approaches. 
+In PotionDB, a view update needs to be executed in every replica while in the other approaches the view update 
+is applied only in a single replica. 
 
-%\begin{figure}
-%	\centering
-%	\begin{subfigure}{.49\linewidth}
-%		\includegraphics[width=1\linewidth]{singleQuery/query_latency_global}
-%		\caption{Query-latency.}
-%		\label{fig:query_latency}
-%	\end{subfigure}%
-%	\hspace*{0.8em}
-%	\begin{subfigure}{.49\linewidth}
-%		\includegraphics[width=1\linewidth]{singleQuery/upd_latency_global}
-%		\caption{Update-latency.}
-%		\label{fig:update_latency}
-%	\end{subfigure}
-%	\caption{Average latencies of queries and updates on PotionDB.}
-%\end{figure}
+To evaluate the impact of updates we consider workloads consisting in different ratios of updates and queries, with
+an update being the transaction that creates a new order, and a query being one of the queries defined in
+TPC-H - the 25\%/75\% ratio means that 25\% of operations are updates. The results of our experiments
+are presented in Figure~\ref{fig:upds_tc}.
 
 %0: 1.511M ops/s, 0.01: 1.517M ops/s,  0.05: 1.46M, 0.1: 1.45M, 0.15: 1.43M, 0.25: 1.157M
-Figure \ref{fig:upds_tc} shows the results of executing updates alongside queries with multiple update/read ratios.
 %PotionDB has small throughput losses for modest update rates (between 0.1\% and 5.4\% for update rates up to 15\%), while for 25\% it has a significant drop of 23.4\%.
-In PotionDB, for 1\% update rate, the impact is unnoticeable.
-The throughput drop for modest update rates (10\% and 15\%) is reasonable (4\% and 5.4\%), while for 25\% it is quite more significant (23.4\%).
-The lower max throughput and slightly higher latencies are due to the following.
-Update transactions apply the commit protocol locally (Section \ref{subsec:commit}), which requires coordination of multiple shards (multiple updates per transaction), which leads to an higher latency than with queries.
-%Moreover, if too many update transactions are issued concurrently, they will have to wait for each other, increasing the average latency.
-Note however that queries' latency only raises lightly as in practice they seldom wait for updates.
+The results show that for PotionDB, for 1\% update rate, the impact in throughput is unnoticeable, when compared with a read-only workload.
+The throughput starts decreasing as the ratio of updates increases - 4\% drop for 10\% updates and 23.4\% for 25\% of updates.
+The reduction in performance results not only from the fact that view updates need to be executed in all replicas, but also because 
+updates are inherently slower as the commit of a transaction require coordination among the multiple shards involved in the transaction. 
+Note that queries' latency only raises slightly as, in practice, they seldom need to wait for updates.
 %25\%: 0.273304; 0\%: 0.245562
-For instance, at PotionDB's max throughput for 25\% updates, its query-only latency and the corresponding for 0\% are, respectively, 0.273ms and 0.246ms.
+For instance, at PotionDB's maximum throughput for 25\% updates, the query-only latency is 0.273ms, which compares to 0.246ms for 0\% of updates.
 
 %To execute an update transaction, shards have to synchronize to apply the commit protocol (Section \ref{subsec:commit}) - thus, as the update rate gets higher, this synchronization happens more often, potentially making other queries/updates wait.
 %This synchronization, as well as multiple updates being in the same transaction, is why update transactions have higher latency than queries, as seen on Figure \ref{fig:update_latency}.
@@ -1845,37 +1826,25 @@ For instance, at PotionDB's max throughput for 25\% updates, its query-only late
 %The main observable difference in query latency is the latency at the middle of the throughput raising earlier.
 %We believe this may be due to network artifacts that lead to latency raising slightly when using over a certain amount of bandwidth - since update transactions have many updates, this threshold is reached with less clients. %TODO: This is... not really a good explanation. Sigh
 
-Local PotionDB benefits from having multiple updates per transaction, as more operations are done per RTT.
-Thus, Local PotionDB's max throughput raises slightly as the update ratio rises, as seen on Figure \ref{fig:update_rates_local_tc}.
-%Updates do not hinder Local PotionDB considerably, as seen on Figure \ref{fig:update_rates_local_tc}.
-%The latency experienced between servers means Local PotionDB benefits from grouping updates in a single transaction, as more operations can be done per RTT - hence the slight rise in throughput.
-Plus, update transactions do not need to contact every server, as 50\% of the orders are local to a region, \footnote{This does not occur on the original TPC-H dataset, whose orders' items are random. This modification adds locality to orders, which is more realistic for an e-commerce scenario and helps Local PotionDB more than PotionDB.
-	%Note that this helps Local PotionDB more than PotionDB.
-} while most others refer few regions - hence the slightly lower average latency with higher update rates.
-Note that if queries were grouped, throughput would raise further.
-%Note that if queries were grouped, throughput would raise even more, as queries still dominate the workload
-%Note that grouping of queries would increase throughput even more considerably.
-%Note that if queries were grouped, the increase in throughput would be more considerable, as queries still dominate the workload.
+\textit{Local} throughput improves as the ratio of updates increase.  This results from the fact that we 
+are computing the number of executed operations, and the create transaction includes multiple updates. 
+Thus, the overhead for executing a transaction (messages for starting and committing a transaction) is paid
+only once for multiple operations\footnote{In PotionDB, if a transaction includes 5 queries/transaction the maximum throughput 
+goes to 4.83M op/s (with latency of 0.68ms), when compared with 1.5M ops/s with (with latency of 0.37 ms) for one query per transaction.}.  
+Additionally, update transactions do not need to contact other servers - view updates are propagated asynchronously -,  
+as 50\% of the orders are local to a region\footnote{This does not occur on the original TPC-H dataset, 
+whose orders' items are random. This modification adds locality to orders, which is more realistic for 
+an e-commerce scenario and helps \textit{Local} more than PotionDB.} and most other orders
+refer few regions.  This leads to a slightly lower average latency with higher update rates.
 
 %fig:update_rates_single_tc
-Single PotionDB (Figure \ref{fig:update_rates_global_single_tc}) has throughput losses comparable to PotionDB's, except for 25\% updates where the percentage of loss is smaller than PotionDB's due to not having to replicate view updates.
-%Single PotionDB (Figure \ref{fig:update_rates_single_tc}) has similar results to PotionDB, except for 25\% where the percentage of loss throughput is smaller compared to PotionDB, due to not having to replicate view updates.
-However, even for 25\% updates, Single PotionDB's throughput is less than 1/4 of PotionDB's.
-%For Single PotionDB (Figure \ref{fig:update_rates_single_tc}) the results are similar to PotionDB, except for 25\% update rate where Single PotionDB loses less percentage of throughput comparatively, due to not having to replicate view updates.
-%Still, the max throughput of Single PotionDB even in this case is more than 3 times less than PotionDB's.
-%Nevertheless, with more modest update rates the loss on throughput is comparable between both solutions - our solution is optimized for a read-heavy scenario like an e-commerce application, where users see many more products/listings than the ones they buy.
-%We emphasize that our queries are complex queries, which would take several milliseconds or more to execute without views instead of sub-millisecond.
+\textit{Single} configuration has throughput losses comparable to PotionDB's, except for 25\% updates where the drop in throughput is smaller 
+than PotionDB's due to not having to replicate view updates.
+However, even for 25\% updates, \textit{Single}'s throughput is less than 1/4 of PotionDB.
 
-In summary, PotionDB still scales well with modest update rates as is common in, e.g., e-commerce applications.
-%, with only a significant throughput loss in update-heavy scenarios, which are outside of PotionDB's usage scope.
+In summary, PotionDB scales well with modest update ratios, which are common in practice.
 PotionDB keeps views updated while answering complex global queries in sub-millisecond time.
-%in less than 0.5ms.
-%PotionDB is thus able to keep views up-to-date while still answering complex global queries in sub-millisecond time.
-Moreover, updates in PotionDB are unaffected by latency between servers.
-%Moreover, updates in PotionDB and Single PotionDB are unaffected by latency between servers.
-%, as transactions are committed locally.
-%TODO: I would like to re-add the phrase below if there is a little bit of space.
-%The added latency only affects replication, so clients in other servers will take longer to notice the effects of updates executed in faraway servers. %Does this need some ending justification on how this is ok? %Also maybe remove this last two phrases?
+%Moreover, updates in PotionDB are unaffected by latency between servers.
 
 
 %Two to three graphs: global with updates, local with updates, (optionally) single with updates. I have to modify the graphs to not count with updates for the views.
@@ -1910,10 +1879,10 @@ Moreover, updates in PotionDB are unaffected by latency between servers.
 
 \subsection{PotionDB performance on a single data center}
 
-All experiments so far had latency imposed between servers to simulate a geo-distributed scenario.
-This scenario benefits PotionDB compared to the other analysed solutions, as all queries and updates execute locally in the client's server.
-%This scenario benefits PotionDB compared to the other analysed solutions, given both global and local queries, as well as any updates, execute fully in the replica the client is connected to.
-Thus, we now evaluate if PotionDB is still ideal in a single data center scenario, i.e., without added latency. %between servers.
+In this section we study whether keeping global views in all replicas is still an interesting approach when
+latency among replicas is smaller, using the extreme case where all servers are in the same data center
+(and have no added latency for communication among them).
+
 
 \begin{figure}
 	\centering
@@ -1929,30 +1898,24 @@ Thus, we now evaluate if PotionDB is still ideal in a single data center scenari
 		\label{fig:q3_q5_noTC}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Query performance with no added latency.}
+	\caption{Query performance in single DC.}
 	\label{fig:global_local_single_noTC}
 	\vspace*{-1.2em}
 \end{figure}
 
-Figure \ref{fig:global_local_single_noTC} shows PotionDB, Local PotionDB and Single PotionDB's query performance without added latency.
-Compared to previous experiments, PotionDB shows no difference.
-Single 
-PotionDB has slightly higher throughput and lower latency, as all clients are now effectively close to the view server, despite many queries being forwarded from other servers. %I feel this is not clear. But basically, no latency between servers implies that even with redirection of requests, the latency is low.
-%PotionDB shows no difference compared to %the experiments featuring added latency.
-%previous experiments.
-%Single PotionDB features slightly higher throughput and considerably lower average latency compared to previous experiments, as all clients are now effectively close to the view server, even though many requests are forwarded from other servers.
-%The latter is because with latency added, sudden spikes of load happen when the requests from faraway clients finally arrive, instead of the load being well distributed.
-%Furthermore, forwarded requests are not as efficient due to extra serialization, deserialization and data transfer.
-%I think I don't need to justify the higher throughput as it's a slight difference.
 
-With Local PotionDB, when considering only local queries like Q5 in Figure \ref{fig:q3_q5_noTC}, performance is the same as previously observed as those queries are served locally.
-However, when considering only global queries, Local PotionDB still performs poorly - e.g., with Q3, its max throughput is 180k queries/s, which is only 12\% of PotionDB's 1.5M queries/s.
-Even when factoring in all global and local queries (Figure \ref{fig:all_queries_noTC}), Local PotionDB's throughput is less than 17\% of PotionDB's, as in the former global queries contact all servers.
-%However, even without added latency, Local PotionDB's performance is quite lower than PotionDB's when including global queries, as seen in Figures \ref{fig:all_queries_noTC} and \ref{fig:q3_q5_noTC}.
-%For instance, with only Q3, Local PotionDB's max throughput is only $\sim$12\% of PotionDB's - respectively, close to 180k and 1.5M queries/s.
-%Even when factoring both global and local queries, Local PotionDB's throughput is less than 17\% of PotionDB's, as in the former global queries have to be executed in all servers. %not to mention the higher latency
-%This is due to global queries needing to be processed in every server in Local PotionDB, thus leading to a higher server load, more data transferred and higher latency.
-%This is due to, in Local PotionDB, global queries needing to be processed in every server, which imposes an higher load in the servers and requiring more data to be transferred, which also increases the processing time spent on serializing/deserializing data.
+Figure \ref{fig:global_local_single_noTC} present the results for read-only workloads.
+The results for PotionDB are similar to the previous results - this is expected as all operations are local.
+\textit{Local} and \emph{Single} have much lower latency and higher throughput when compared with the
+geo-distributed setting.  This is expected as the cost of contacting other replicas is much lower now - only the
+latency of contacting a node in the same data center.  The maximum throughput is still much lower than that
+of \textit{PotionDB}, as the need to contact multiple server for replying to a query induces 
+an higher load in the servers. 
+
+For the results with a single query - Figure \ref{fig:q3_q5_noTC} - the trend is similar to 
+the results for the geo-replicated setting, but with an increased throughput and lower latency
+for \textit{Local} and \textit{Single}, due to the low latency for contacting other replicas. 
+
 
 \begin{figure}
 	\centering
@@ -1964,53 +1927,40 @@ Even when factoring in all global and local queries (Figure \ref{fig:all_queries
 \end{figure}
 
 %TODO: Would be really nice if I could trim this one further
-In scenarios with updates, similar conclusions can be taken - Figure \ref{fig:update_rates_global_vs_local_noTC} showcases PotionDB's and Local PotionDB's throughputs for multiple update rates.
-PotionDB's throughput is the same as previously in Figure \ref{fig:update_rates_global_single_tc}.
-%PotionDB is the same as previously observed in Figure \ref{fig:update_rates_global_single_tc}. %, given latency between servers does not affect PotionDB's performance.
-Local PotionDB's throughput only reaches $\sim$250k ops/s for all update rates.
-%For Local PotionDB, the throughput is lower than PotionDB's in all cases, staying at around 250k ops/s for all update rates.
-The stability of Local PotionDB's throughput across different update rates is threefold:
-%Local PotionDB's stable throughput across different update rates is threefold:
-\begin{enumerate*}[label=(\roman*)]
-	\item multiple updates per transaction;%, unlike queries which are one per transaction;
-	\item orders' locality, thus many update transactions are local;
-	%\item orders' locality implies half of update transactions are fully local and most others involve only a subset of servers;
-	\item view updates are not replicated as views are local, which slightly reduces server load. %"do not need to be replicated" instead of "are not replicated"
-	%\item view updates do not need to be replicated unlike in PotionDB as views are local, thus slightly reducing server load.
-	%\item orders' locality implies that half of update transactions can be executed fully locally, with most others only requiring a subset of servers, unlike global queries which require all servers;
-	%\item since views are local, view updates do not need to be replicated and applied in other servers, thus slightly reducing server load.
-\end{enumerate*} %This still has some overlap with the previous section
-Update scenarios favour Local PotionDB, yet its performance is far from PotionDB's.
-%Even though scenarios with updates are favourable for Local PotionDB, it still does not match PotionDB's performance even with an high update ratio.
-Finally, Single PotionDB's thoughput is similar to what was observed in Figure \ref{fig:update_rates_global_single_tc} (and thus lower than PotionDB's), but with lower latencies ranging from 0.24ms to 0.6ms.
-%Finally, Single PotionDB achieves a throughput similar to what was observed previously in Figure \ref{fig:update_rates_single_tc}, but with smaller latencies, ranging from 0.2ms to 0.6ms.
-%Its throughput is, thus, still always lower than PotionDB's.
+The results for workloads with updates, presented in Figure~\ref{fig:update_rates_global_vs_local_noTC}, 
+show similar trends - PotionDB maintains a significantly better performance than alternative
+approaches, which improve throughput and lower latency.  
 
-%\begin{figure}
-%	\centering
-%	\includegraphics[width=1\linewidth]{singleQuery/upd_rate_single_noTC}
-%	\caption{Single PotionDB's performance in multiple read:update ratios, with no latency added between servers.}
-%	\label{fig:update_rates_single_noTC}
-%\end{figure}
 
-%Figure \ref{fig:update_rates_single_noTC} shows Single PotionDB's behaviour with updates.
-%The throughput decreases as the update ratio increases, but with a smaller decrease than in PotionDB, similarly to what was observed in the scenario with latency.
+%similar trends occur with updates, similar conclusions can be taken - Figure \ref{fig:update_rates_global_vs_local_noTC} showcases PotionDB's and Local PotionDB's throughputs for multiple update rates.
+%PotionDB's throughput is the same as previously in Figure \ref{fig:update_rates_global_single_tc}.
+%%PotionDB is the same as previously observed in Figure \ref{fig:update_rates_global_single_tc}. %, given latency between servers does not affect PotionDB's performance.
+%Local PotionDB's throughput only reaches $\sim$250k ops/s for all update rates.
+%%For Local PotionDB, the throughput is lower than PotionDB's in all cases, staying at around 250k ops/s for all update rates.
+%The stability of Local PotionDB's throughput across different update rates is threefold:
+%%Local PotionDB's stable throughput across different update rates is threefold:
+%\begin{enumerate*}[label=(\roman*)]
+%	\item multiple updates per transaction;%, unlike queries which are one per transaction;
+%	\item orders' locality, thus many update transactions are local;
+%	%\item orders' locality implies half of update transactions are fully local and most others involve only a subset of servers;
+%	\item view updates are not replicated as views are local, which slightly reduces server load. %"do not need to be replicated" instead of "are not replicated"
+%	%\item view updates do not need to be replicated unlike in PotionDB as views are local, thus slightly reducing server load.
+%	%\item orders' locality implies that half of update transactions can be executed fully locally, with most others only requiring a subset of servers, unlike global queries which require all servers;
+%	%\item since views are local, view updates do not need to be replicated and applied in other servers, thus slightly reducing server load.
+%\end{enumerate*} %This still has some overlap with the previous section
+%Update scenarios favour Local PotionDB, yet its performance is far from PotionDB's.
+%%Even though scenarios with updates are favourable for Local PotionDB, it still does not match PotionDB's performance even with an high update ratio.
+%Finally, Single PotionDB's thoughput is similar to what was observed in Figure \ref{fig:update_rates_global_single_tc} (and thus lower than PotionDB's), but with lower latencies ranging from 0.24ms to 0.6ms.
+%%Finally, Single PotionDB achieves a throughput similar to what was observed previously in Figure \ref{fig:update_rates_single_tc}, but with smaller latencies, ranging from 0.2ms to 0.6ms.
+%%Its throughput is, thus, still always lower than PotionDB's.
 
-%\begin{figure}
-%	\centering
-%	\includegraphics[width=0.62\linewidth]{singleQuery/all_queries_batch5_noTC}
-%	\vspace*{-0.7em}
-%	\caption{Query-only performance with all types of queries and with 5 queries per transaction.}
-%	\label{fig:global_local_single_batch_notc}
-%	\vspace*{-0.8em}
-%\end{figure}
+To conclude, PotionDB's global views provide query throughput and latency unmatched by alternative 
+\textit{Local} and \emph{Single} approaches in every tested scenario.
+We note, however,  that there is additional memory used for maintaining views in all replicas and this
+should be considered when deciding whether to adopt this approach or not in a single data center.
 
-%To conclude, PotionDB is able to outperform Single and Local PotionDB in every scenario
-To conclude, PotionDB's global views provide query throughputs and latencies unmatched by both Local and Single PotionDB in every tested scenario.
-%To conclude, while PotionDB is favoured by a geo-distributed scenario relatively to Local and Single PotionDBs, even in a single data center scenario PotionDB's replicated global views still provide query throughputs and latencies unmatched by both Local and Single PotionDB.
-As a side note, PotionDB scales further if clients issue multiple queries per transaction - e.g., with 5 queries/transaction, PotionDB's max throughput (resp. transaction latency) goes from 1.5M ops/s (0.37 ms) to 4.83M ops/s (0.68 ms), an increase of 222\% (83.8\%).
-%Local and Single PotionDB's throughput also increase but with a smaller factor. %TODO: Consider removing this last phrase.
-%As a side note, PotionDB's throughput scales even further if clients request multiple queries per transaction, as shown in Figure \ref{fig:global_local_single_batch_notc}.
+
+
 
 %\subsection{Query batching}
 %\label{subsec:query_batching}
