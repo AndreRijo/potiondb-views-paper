@@ -1145,21 +1145,14 @@ information that a given operation has been executed in the current location.
 \section{Views and Experience}
 \label{sec:views_for_apps}
 
-PotionDB provides materialized views, where a view is the result of a query (including aggregations and limits)
-over data in the database.  A materialized view is stored as a database object, which can be replicated
-in any location.
-PotionDB adopts an incremental view maintenance approach, where 
-view objects are updated in the context of transactions that update the database. 
-To this end, from the definition of the view, PotionDB generates code that runs as triggers.
-
-In this section we start by discussing how views are supported in PotionDB and proceed to 
-discuss %how 
+In this section, we discuss how materialized views are supported in PotionDB, by using PotionDB
+objects and triggers generated from the view specification. We also discuss
 our experience in defining views for the queries of the TPC-H benchmark~\cite{tpch}. 
 
 \subsection{Generated objects and triggers}
 \label{subsec:generated_view}
 
-Next, we outline how PotionDB, given a view specification, generates the 
+We now outline how PotionDB, given a view specification, generates the 
 %right 
 objects to hold the view's data and its updates. % the views.
 %For the sake of brevity and simplicity, we do not dive deep into the details of the algorithm, instead showing the intuition behind it.
