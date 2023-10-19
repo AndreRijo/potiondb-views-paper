@@ -415,16 +415,15 @@ In this paper we make the following contributions:
 \section{System Overview}
 \label{sec:overview}
 
-This section provides an overview of PotionDB, focusing on its support for 
+This section overviews PotionDB, focusing on support for 
 recurrent queries.
 
 PotionDB is a distributed database designed for supporting global services deployed at multiple data centers. 
-In these settings,
-it is common that (some) data items are only needed at some geographic locations. 
-As a running example, we will consider a large e-commerce company with online stores for different countries 
+In these settings, (some) data items are only needed at some geographic locations. 
+As a running example, we consider a large e-commerce site with online stores for different countries 
 and clients spread across the world. 
-The service includes data for millions of products, with some products available 
-only at some locations. The service also maintains information about customers and their purchases, 
+The service includes data for products, with some products available 
+only at some locations. The service maintains information about customers and their purchases, 
 with clients being associated with one online store.
 
 In this context, fully replicating the whole dataset might become too expensive.
@@ -461,7 +460,7 @@ social news aggregation.
 PotionDB is a distributed key-value database.
 We identify two types of values: base objects, $\mathit{Objs}$, and derived objects, $\mathit{Views}$.
 The set of objects of a database is defined as $\mathit{DB} = \mathit{Objs} \cup \mathit{Views}$.
-Informally, an object ($o$) is any value that is either a base object ($b$) or view ($v$).
+Informally, an object, $o$, is any value that is either a base object, $b$, or view,$v$.
 We distinguish between base objects and views whenever necessary for clarity.
 
 The value of a view is defined as a function over the values of other object(s), i.e., 
@@ -470,10 +469,10 @@ where $D_v$ is the set of objects (potentially both base objects and other views
 We assume the computation is non-recursive, i.e., the value of a view is never based on its own value or, formally, 
 $\forall\, v \in \mathit{Views} : v \notin D_v$.
 
-Objects are uniquely identified by a tuple $\mathit{(key, bucket, type)}$.
-For presentation purposes, we assume this tuple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
-When needed, we represent these properties for an object $o$ as
-$o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
+Objects are uniquely identified by a tuple $\mathit{id} = \mathit{(key, bucket, type)}$.
+%For presentation purposes, we assume this tuple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
+%When needed, we represent these properties for an object $o$ as
+%$o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
 Objects are stored in $\mathit{buckets}$, which are the unit of replication in PotionDB. 
 Buckets are further logically grouped in containers. %, as further detailed in Section \ref{subsec:buckets}. 
 An object has a $\mathit{key}$ inside the bucket.
@@ -497,7 +496,7 @@ in the presence of concurrent updates.
 %		& \\
 %		\hspace*{-0.35em}readTx(clk, read(s)) $\rightarrow$ clk, value(s) & updateTx(clk, update(s)) $\rightarrow$ clk \\
 %=======
-\begin{small}
+\begin{smaller}
 \begin{table}[t]
 \center
 	\begin{tabular}{ll} 
@@ -505,8 +504,8 @@ in the presence of concurrent updates.
 		 \code{begin(clk) $\rightarrow$ txId}                    & \code{get(txId, id) $\rightarrow$ value}            \\
 		 \code{commit(txId) $\rightarrow$ clk}            & \code{read(txId, id, op) $\rightarrow$ value}          \\
 		  \code{rollback(txId) $\rightarrow$ ok}        & \code{upsert(txId, id, op) $\rightarrow$ ok}                        \\[4pt]
-		\multicolumn{2}{l}{\code{readTx(clk, (id, op)$^+$) $\rightarrow$ clk, value$^+$}} \\
-		\multicolumn{2}{l}{\code{updateTx(clk, (id, op)$^+$) $\rightarrow$ clk}} \\
+		\multicolumn{2}{l}{\code{oneShotTx(clk, (id, op)$^+$) $\rightarrow$ clk, value$^+$}} \\
+	%	\multicolumn{2}{l}{\code{updateTx(clk, (id, op)$^+$) $\rightarrow$ clk}} \\
 		%\multicolumn{2}{l}{\code{readTx(clk, read$^+$) $\rightarrow$ clk, value$^+$}} \\
 		%\multicolumn{2}{l}{\code{updateTx(clk, update$^+$) $\rightarrow$ clk}} \\
 		\bottomrule
@@ -514,36 +513,39 @@ in the presence of concurrent updates.
 	%\vspace{0.8em}
 	\caption{PotionDB's data manipulation API.}
 	\label{table:PotionDB_API}
-	\vspace{-15pt}
+	\vspace{-20pt}
 \end{table}
-\end{small}
+\end{smaller}
 
 PotionDB offers a key-value  transactional interface, as summarized in Table \ref{table:PotionDB_API}.
-An application issues interactive transactions, by executing operation \code{begin(clk)},
+An application issues interactive transactions, by executing \code{begin(clk)},
 where \code{clk} is used to enforce causality between consecutive transactions.
 A transaction proceeds with a sequence of operations: 
 \begin{inparaenum}[(i)] 
 \item \code{get(txId, id)}, which returns the full state of the object;
 \item \code{read(txId, id,op)}, which returns the result of read-only operation \code{op} executed in the object; and
-\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, or creates the object if it does not exist; 
-\item an object is deleted by issuing the \code{delete}  operation.
+\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, or creates the object if it does not exist.
+%; 
+%\item an object is deleted by issuing the \code{delete}  operation.
 \end{inparaenum}
-Operations defined in each object are type-specific - e.g. a set object has a \code{contains(e)} operation to check
+Operations defined in each object are type-specific - e.g. a set has a \code{contains(e)} operation to check
 if value \code{e} belongs to the set, and an \code{add(e)} and \code{remove(e)} to add or remove \code{e} from the set.
-The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
+A transaction ends with a \code{commit(txId)} for committing the transaction%, making updates durable,  
+or \code{rollback(txId)} to abort the transaction.
 
 %PotionDB also allows an application to issue an one-shot~\cite{eiger} read-only or write-only transaction,
-PotionDB also allows an application to issue an one-shot
+PotionDB also supports one-shot transactions, \code{oneShotTx(clk, (id, op)$^+$)}, that include a sequence of read or
+write operations.
 %~\cite{??????} 
-read-only or write-only transaction,
-by executing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
+%read-only or write-only transaction,
+%by executing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
 %for aborting 
 
-PotionDB provides a data definition API, including operations to create and delete buckets, and 
-to create views. As it is common in key-value stores and document databases, buckets have no associated
-data type, i.e., any object type can be stored in any bucket although it is common for applications to 
+PotionDB's data definition API includes operations to create and delete buckets, and 
+to create views. Even if buckets have no associated
+data type, i.e., any object type can be stored in any bucket, we expect that applications 
 store objects of the same type in each bucket.  A document or a table row can be stored in 
-PotionDB as map CRDT, with each element of the map having its own type. 
+PotionDB as a map CRDT, with each element of the map having its own type. 
 
 
 \begin{figure}[t]
@@ -587,22 +589,21 @@ LIMIT 10
 %LIMIT 10
 
 
-The operation to create a view receives a view specification defined in a language based on SQL~\cite{sequel}.
-Figure \ref{fig:viewtopsales} shows the specification of a view that maintains the top 10 products with  most profit in sales for
+The create view receives a view specification defined in a language based on SQL~\cite{sequel}.
+Figure \ref{fig:viewtopsales} shows the specification of a view that maintains the top 10 products with most profit in sales for
 each month. %The create view specifies in which bucket and object the  materialized view object will be stored.
-\qcr{CREATE VIEW} specifies in which key (prefix) and bucket the materialized view will be stored.
-The \qcr{FROM} clause specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
+\qcr{CREATE VIEW} specifies the key prefix and bucket of the materialized view objects.
+The \qcr{FROM} specifies which container(s) are used in the computation of the view, while \qcr{SELECT} specifies
 the attributes of the view, which can include simple attributes or aggregations.
-As usual in SQL, it is possible to define aggregations over groups with the \qcr{GROUP BY} clause,
+It is possible to define aggregations over groups with the \qcr{GROUP BY} clause,
 restrict the number of elements with a \qcr{LIMIT} clause, and
 order the results using an \qcr{ORDER BY} clause. %which can be ordered using a \qcr{ORDER BY} clause.
 
 In recurrent queries, it is common that a generic query is instantiated with different values. 
 To support this, our language allows the use of variables in the view definition.
 %, specified using  square brackets. 
-In the example, we have variables \qcr{YEAR} and \qcr{MONTH}, 
-which will lead the system to maintain
-for each pair (year, month) that exists in the database, the top 10 sales.
+In the example, variables \qcr{YEAR} and \qcr{MONTH} lead the system to maintain
+for each pair (year, month), the top 10 sales.
 
 
 %A common requirement when defining views \cite{tpch} is to maintain only the top elements
@@ -611,11 +612,11 @@ for each pair (year, month) that exists in the database, the top 10 sales.
 %with  \qcr{ORDER BY} and  \qcr{LIMIT} clauses - in the example, for each month and year, only the 10 
 %top sold products will be maintained.
 
-Given a view definition, PotionDB automatically infers the objects to be used to store the view contents and
-the view updates  required to incrementally maintain the materialized view whenever a relevant base object 
-is written. We detail this process in Section \ref{subsec:generated_view}.
-The data in a materialized view object is read in the same way as any other object, by issuing read
-operations to the view object.
+Given a view definition, PotionDB automatically infers the objects to be used to store the view and
+the view updates required to incrementally maintain the materialized view whenever a relevant base object 
+is updated - details are presented in Section \ref{subsec:generated_view}.
+The data in a materialized view object is read as any other object, by issuing reads
+to the view object.
 
 
 %\begin{table}[t]
@@ -750,7 +751,7 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 
 \begin{figure}
 	\centering
-	\includegraphics[width=\linewidth]{PotionDBArch}
+	\includegraphics[width=0.8\linewidth]{PotionDBArch}
 	\caption{PotionDB Architecture}
 	\vspace{-15pt}
 	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
