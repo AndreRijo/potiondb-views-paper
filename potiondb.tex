@@ -1921,7 +1921,7 @@ for \textit{Local} and \textit{Single}, due to the low latency for contacting ot
 	\centering
 	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
 	\vspace*{-0.65em}
-	\caption{PotionDB and Local PotionDB's performance with multiple update rates, without added latency.}
+	\caption{PotionDB and \textit{Local} performance with multiple update rates, without added latency.}
 	\label{fig:update_rates_global_vs_local_noTC}
 	\vspace*{-1.3em}
 \end{figure}
@@ -1960,121 +1960,27 @@ We note, however,  that there is additional memory used for maintaining views in
 should be considered when deciding whether to adopt this approach or not in a single data center.
 
 
-
-
-%\subsection{Query batching}
-%\label{subsec:query_batching}
-%
-%\begin{figure}
-%	\centering
-%	\includegraphics[width=0.7\linewidth]{singleQuery/all_queries_batch5_noTC}
-%	\caption{Query-only performance of PotionDB, Local PotionDB and Single PotionDB with all types of queries, 5 queries per transaction}
-%	\label{fig:global_local_single_batch_notc}
-%\end{figure}
-%
-%In all previous experiments, each client executes only one query per transaction.
-%Said situation does not allow for full usage of PotionDB's throughput.
-%As an example, Figure \ref{fig:global_local_single_batch_notc} shows the query throughput of PotionDB, Local PotionDB and Single PotionDB when clients execute 5 queries per transaction.
-%The higher throughput is noticeable - for instance, PotionDB's max throughput is almost 3 times higher compared to only 1 query per transaction. %Could say here or somewhere else this is because one of the queries is a Top100, which does not scale very well with batching
- 
-%Note: The idea here is to repeat all the tests before without latency and notice how our solution is still better than local and single PotionDB.
-%
-%\begin{itemize}
-%	\item Explain how latency favours our solution over local and single PotionDB (i.e., our solution is unnafected by latency)
-%	\item Explain that is why from here on we will test on a single DC, which benefits local and single
-%\end{itemize}
-%
-%%Need to add graphs, these ones I believe I have on the paper already
-%
-%\begin{figure}[h]
-%	\centering
-%	\begin{subfigure}{.5\linewidth}
-%		\centering
-%		\includegraphics[width=.9\linewidth]{clientScale_cut}
-%		\caption{All queries}
-%		\label{fig:(new)global_local_single}
-%	\end{subfigure}%
-%	\begin{subfigure}{.5\linewidth}
-%		\centering
-%		\includegraphics[width=.9\linewidth]{Q3vsQ5_cut}
-%		\caption{Single query type}
-%		\label{fig:(new)q3q5}
-%	\end{subfigure}
-%	\caption{Query-only performance of PotionDB and its local and single view versions, without added latency. On the left all queries are executed, while on the right only Q3 or Q5 are.}
-%	\label{fig:(new)query_only}
-%\end{figure}
-%
-%\begin{itemize}
-%	\item Can confirm that PotionDB's performance is unaffected by added latency - same performance as before.
-%	\item Local and single PotionDB still perform much worse than PotionDB when executing all queries.
-%	\item Local PotionDB performance for all queries is around 1/6th of PotionDB. This is due to 2/3rd of the queries requiring data from all servers, which means needing to redirect requests and adding extra load on all servers, as well as having to wait for RTT. Furthermore, it implies all transactions need to wait for the slowest server. (Note: these redirected requests do not count for throughput - i.e., if a query only needed a single read in normal PotionDB, we only count as one read even if all servers need to execute said read)
-%	\item Local PotionDB works well for Q5, as this query is served totally with data of a region (i.e., local data). For queries of a region, the clients always pick the region of the server they are connected to. Thus, no redirects occurs and its performance is comparable to PotionDB.
-%	\item Local PotionDB does not perform well with Q3, a query requiring global data. The performance is only 1/13th of PotionDB's. This is due to the redirected requests, exercing extra pressure on all servers, the extra round-trip and bigger data transfers. (Note: this query is a top 10, thus the data transferred is non-negligible.)
-%	\item Single PotionDB's max throughput is about 1/5th of PotionDB's performance for all scenarios considered, as one server gets the full load.
-%\end{itemize}
-%
-%\begin{figure}[h]
-%	\centering
-%	\includegraphics[width=.75\linewidth]{updRate_global_cut}
-%	\caption{PotionDB's performance with varying update rate.}
-%	\label{fig:(new_2)update_rates}
-%\end{figure}
-%\begin{figure}[h]
-%	\centering
-%	\begin{subfigure}{.5\linewidth}
-%		\centering
-%		\includegraphics[width=.99\linewidth]{updRate_queryLatency_cut}
-%		\caption{Query-latency}
-%		\label{fig:(new)update_rates_query}
-%	\end{subfigure}%
-%	\begin{subfigure}{.5\linewidth}
-%		\centering
-%		\includegraphics[width=.99\linewidth]{updRate_updateLatency_cut}
-%		\caption{Update-latency}
-%		\label{fig:(new)update_rates_update}
-%	\end{subfigure}
-%	\caption{PotionDB's performance with varying update rate, with query and update latencies split. Note that each update transaction adds and removes one order, as well as associated items and views, thus having more operations than one query-only transaction.}
-%	\label{fig:(new)update_rates_split}
-%\end{figure}
-%
-%\begin{figure}[h]
-%	\centering
-%	\includegraphics[width=.7\linewidth]{updRate_localvsglobal_cut}
-%	\caption{Normal(P\_) and Local (L\_) PotionDB's performance with varying update rate.}
-%	\label{fig:(new)update_rates_normal_vs_local}
-%\end{figure}
-%
-%Note: Figure \ref{fig:(new_2)update_rates} is the same one as the one used in the latency section as... there is no visible difference.
-%I could however re-run the experiments with latency to have maybe a very slightly difference. I suppose we won't repeat the graph.
-%
-%Note2: Are the graphs in Figure \ref{fig:(new)update_rates_split} still relevant? The idea is to differentiate how the latency of queries/updates scales. I believe it is.
-%
-%Note3: All the graphs still include in their throughput the view's updates. I will remove this later.
-%
-%\begin{itemize}
-%	\item Mention how it can be observed that added latency has no effect on PotionDB's throughput with updates;
-%	\item It is noticeable that updates have higher latency than queries even with few clients. This is mostly due to transactions with updates having more operations than query-only (due to needing to update order + its items + all views)
-%	\item Latency on updates spikes more heavily at the end compared to queries. This is due to many concurrent transactions trying to commit, which makes each transaction having to wait for multiple others to finish before it is successfully committed. (I need suggestions to explain this one. Basically it's the problem of 2PC - too many transactions, they start conflicting and slow down the system. We don't use locks however.)
-%	\item Not having latency added benefits local PotionDB. However, overall, its performance is still worse than PotionDB.
-%	\item Local PotionDB's throughput increases slightly with the increase of the update ratio. This is because updates are not as hindered by views being split per region as queries. Half of our orders are local to a region, thus all updates of those half will be local-only. Even for orders that are not fully local, usually they only refer a subset of the other regions, thus only a few updates get redirected and to few servers. Furthermore, updates to the views do not need to be replicated and applied everywhere as all views are local.
-%\end{itemize}
-%
-%IMPORTANT NOTE: After I remove the view's updates from the counting, it is possible that Local PotionDB no longer increases throughput with the \% of updates. However, it will still be worse than PotionDB for sure.
-
 %\subsection{Types of views (or maybe, Views type benchmarking?}
 \subsection{Scalability of different types of views}
 \label{subsec:microbenchmarks}
 
-We now try to assess how the CRDTs supporting different kinds of views scale.
-We focus on what is most common in TPC-H: limits (TopK/TopSum) and aggregations, namely count and sum (Counter) and average (Average).
-%We focus on the most common aggregations found on TPC-H: limits (TopK/TopSum), count and sum (Counter) and average (Average).
+This section studies how different views behave and scale for different configuration. 
+To this end,  we study the behavior of the underlying CRDTs used for supporting different types of 
+view: simple limits (Top-K), limits over aggregations (Top-K counter), sum/count (Counter) and average (Average) aggregations.
 
-In this scenario we drop TPC-H's dataset and use instead micro-benchmarks.
-For each test we prepare 20 CRDTs with random initial data.
-TopKs and TopSums are initialized with 10k elements and never go beyond 10k.
-We maintain the same number of servers (5) and replicate each CRDT in all servers.
-Each client picks a CRDT randomly according to an uniform distribution and executes reads and possibly updates on it.
-Unless stated otherwise, each client executes 5 operations per transaction, in order to avoid communication overheads of small messages dominating our experiments.
+These experiments were performed using micro-benchmarks, where the underlying CRDTs are 
+accessed directly by clients - this allows to measure the performance of maintaining the views 
+only, without the overhead of storing the base data.
+We run the experiments with the same configuration as the previous experiments - 10 machines
+divided in 5 groups, with one machine for the server and another for running clients, with no
+additional latency added to communications.  
+In each experiment, we have 20 CRDTs with random initial data.
+Top K and Top K Counter CRDTs are initialized with 10K elements. 
+Clients execute transactions consisting in read and updates operations, with each operation 
+executed in a CRDT selected randomly using a uniform distribution. For Top K, update operations
+are insert and remove of a random elements; for top K counter, update operations are increment 
+and decrement to a random element.
+Unless stated otherwise, each transaction consists in a batch of 5 operations.
 
 
 \begin{figure}
@@ -2100,32 +2006,30 @@ Unless stated otherwise, each client executes 5 operations per transaction, in o
 %For 5 batch: 8.339676e+06, 8.194999e+06, 2.211799e+06	, 2.676134e+05
 %TODO: Maybe not focus so much on serialization/deserialization: it may not be easy to justify/not the real cause
 
-\paragraph{TopK - K scalability and comparison with TopSum.} %\hspace{0em}
+\paragraph{Scalability of Top-K and Top-K Counter:} %\hspace{0em}
+We start by studying the impact of batch size in the number of operations executed. 
+Figures \ref{fig:topSize_single} and \ref{fig:topSize_batch} present the results for a read-only workload accessing
+top-K objects, where transactions include, respectively, 1 read operation and 5 read operations.
+The results show that, for small tops - Top-1 and Top-10, the number of operations executed increases almost
+linearly with the number of reads in the transaction.  This shows that in this case,  the fixed overhead of setting 
+up a transaction and sending messages dominates the load. 
+For larger tops, the number of operations executed increases increasing less. This shows that the amount of data 
+transmitted becomes increasingly more relevant in the performance of the system.
+We expect that with tops larger than 1000, the number of operations performed when using batches will 
+tend to be similar to that when performing read independently.
 
-Figures \ref{fig:topSize_single} and \ref{fig:topSize_batch} showcase TopK's read performance for different values of K where clients execute, respectively, 1 and 5 reads per transaction.
-Top1, Top10 and Top100 all perform similarly with 1 read per txn, as communication overhead for small messages (latency, metadata, serialization and deserialization of protobufs) and high number of clients dominate over costs of data transfer and query execution time.
-%Top1, Top10 and Top100 all perform equally with 1 read per txn - this happens as the considerable communication overhead for such small requests and replies (latency, metadata transferred, serialization and deserialization of protobufs), together with the overhead of handling a high number of clients, dominates over the costs of data transfer and query execution time.
-Grouping reads reduces the aforementioned overhead - with 5 reads per transaction, throughput from Top1 to Top10 drops very slightly ($\sim$2\%), with a much bigger drop for Top10 to Top100 ($\sim$73\%) and Top100 to Top1000 ($\sim$88\%).
-In the latter two cases the amount of data transferred for the replies is the dominating factor, thus making better usage of the network's bandwidth.
-We expect that after 1000, increasing K linearly will decrease throughput linearly as well.
-%by the same factor.
 
-%\begin{figure}
-%	\centering
-%	\begin{subfigure}{.49\linewidth}
-%		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_1_5b}
-%		\caption{10\% updates}
-%		\label{fig:topSize_10_upd}
-%	\end{subfigure}%
-%	\hspace*{0.8em}
-%	\begin{subfigure}{.49\linewidth}
-%		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_25_5b}
-%		\caption{25\% updates.}
-%		\label{fig:topSize_25_upd}
-%	\end{subfigure}
-%	\caption{TopK performance for different top sizes and update rates.}
-%	\label{fig:topSize_upd}
-%\end{figure}
+%The results show that Top1, Top10 and Top100 all perform similarly with 1 read per txn, as communication overhead 
+%for small messages (latency, metadata, serialization and deserialization of protobufs) and high number of clients 
+%dominate over costs of data transfer and query execution time.
+%
+%
+%
+%Grouping reads reduces the aforementioned overhead - with 5 reads per transaction, throughput from Top1 to Top10 drops very slightly ($\sim$2\%), with a much bigger drop for Top10 to Top100 ($\sim$73\%) and Top100 to Top1000 ($\sim$88\%).
+%In the latter two cases the amount of data transferred for the replies is the dominating factor, thus making better usage of the network's bandwidth.
+%We expect that after 1000, increasing K linearly will decrease throughput linearly as well.
+%%by the same factor.
+
 
 \begin{figure}
 	\centering
@@ -2137,14 +2041,17 @@ We expect that after 1000, increasing K linearly will decrease throughput linear
 	\vspace*{-0.75em}
 \end{figure}
 
-We now consider also the execution of updates for different values of K.
-For updates, we use an add/remove ratio of 90\%/10\%, as it is unusual for tops/leaderboard-like objects to have frequent removes \cite{Cabrita17Nonuniform}.
-Figure \ref{fig:topKVSTopSum} shows both TopK's and TopSum's max throughputs for multiple update/read ratios.
-%Figure \ref{fig:topKVSTopSum} shows both TopK's and TopSum's max throughputs for update/read ratios of 0\%/100\%, 10\%/90\% and 25\%/90\%.
-In all cases TopSum and TopK perform similarly.
-%In all cases, despite TopSum's higher flexibility, its throughput is equivalent to TopK's.
-%For now we focus only on TopK.
-%Thus, we focus on TopK's scalability with updates.
+We now compare how Top K and Top K Counter behave for different values of K, with different update
+ratios. For updates, we use an add/remove ratio of 90\%/10\%, as it is unusual for an element to be removed
+from being considered for a top \cite{Cabrita17Nonuniform} (note that a top K object keeps information about 
+all elements in a partitioned way, with only the top K element being replicated in all replicas). 
+Figure \ref{fig:topKVSTopSum} shows that both TopK and Top K Counter maximum throughput is similar, which
+shows that the mechanism used for deciding when it is necessary to propagate updates for Top K Counters 
+perform well. When considering different update ratios, for small tops 
+
+
+The performance of 
+
 Thus, we now focus on update scalability.
 %The results with updates are somewhat different to query-only.
 The size of an update is independent of the top's size - thus, as the amount of updates increase and reads decrease, throughput increases considerably for Top1000 and slightly for Top100.
