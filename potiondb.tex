@@ -348,28 +348,30 @@ To our knowledge, our work is the first to address the problem of maintaining ma
 
 \andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
-We evaluated our system using micro-benchmarks and \mbox{TPC-H} queries~\cite{tpch}.
+We used micro-benchmarks and \mbox{TPC-H} queries~\cite{tpch} to evaluate PotionDB.
 The results show that our algorithms for maintaining materialized views impose 
 low overhead when executing asynchronously replicating transactions, particularly
 for views with limits. 
 \nuno{deviamos ter uns micro-benchmarks que comparassem o overhead com limites e sem limites}
 %Additionally, the results show that executing queries by relying on the materialized views is much more 
 %efficient than using alternative mechanisms.  
-Furthermore, our algorithms for maintaining materialized views in a decentralized way perform better 
-than alternative approaches where the view is computed in a single data center, while being
-able to keep consistency between the base and view data in every replica.
+Moreover, our algorithms for maintaining materialized views in a decentralized way perform better 
+than alternative approaches where the view is computed in a single data center, 
+while also keeping consistency between the base and view data in every replica.
 
 In this paper we make the following contributions:
 %\begin{enumerate*}[(label=\roman*)]
-\begin{compactitem}
-	\item design of a geo-replicated key-value store  with support for partial replication
+\begin{itemize}[noitemsep,topsep=0pt,parsep=0pt,partopsep=0pt,leftmargin=*]
+	\item 
+	%design of a 
+	geo-replicated key-value store  with support for partial replication
 	and views over partially replicated data (Section~\ref{sec:transactions}); 
-	\item replication algorithms for efficiently maintaining consistent materialized views over 
+	\item replication algorithms that efficiently maintain consistent materialized views over 
 	partially replicated data (Section~\ref{sec:views_for_apps});
 %	\item a language inspired in SQL for view specification in key-value stores, with view maintenance code automatically inferred from the specification;
 	 \item implementation and evaluation of the proposed approach with micro-benchmarks
 	 and TPC-H (Section~\ref{sec:evaluation}).
-\end{compactitem}
+\end{itemize}
 
 %The remainder of the paper is organized as follows.
 %Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
@@ -395,7 +397,7 @@ In this paper we make the following contributions:
 %\end{itemize}
 %}
 
-\vspace{-20pt}
+
 \section{System Overview}
 \label{sec:overview}
 
@@ -426,9 +428,9 @@ For supporting the latter, %operations,
 PotionDB provides materialized views that are the result of an aggregation 
 over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
-The key features of this example -- global service with a large database with
+The key features of this example - global service with a large database with
 data that is mostly access in a single (or few) location,  and some operations accessing the result
-of a global aggregation -- are common to other global services, such as multi-user online games, and
+of a global aggregation - are common to other global services, such as multi-user online games, and
 social news aggregation.
 
 
@@ -516,6 +518,7 @@ Operations defined in each object are type-specific - e.g. a set object has a \c
 if value \code{e} belongs to the set, and an \code{add(e)} and \code{remove(e)} to add or remove \code{e} from the set.
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
+%PotionDB also allows an application to issue an one-shot~\cite{eiger} read-only or write-only transaction,
 PotionDB also allows an application to issue an one-shot
 %~\cite{??????} 
 read-only or write-only transaction,
@@ -804,9 +807,11 @@ We now explain the guarantees and uses of each type of objects.
 \noindent
 \textbf{CRDTs.} CRDTs are replicated objects that are guaranteed to converge
 after applying the same set of operations. In particular, PotionDB uses operation-based CRDTs,
-in which the convergence of replicas is guaranteed if operations are applied respecting causality. 
-This is the case in PotionDB, as a valid serialization of transaction must respect the happens-before
-relation, i.e., the causal order.
+in which the convergence of replicas is guaranteed if operations are causally applied.
+% respecting causality.  
+This is the case in PotionDB, as a valid transaction serialization must respect the happens-before
+relation.
+%, i.e., the causal order.
 
 Our prototype supports the following CRDTs: last-writer-wins register, for storing opaque values;
 add-wins set, for keeping a set where adding an elements wins over a concurrent removal of that element;
@@ -852,24 +857,27 @@ First, in top-K objects,  instead of keeping only the value associated with an e
 attributes, as needed for maintaining the attributes of a view with a limit clause.
 
 \carla{I don't understand the next paragraph!}
-As such, a top-K object consists in a set of CRDT maps, rows, with two special elements - the key of the 
-row and the ordered value used for selecting the top rows.
+As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
+row and the ordered value used to select the top rows.
 An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
 and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
-row, with the operations of the data type associated with the row element. \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
+row, with the operations of the data type.% associated with the row element.
+ \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
 
 Second, we extend NuCRDT specifications to include information that allows a replica to know if it might be exposing incorrect results. 
 This information consists in the timestamps of operations (transactions) that could cause the anomaly - e.g. in our maximum NuCRDT example, 
 this is the timestamp of the transaction with the \emph{remove} operation that deleted the previous maximum. 
 Given this information, and knowing the updates that replicas have seen (which is maintained by PotionDB), 
 a replica knows that no anomaly can occur if the operation has been seen by all replicas of the object, 
-which would have triggered replica to send the operations that could be relevant for the observable state, if any.
+which would have triggered replicas to send the operations that could be relevant for the observable state, if any.
  
-Third, we also extend NuCRDT specifications to maintain a larger observable state to minimize the 
-cases in which a replica may be exposing incorrect results in practice. In our example, the maximum NuCRDT
+Third, we extend NuCRDT specifications to maintain a larger observable state to reduce the instances
+ in which a replica may be exposing incorrect results.
+ % in practice. 
+ In our example, the maximum NuCRDT
 maintains the two largest elements. Therefore, if the maximum element
 is deleted, replicas still have the new maximum. 
-Doing this is straightforward for all NuCRDTs we have defined, besides the top-K counter. 
+This extension is simple for all NuCRDTs we have defined, besides the top-K counter. 
 \carla{What is "this" is the above sentence?}
 
 \nuno{explicar como fazer?}
@@ -992,17 +1000,19 @@ there will be no updates, as $L_i$ does not replicate $o$.
 
 \noindent
 \textbf{Reads on NuCRDTs.}
-As mentioned in the previous Section, due to the way NuCRDTs work, they may temporarily expose 
+As mentioned, due to the way NuCRDTs work, they may temporarily expose 
 incorrect results when the execution of an operation $o$ changes the set of relevant operations.  
-As explained before, PotionDB maintains information for a replica to know if this is the case and
-this is expected to be a rare situation. \andre{Shouldn't we mention again we have mechanisms to make this situation even more rare to happen? (e.g., maintaining a top of double the size.)}
+As explained, PotionDB is able to detect this situation 
+%maintains information for a replica to know if this is the case 
+and
+it is expected to be a rare situation. \andre{Shouldn't we mention again we have mechanisms to make this situation even more rare to happen? (e.g., maintaining a top of double the size.)}
 Applications may select two behaviors when they start a transactions.
 First, to ignore the potential anomalies and immediately execute the read operation in the local replica.
 This guarantees fast replies at the cost of potential anomalies. 
 %
 Second, to strictly enforce TCC. In this case, the read blocks until the replica can gather 
-information that there is no missing relevant operation. This requires receiving information from
-all replicas that operation $o$ has been performed and all additional relevant operations, if any, have been
+information that no relevant operation is missing. This requires receiving information from
+all replicas that operation $o$ has  performed and all additional relevant operations, if any, have been
 propagated. This is done in the context of the replication process and explained later.
 
 \noindent
@@ -1081,21 +1091,21 @@ If an update operation has no
 effect in the observable object state, hence does not need to be propagated, 
 the update operation just generates a null effect.
 
-In NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{prv}$
+In NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{p}$
 relevant, requiring this previous operation to be propagated to other replicas  
 (e.g.  \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
 maximum element relevant). There are two cases to be considered.
 %
 The first case is when operation $o$ is executed initially. Then the effect of
-$o$ will include also the effect of $o_{prv}$. Thus, as the combined effects are propagated and applied in 
+$o$ will include also the effect of $o_{p}$. Thus, as the combined effects are propagated and applied in 
 the context of the same transaction, no anomaly is generated.
 %
-The second case happens when the now relevant $o_{prv}$ operation was executed in  
+The second case happens when the now relevant $o_{p}$ operation was executed in  
 another replica.  This is handled by replication process as follows.  When a location receives
 the replication stream from other replicas, it executes the received \emph{effects} in the objects' local copy.
 For NuCRDTs, the execution of an \emph{effect} operation may generate additional 
 \emph{effects} - in our example, the execution of the \emph{effect}s of $o$ would generate
-the effects of $o_{prv}$. These extra effects are remotely propagated 
+the effects of $o_{p}$. These extra effects are remotely propagated 
 %to other locations 
 along with the 
 information that a given operation has been executed in the current location. 
@@ -1149,7 +1159,10 @@ in the view.
 \noindent
 \textbf{Generated triggers:}
 After determining the objects used to represent the view, PotionDB generates triggers to update 
-the contents of the view, as base objects are created, updated or deleted (referred simply as updates). 
+its contents,
+%of the view, 
+as base objects are created, updated or deleted.
+% (referred simply as updates). 
 The trigger will be set for the container (or buckets) specified in the \emph{from} clause of the view
 definition.
 If a \emph{where} clause is included in the view definition, updates to objects that do not match the 
@@ -1456,8 +1469,10 @@ update the view objects.
 \subsubsection{Data model}
 \label{subsec:dataset}
 
-We now describe our experience applying our proposed model to the queries defined in TPC-H.
-TPC-H data is representative of an e-commerce service with tables storing information about customers, suppliers, parts (products), orders, 
+We now describe our experience applying our 
+%proposed 
+model to the queries defined in TPC-H.
+TPC-H data is typical of an e-commerce service with tables storing information about customers, suppliers, parts (products), orders, 
 countries and regions (continents).
 Two extra tables represent associations: partsupply and lineitem represent, respectively, a part provided by a supplier
 and a product sold in an order. 
@@ -1586,7 +1601,7 @@ In this case, four objects will be created, one for each value of \texttt{quanti
 order is inserted (or updated), the four objects are updated.
 
 % limitações
-\paragraph{Limitations:} The language for specifying views in PotionDB has several limitations, when
+\paragraph{Limitations.} The language for specifying views in PotionDB has several limitations, when
 compared with support for defining views in relational databases. The main limitations concern the 
 lack of support for joins and sub-queries, and the limited expressiveness in clauses like select and where. 
 This makes more difficult the specification of views for some complex queries and might even make it 
@@ -1609,6 +1624,7 @@ FROM Partsupp
 WHERE N_Name == [NATION]
 \end{lstlisting}
 	\caption{Important stock identification query (Q11).}
+	\vspace{-5pt}
 	\label{fig:q5_view}
 \end{figure}
 
@@ -1633,20 +1649,20 @@ reach the percentage ratio specified in the query).
 %\end{itemize}
 
 
-In this section we evaluate PotionDB's prototype, aiming at answering the following questions: 
+We evaluated PotionDB's prototype, aiming at answering the next questions: 
 \begin{enumerate*}[label=(\roman*)]
-	\item  \label{enum:q1} Can global views over partially geo-replicated data provide better performance than alternative approaches? 	     
+	\item  \label{enum:q1} Can global views over partially geo-replicated data give better performance than alternative approaches? 	     
 	\item \label{enum:q2} Are global views still worthwhile in a single data center scenario?
 	\item \label{enum:q3} How do different types of views behave? 
 \end{enumerate*}
 
-Out prototype was implemented in Go and uses Google's protobufs to serialize/deserialize all data transmitted.
+Our prototype was implemented in Go and uses Google's protobufs to serialize/deserialize all data transmitted.
 
 \subsection{Experimental setup}
 \label{subsec:setup}
 
 In our experiments, we compare the following alternative approaches to maintain views:
-\begin{itemize}[leftmargin=10pt]
+\begin{itemize}[leftmargin=*,noitemsep,topsep=0pt,parsep=0pt,partopsep=0pt]
 	\item \emph{PotionDB}, our proposed approach where all servers replicate the complete materialized view;
 	\item \emph{Local}, where each server maintains a local view that includes only the objects replicated in the server - in this case, 
 	updates to the view result only from updates to the objects replicated in the server; 
@@ -1701,9 +1717,12 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 Figure \ref{fig:global_local_single_tc} shows the results of running all selected TPC-H queries for the three alternative approaches. 
 As expected, PotionDB throughput, latency and scalability are considerably better than alternative approaches, reaching 
 1.5 million queries/s with latency under 0.6 milliseconds. 
-This results from the fact that all queries are local, while in alternative approaches, global queries need to access data from 
-remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading not only
-to higher latency but also to lower throughput. 
+This results from all queries being local, while in alternative approaches, global queries need to access data from 
+remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading 
+%not only
+to higher latency 
+%but also to 
+and lower throughput. 
 
 When comparing the results of \textit{Single} and \textit{Local}, the \textit{Single} configuration has much lower latency and higher throughput. This is explained by the fact that clients connected directly to the server that holds the views are very fast and 
 end up executing a much higher number of requests, that clients in other regions, which experience high latency- this can be 
@@ -1739,7 +1758,7 @@ To conclude, having global, complete views replicated in every server allows all
 \label{subsec:data_locality}
 For better understanding the effects of data locality,  Figures \ref{fig:q3_tc} and \ref{fig:q5_tc} present, respectively, the performance when
 executing a single global query (TPC-H Q3) and local query (TPC-H Q5). 
-For the global query, the results are similar to the complete workload, with the main difference an increase in latency and reduction in the throughput for the \textit{Local} configuration. This is explained by the fact that in this case, all queries need to contact remote servers and results do not include the effects of operations that execute locally.
+For the global query, the results are similar to the complete workload, the main difference being an increase in latency and reduction in  throughput for the \textit{Local} configuration. In this case this is explained by all queries needing to contact remote servers and results do not include the effects of operations that execute locally.
 
 For the local query, the \textit{Local} configuration performs similarly to \textit{PotionDB}. The reason for this is that, in this case, queries only access the local server that has all necessary information - a client in a region only performs request for data of that region.
 In short, PotionDB is efficient for both global and local queries, while \textit{Local} is heavily hindered by latency for any query that is not fully local.
@@ -1793,7 +1812,7 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Performance with multiple update rates}
+	\caption{Performance with multiple update rates.}
 	\label{fig:upds_tc}
 	\vspace*{-1.2em}
 \end{figure}
@@ -1826,16 +1845,16 @@ For instance, at PotionDB's maximum throughput for 25\% updates, the query-only 
 %The main observable difference in query latency is the latency at the middle of the throughput raising earlier.
 %We believe this may be due to network artifacts that lead to latency raising slightly when using over a certain amount of bandwidth - since update transactions have many updates, this threshold is reached with less clients. %TODO: This is... not really a good explanation. Sigh
 
-\textit{Local} throughput improves as the ratio of updates increase.  This results from the fact that we 
+\textit{Local} throughput improves as the ratio of updates increase.  This stems from the fact that we 
 are computing the number of executed operations, and the create transaction includes multiple updates. 
 Thus, the overhead for executing a transaction (messages for starting and committing a transaction) is paid
 only once for multiple operations\footnote{In PotionDB, if a transaction includes 5 queries/transaction the maximum throughput 
 goes to 4.83M op/s (with latency of 0.68ms), when compared with 1.5M ops/s with (with latency of 0.37 ms) for one query per transaction.}.  
-Additionally, update transactions do not need to contact other servers - view updates are propagated asynchronously -,  
+Moreover, update transactions do not need to contact other servers - view updates are propagated asynchronously -,  
 as 50\% of the orders are local to a region\footnote{This does not occur on the original TPC-H dataset, 
 whose orders' items are random. This modification adds locality to orders, which is more realistic for 
 an e-commerce scenario and helps \textit{Local} more than PotionDB.} and most other orders
-refer few regions.  This leads to a slightly lower average latency with higher update rates.
+refer few regions.  This leads to a slightly lower average latency \mbox{with higher update rates.}
 
 %fig:update_rates_single_tc
 \textit{Single} configuration has throughput losses comparable to PotionDB's, except for 25\% updates where the drop in throughput is smaller 
@@ -2637,26 +2656,33 @@ PotionDB's replication mechanism groups remote transactions together, allowing f
 %TODO: Veronica uses projection to improve queries, might be worth comparing to.
 
 %Maybe should use only "Consistency" as the paragraph title?
+
 \noindent
 \textbf{Consistency in geo-replication.}
-Database systems can offer different levels of consistency, and are usually labelled as either strongly or weakly consistent.
-Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
-Strong consistency requires coordination between data centers, which leads to high latency in geo-distributed scenarios and, as implied by the CAP theorem \cite{cap}, network partitions compromise the system's availability.
-%However, the CAP theorem \cite{cap} implies that network partitions compromise availability.
-%However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions.
-%Furthermore, high latency is to be expected in geo-distributed scenarios as multiple data centers must be contacted for committing a transaction.
+Database systems can be classified as being either strongly or weakly consistent.
+Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} provide a total order for transactions and are easier to work with.
+However, coordination between data centers is required, leading to high latency in geo-distributed scenarios and compromised availability under network partitions \cite{cap}.
 By relaxing the provided consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
-Causal consistency is a weak consistency model that alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
+Casual consistency is a weak consistency model that alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
+%Database systems can offer different levels of consistency, and are usually labelled as either strongly or weakly consistent.
+%Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
+%Strong consistency requires coordination between data centers, which leads to high latency in geo-distributed scenarios and, as implied by the CAP theorem \cite{cap}, network partitions compromise the system's availability.
+%%However, the CAP theorem \cite{cap} implies that network partitions compromise availability.
+%%However, the CAP theorem \cite{cap} implies that availability may be compromised in case of network partitions.
+%%Furthermore, high latency is to be expected in geo-distributed scenarios as multiple data centers must be contacted for committing a transaction.
+%By relaxing the provided consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
+%However, concurrency conflicts make those solutions harder to work with.
+%Causal consistency is a weak consistency model that alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
 
 \noindent
 \textbf{Indexes and views.}
 Both indexes and materialized views speed up query execution.
 Indexes provide quick access to a table or an object using a non-primary key, and are often used by queries requiring sorting or a given range of values.
 Multiple systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} and there are several proposals on efficient usage and storage of indexes~\cite{lee2020asymmetric, lisa, alex, bindex, slik}.
-On the other hand, 
+%On the other hand, 
 %Conversely, 
-materialized views work as a cache for the result of a large query, thus avoiding expensive data recalculations.
+Materialized views work as a cache for the result of a large query, thus avoiding expensive data recalculations.
 However, maintaining views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria}, %even though they can speed up queries considerably.
 despite their %considerable 
 query speed-up potential and usefulness for analytic queries \cite{analyticdb, hadad}.
@@ -2673,7 +2699,7 @@ PotionDB is the first system to support materialized views of global data in a p
 \noindent
 \textbf{Partial replication.}
 Partial replication reduces storage costs and can potentially improve a system's performance, as less operations are applied on each server~\cite{sipre, optimisticPartial, coda}, and is thus of interest for geo-distribution.
-Careful data partitioning is essential to avoid clients having to contact far away servers, thus experience high latency~\cite{sipre, optimisticPartial, coda}.
+Careful data partitioning is essential to avoid clients having to contact far away servers, thus experiencing high latency~\cite{sipre, optimisticPartial, coda}.
 However, queries over data sharded across data centers is challenging and slow, specially when trying to provide a consistent snapshot.
 PotionDB tackles this problem by providing views that summarize partially replicated data and directly answer such queries.
 
@@ -2689,10 +2715,10 @@ PotionDB tackles this problem by providing views that summarize partially replic
 
 %I made the CRDT paragraph shorter since we already talk about them in detail in other sections. Maybe should just remove it altogether?
 
-\noindent
-\textbf{CRDTs.} These replicated data types~ \cite{crdt} guarantee state convergence after applying the same set of operations.
-Thus they are often used in weakly consistent systems, e.g., Redis \cite{redisCRDT} and Riak \cite{riak}.
-Computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform} are of particular interest for views in PotionDB, as the former summarizes data using aggregations, while the later minimizes the data stored and replicated between replicas while still ensuring queries are answered correctly.
+%\noindent
+%\textbf{CRDTs.} These replicated data types~ \cite{crdt} guarantee state convergence after applying the same set of operations.
+%Thus they are often used in weakly consistent systems, e.g., Redis \cite{redisCRDT} and Riak \cite{riak}.
+%Computational CRDTs \cite{computationalCrdt} and non-uniform CRDTs \cite{Cabrita17Nonuniform} are of particular interest for views in PotionDB, as the former summarizes data using aggregations, while the later minimizes the data stored and replicated between replicas while still ensuring queries are answered correctly.
 %Maybe add example for Nu-CRDT? (e.g., a top-K CRDT does not need all entries to be replicated)
 %\noindent
 %\textbf{CRDTs.}
@@ -2713,20 +2739,15 @@ It also uses indexes to speed up queries.
 However, complex queries still take hundreds of milliseconds to execute and may slow down  simpler queries.
 %They do not make usage of views.
 
-SLOG \cite{slog} provides ACID transactions in a geo-replicated scenario.
-By leveraging on partial replication and data locality (as in PotionDB), SLOG achieves low latency on transactions served by a single data center.
-However, queries regarding global data are slow and prone to network partitions.
-PotionDB's global views prevent both issues from happening.
+%This one is interesting as they leverage on partial replication and data locality to achieve low latency but nothing about views/query speedup.
 %SLOG \cite{slog} provides ACID transactions in a geo-replicated scenario.
-%They share one of PotionDB's insights - not all data is relevant everywhere and clients will often access data relevant in their region.
-%Thus, SLOG achieves low latency for ACID transactions that can be served by a single data center.
-%However, unlike PotionDB, queries regarding data partitioned across multiple data centers has considerably higher latency.
-%We leverage on views of global data to prevent this.
+%By leveraging on partial replication and data locality (as in PotionDB), SLOG achieves low latency on transactions served by a single data center.
+%However, queries regarding global data are slow and prone to network partitions.
+%PotionDB's global views prevent both issues from happening.
 
 %Not too relevant
 %ESTOCADA \cite{estocada} is a system designed to work with polystores and focus on taking advantage of each database's stronger points and make extensive usage of the materialized views provided on each.
 
-%Preciso de rever este melhor (local/remoto?)
 Marviq \cite{marviq} tackles the specific situation of efficiently providing a visualization (e.g., scatterplot) of a large data set.
 While a very specific scenario, it showcases the need of summarizing large datasets.
 Marviq leverages on materialized views for handling range queries.
@@ -2800,9 +2821,10 @@ CouchDB \cite{couchDB} provides both indexes and materialized views, however the
 \label{sec:conclusion}
 
 PotionDB is a weakly consistent, partially geo-replicated database geared to efficiently support OLAP queries.
-PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
-PotionDB’s views can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
-Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
+PotionDB's key feature is the provision of automatically maintained materialized views that are always consistent with their base data and can efficiently answer complex queries regarding large amounts of global data with a single read operation, even if the base data is partitioned across faraway data centers.
+%PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
+%PotionDB’s views can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
+%Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
 PotionDB's transactional causal consistency, alongside a rich library of data types, view API, and usage of CRDTs to automatically handle concurrency conflicts, ease the programmer’s complexity on developing distributed applications 
 %using PotionDB 
 when compared to other weakly consistent solutions.
