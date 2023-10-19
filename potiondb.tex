@@ -413,7 +413,6 @@ In this paper we make the following contributions:
 %\end{itemize}
 %}
 
-
 \section{System Overview}
 \label{sec:overview}
 
@@ -561,8 +560,9 @@ GROUP BY ProdName
 ORDER BY SumProfit DESC, NumSales DESC
 LIMIT 10
 \end{lstlisting}}
+	\vspace{-5pt}
 	\caption{Specification of the view Monthly \emph{TopSales}.}
-	\vspace{-15pt}
+	\vspace{-10pt}
 	\label{fig:viewtopsales}
 \end{figure}
 
@@ -756,6 +756,7 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 \begin{figure}
 	\centering
 	\includegraphics[width=0.9\linewidth]{PotionDBArch}
+	\vspace{-5pt}
 	\caption{PotionDB Architecture}
 	\vspace{-20pt}
 	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
@@ -1557,6 +1558,7 @@ WHERE C_NationKey == S_NationKey AND R_Name == [REGION]
 GROUP BY N_Name
 ORDER BY Revenue DESC
 \end{lstlisting}}
+	\vspace{-5pt}
 	\caption{Revenue of local suppliers (Q5).}
 	\vspace{-10pt}
 	\label{fig:viewlocalsupliers}
@@ -1595,6 +1597,7 @@ WHERE TotalQuantity > [QUANTITY]
 ORDER BY TotalPrice DESC, OrderDate ASC
 LIMIT 100
 	\end{lstlisting}
+	\vspace{-5pt}
 	\caption{Large volume customer query (Q18).}
 	\vspace{-5pt}
 	\label{fig:q18_view}
@@ -1628,6 +1631,7 @@ impossible to use our view definition language.  In this latter case, the progra
 define a view, by selecting the appropriate objects to store the information and defining the necessary triggers
 to update these objects.
 
+\vspace{-5pt}
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
 CREATE VIEW (Q11_p1, views) WITH NATION == ANY (...) AS
@@ -1642,6 +1646,7 @@ SELECT SUM(Supplycost * Availqty) AS Value
 FROM Partsupp
 WHERE N_Name == [NATION]
 \end{lstlisting}
+\vspace{-2pt}
 	\caption{Important stock identification query (Q11).}
 	\vspace{-5pt}
 	\label{fig:q5_view}
@@ -1727,7 +1732,7 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 	\vspace*{-0.6em}
 	\caption{Average latencies of clients in Single PotionDB, depending on the server they are connected to.}
 	\label{fig:single_tc_latencies}
-	\vspace*{-0.9em}
+	\vspace*{-1em}
 \end{figure}%
 
 \noindent
@@ -2079,7 +2084,7 @@ tend to be similar to that when performing read independently.
 
 We now compare how Top K and Top K Counter behave for different values of K, with different update
 ratios. For updates, we use an add/remove ratio of 90\%/10\%, as it is unusual for an element to be removed
-from being considered for a top \cite{Cabrita17Nonuniform} (note that a top K object keeps information about 
+from being considered for a top~\cite{Cabrita17Nonuniform} (note that a top K object keeps information about 
 all elements in a partitioned way, with only the top K element being replicated in all replicas). 
 Figure \ref{fig:topKVSTopSum} shows that both TopK and Top K Counter maximum throughput is similar, 
 showing that the mechanism used for deciding when it is necessary to propagate updates for Top K Counters 
@@ -2295,7 +2300,7 @@ There is also concerns on the performance of queries when a view needs to be reb
 
 Dynamo \cite{dynamo} and Cassandra \cite{cassandra} are eventually consistent databases.
 Both provide indexes to speed up some queries but not materialized views, thus complex queries may need to access large amounts of objects.
-CouchDB \cite{couchDB} provides both indexes and materialized views, however their views can only refer to data in one partition.
+CouchDB \cite{couchDB} provides both indexes and materialized views, however views can only refer to data in one partition.
 
 %Should prob make a general comparison to MongoDB/Cassandra/Dynamo
 
