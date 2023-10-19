@@ -1794,7 +1794,7 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Performance with multiple update rates}
+	\caption{Performance with multiple update rates.}
 	\label{fig:upds_tc}
 	\vspace*{-1.2em}
 \end{figure}
@@ -1922,7 +1922,7 @@ for \textit{Local} and \textit{Single}, due to the low latency for contacting ot
 	\centering
 	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
 	\vspace*{-0.65em}
-	\caption{PotionDB and Local PotionDB's performance with multiple update rates, without added latency.}
+	\caption{\textbf{P}otionDB and \textbf{L}ocal PotionDB's performance with multiple update rates, without added latency.}
 	\label{fig:update_rates_global_vs_local_noTC}
 	\vspace*{-1.3em}
 \end{figure}
@@ -2080,13 +2080,13 @@ Unless stated otherwise, each client executes 5 operations per transaction, in o
 
 \begin{figure}
 	\centering
-	\begin{subfigure}{.481\linewidth}
+	\begin{subfigure}{.471\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_upd}
 		\caption{1 read per txn.}
 		\label{fig:topSize_single}
 	\end{subfigure}%
 	\hspace*{0.2em}
-	\begin{subfigure}{.499\linewidth}
+	\begin{subfigure}{.509\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_upd_5b}
 		\caption{5 reads per txn (log scale).}
 		\label{fig:topSize_batch}
@@ -4909,7 +4909,7 @@ In short, PotionDB is efficient for both global and local queries, while Local P
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Performance with multiple update rates}
+	\caption{Performance with multiple update rates.}
 	\label{fig:upds_tc}
 	\vspace*{-1.2em}
 \end{figure}
@@ -5071,10 +5071,10 @@ Even when factoring in all global and local queries (Figure \ref{fig:all_queries
 \begin{figure}
 	\centering
 	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
-	\vspace*{-0.65em}
+	%\vspace*{-0.65em}
 	\caption{PotionDB and Local PotionDB's performance with multiple update rates, without added latency.}
 	\label{fig:update_rates_global_vs_local_noTC}
-	\vspace*{-1.3em}
+	%\vspace*{-0em}
 \end{figure}
 
 %TODO: Would be really nice if I could trim this one further
@@ -5254,10 +5254,10 @@ Unless stated otherwise, each client executes 5 operations per transaction, in o
 		\caption{5 reads per txn (log scale).}
 		\label{fig:topSize_batch}
 	\end{subfigure}%
-	\vspace*{-0.65em}
+	%\vspace*{-0.65em}
 	\caption{TopK query performance for multiple top sizes.}
 	\label{fig:topSize}
-	\vspace*{-0.2em} %TODO: Increase this once we can pull higher the text
+	%\vspace*{-0.2em} %TODO: Increase this once we can pull higher the text
 \end{figure}
 
 %TODO: Need to replace the data for Top1 or Top10 in single read.
