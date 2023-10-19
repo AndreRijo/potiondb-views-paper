@@ -2130,9 +2130,10 @@ Multi-update transactions lock multiple shards instead of just one, so they redu
 
 \paragraph{Impact of the number of replicas:}
 We now evaluate how NuCRDTs that support views scale with the number of replicas. 
-Figure \ref{fig:crdts} shows the throughput of NuCRDTs with different numbers of replicas per NuCRDT 
+Figure \ref{fig:crdts:perf} shows the throughput of NuCRDTs with different numbers of replicas per NuCRDT 
 (for top K,  we used K = 10). 
-Results are presented in Figure~\ref{fig:crdts:perf}. The first observation is that, 
+%Results are presented in Figure~\ref{fig:crdts:perf}. 
+The first observation is that, 
 for each configuration the performance is similar.  This seems to show that the internal implementation of
 the CRDT has little impact in the overall performance of the system, even if internally NuCRDTs are
 considerably different.
