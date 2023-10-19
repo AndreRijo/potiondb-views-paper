@@ -910,7 +910,7 @@ This extension is simple for all NuCRDTs we have defined.% besides the top-K cou
 
 PotionDB adopts a sharded model, where objects replicated in a location are 
 split into multiple shards. For durability, each shard could be replicated in multiple
-servers using some replication protocol \cite{paxos,raft,chainreplication}.
+servers using some replication protocol \cite{paxos,raft}. %\cite{paxos,raft,chainreplication}.
 
 In each server,  a shard has a dedicated thread, adopting an approach used in other
 database systems, such as H-store~\cite{h-store}. This avoids using locks when 
@@ -1454,7 +1454,7 @@ We have divided the machines in 5 groups,  each one representing a region, with 
 Data is partitioned as described in Section \ref{subsec:dataset}. 
 We have used the Linux \texttt{tc} command to add latency between nodes in different groups, using as reference the latency between AWS instances measured in \cite{AWSLatency} for regions EU (Paris), US (N.Virginia), Canada (Central), Asia (Tokyo) and Middle East (Bahrain). The highest latency is between Tokyo and Paris at 217ms.  This distribution does not include data centers in each continent, as there was no information for Oceania - we note that this is less favorable for PotionDB, as in PotionDB queries are always local, while in alternative approaches some queries need to access remote servers. 
 
-For each experiments, we restart the servers and load the initial database. 
+For each experiment, we restart the servers and load the initial database. 
 Each presented result is the average of three runs. 
 For each configuration, we run experiments with an increasing number of clients. 
 
@@ -1476,7 +1476,7 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 	\centering
 	\includegraphics[width=0.72\linewidth]{singleQuery/single_TC_latencies}
 	\vspace*{-0.6em}
-	\caption{Average latencies of clients in Single PotionDB, depending on the server they are connected to.}
+	\caption{Average latencies of clients in \textit{Single}, depending on the server they are connected to.}
 	\label{fig:single_tc_latencies}
 	\vspace*{-1em}
 \end{figure}%
@@ -1484,7 +1484,7 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 \noindent
 \textbf{Query performance and benefits of views.}
 Figure \ref{fig:global_local_single_tc} shows the results of running all selected TPC-H queries for the three alternative approaches. 
-As expected, PotionDB throughput, latency and scalability are considerably better than alternative approaches, reaching 
+As expected, PotionDB's throughput, latency and scalability are considerably better than alternative approaches, reaching 
 1.5 million queries/s with latency under 0.6 milliseconds. 
 This results from all queries being local, while in alternative approaches, global queries need to access data from 
 remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading 
@@ -1494,7 +1494,7 @@ to higher latency
 and lower throughput. 
 
 When comparing the results of \textit{Single} and \textit{Local}, the \textit{Single} configuration has much lower latency and higher throughput. This is explained by the fact that clients connected directly to the server that holds the views are very fast and 
-end up executing a much higher number of requests, that clients in other regions, which experience high latency- this can be 
+end up executing a much higher number of requests than clients in other regions, which experience high latency- this can be 
 seen in Figure \ref{fig:single_tc_latencies}, that shows the latency of clients in each region.
 
 To conclude, having global, complete views replicated in every server allows all clients to achieve low latency and high throughput in PotionDB, while \textit{Local} and \textit{Single} approaches suffer from comparatively high latency and low throughput.
@@ -1528,7 +1528,7 @@ For better understanding the effects of data locality,  Figures \ref{fig:q3_tc} 
 executing a single global query (TPC-H Q3) and local query (TPC-H Q5). 
 For the global query, the results are similar to the complete workload, the main difference being an increase in latency and reduction in  throughput for the \textit{Local} configuration. In this case this is explained by all queries needing to contact remote servers and results do not include the effects of operations that execute locally.
 
-For the local query, the \textit{Local} configuration performs similarly to \textit{PotionDB}. The reason for this is that, in this case, queries only access the local server that has all necessary information - a client in a region only performs request for data of that region.
+For the local query, the \textit{Local} configuration performs similarly to PotionDB. The reason for this is that, in this case, queries only access the local server that has all necessary information - a client in a region only performs requests for data of that region.
 In short, PotionDB is efficient for both global and local queries, while \textit{Local} is heavily hindered by latency for any query that is not fully local.
 
 %II have to do these two graphs (I have the necessary data however).
@@ -1588,8 +1588,8 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 
 \noindent
 \textbf{Impact of updates.}
-PotionDB approach of maintaining a copy of the views in every server imposes additional load on the system
-for keeping view updated,  when compared with the \textit{Local} and \textit{Single} approaches. 
+PotionDB's approach of maintaining a copy of the views in every server imposes additional load on the system
+for keeping views updated,  when compared with the \textit{Local} and \textit{Single} approaches. 
 In PotionDB, a view update needs to be executed in every replica while in the other approaches the view update 
 is applied only in a single replica. 
 
@@ -1603,7 +1603,7 @@ are presented in Figure~\ref{fig:upds_tc}.
 The results show that for PotionDB, for 1\% update rate, the impact in throughput is unnoticeable, when compared with a read-only workload.
 The throughput starts decreasing as the ratio of updates increases - 4\% drop for 10\% updates and 23.4\% for 25\% of updates.
 The reduction in performance results not only from the fact that view updates need to be executed in all replicas, but also because 
-updates are inherently slower as the commit of a transaction require coordination among the multiple shards involved in the transaction. 
+updates are inherently slower as the commit of a transaction requires coordination among the multiple shards involved in the transaction. 
 Note that queries' latency only raises slightly as, in practice, they seldom need to wait for updates.
 %25\%: 0.273304; 0\%: 0.245562
 For instance, at PotionDB's maximum throughput for 25\% updates, the query-only latency is 0.273ms, which compares to 0.246ms for 0\% of updates.
@@ -1619,7 +1619,7 @@ are computing the number of executed operations, and the create transaction incl
 Thus, the overhead for executing a transaction (messages for starting and committing a transaction) is paid
 only once for multiple operations\footnote{In PotionDB, if a transaction includes 5 queries/transaction the maximum throughput 
 goes to 4.83M op/s (with latency of 0.68ms), when compared with 1.5M ops/s with (with latency of 0.37 ms) for one query per transaction.}.  
-Moreover, update transactions do not need to contact other servers - view updates are propagated asynchronously -,  
+Moreover, update transactions do not always need to contact other servers - view updates are propagated asynchronously -,  
 as 50\% of the orders are local to a region\footnote{This does not occur on the original TPC-H dataset, 
 whose orders' items are random. This modification adds locality to orders, which is more realistic for 
 an e-commerce scenario and helps \textit{Local} more than PotionDB.} and most other orders
@@ -1697,7 +1697,7 @@ The results for PotionDB are similar to the previous results - this is expected 
 \textit{Local} and \emph{Single} have much lower latency and higher throughput when compared with the
 geo-distributed setting.  This is expected as the cost of contacting other replicas is much lower now - only the
 latency of contacting a node in the same data center.  The maximum throughput is still much lower than that
-of \textit{PotionDB}, as the need to contact multiple server for replying to a query induces 
+of \textit{PotionDB}, as the need to contact multiple servers for replying to a query induces 
 an higher load in the servers. 
 
 For the results with a single query - Figure \ref{fig:q3_q5_noTC} - the trend is similar to 
@@ -1716,7 +1716,7 @@ for \textit{Local} and \textit{Single}, due to the low latency for contacting ot
 
 %TODO: Would be really nice if I could trim this one further
 The results for workloads with updates, presented in Figure~\ref{fig:update_rates_global_vs_local_noTC}, 
-show similar trends - PotionDB maintains a significantly better performance than alternative
+shows similar trends - PotionDB maintains a significantly better performance than alternative
 approaches, which improve throughput and lower latency.  
 
 
@@ -1765,7 +1765,7 @@ additional latency added to communications.
 In each experiment, we have 20 CRDTs with random initial data.
 Top K and Top K Counter CRDTs are initialized with 10K elements. 
 Clients execute transactions consisting in read and updates operations, with each operation 
-executed in a CRDT selected randomly using a uniform distribution. For Top K, update operations
+executed in a CRDT selected randomly using an uniform distribution. For Top K, update operations
 are insert and remove of a random elements; for top K counter, update operations are increment 
 and decrement to a random element.
 Unless stated otherwise, each transaction consists in a batch of 5 operations.
@@ -1800,10 +1800,10 @@ top-K objects, where transactions include, respectively, 1 read operation and 5 
 The results show that, for small tops - Top-1 and Top-10, the number of operations executed increases almost
 linearly with the number of reads in the transaction.  This shows that in this case,  the fixed overhead of setting 
 up a transaction and sending messages dominates the load. 
-For larger tops, the number of operations executed increases increasing less. This shows that the amount of data 
+For larger tops, the number of operations executed increases less. This shows that the amount of data 
 transmitted becomes increasingly more relevant in the performance of the system.
 We expect that with tops larger than 1000, the number of operations performed when using batches will 
-tend to be similar to that when performing read independently.
+tend to be similar to that of when performing reads independently.
 
 
 %The results show that Top1, Top10 and Top100 all perform similarly with 1 read per txn, as communication overhead 
