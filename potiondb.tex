@@ -1159,7 +1159,10 @@ in the view.
 \noindent
 \textbf{Generated triggers:}
 After determining the objects used to represent the view, PotionDB generates triggers to update 
-the contents of the view, as base objects are created, updated or deleted (referred simply as updates). 
+its contents,
+%of the view, 
+as base objects are created, updated or deleted.
+% (referred simply as updates). 
 The trigger will be set for the container (or buckets) specified in the \emph{from} clause of the view
 definition.
 If a \emph{where} clause is included in the view definition, updates to objects that do not match the 
@@ -1646,9 +1649,9 @@ reach the percentage ratio specified in the query).
 %\end{itemize}
 
 
-In this section we evaluate PotionDB's prototype, aiming at answering the following questions: 
+We evaluated PotionDB's prototype, aiming at answering the next questions: 
 \begin{enumerate*}[label=(\roman*)]
-	\item  \label{enum:q1} Can global views over partially geo-replicated data provide better performance than alternative approaches? 	     
+	\item  \label{enum:q1} Can global views over partially geo-replicated data give better performance than alternative approaches? 	     
 	\item \label{enum:q2} Are global views still worthwhile in a single data center scenario?
 	\item \label{enum:q3} How do different types of views behave? 
 \end{enumerate*}
@@ -1715,8 +1718,11 @@ Figure \ref{fig:global_local_single_tc} shows the results of running all selecte
 As expected, PotionDB throughput, latency and scalability are considerably better than alternative approaches, reaching 
 1.5 million queries/s with latency under 0.6 milliseconds. 
 This results from all queries being local, while in alternative approaches, global queries need to access data from 
-remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading not only
-to higher latency but also to lower throughput. 
+remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading 
+%not only
+to higher latency 
+%but also to 
+and lower throughput. 
 
 When comparing the results of \textit{Single} and \textit{Local}, the \textit{Single} configuration has much lower latency and higher throughput. This is explained by the fact that clients connected directly to the server that holds the views are very fast and 
 end up executing a much higher number of requests, that clients in other regions, which experience high latency- this can be 
@@ -1806,7 +1812,7 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Performance with multiple update rates}
+	\caption{Performance with multiple update rates.}
 	\label{fig:upds_tc}
 	\vspace*{-1.2em}
 \end{figure}
