@@ -1983,9 +1983,9 @@ should be considered when deciding whether to adopt this approach or not in a si
 \subsection{Scalability of different types of views}
 \label{subsec:microbenchmarks}
 
-This section studies how different views behave and scale for different configuration. 
+This section studies how different views behave and scale for different configurations. 
 To this end,  we study the behavior of the underlying NuCRDTs used for supporting different types of 
-view: simple limits (Top-K), limits over aggregations (Top-K counter), sum/count (Counter) and average (Average) aggregations.
+views: simple limits (Top-K), limits over aggregations (Top-K counter), sum/count (Counter) and average (Average) aggregations.
 
 These experiments were performed using micro-benchmarks, where the underlying NuCRDTs are 
 accessed directly by clients - this allows to measure the performance of maintaining the views 
@@ -2064,11 +2064,11 @@ We now compare how Top K and Top K Counter behave for different values of K, wit
 ratios. For updates, we use an add/remove ratio of 90\%/10\%, as it is unusual for an element to be removed
 from being considered for a top \cite{Cabrita17Nonuniform} (note that a top K object keeps information about 
 all elements in a partitioned way, with only the top K element being replicated in all replicas). 
-Figure \ref{fig:topKVSTopSum} shows that both TopK and Top K Counter maximum throughput is similar, which
-shows that the mechanism used for deciding when it is necessary to propagate updates for Top K Counters 
-perform well. When considering different update ratios, for small tops, the throughput decreases with an increasing 
+Figure \ref{fig:topKVSTopSum} shows that both TopK and Top K Counter maximum throughput is similar, 
+showing that the mechanism used for deciding when it is necessary to propagate updates for Top K Counters 
+performs well. When considering different update ratios, for small tops, the throughput decreases with an increasing 
 ratio of updates, as processing updates is more complex than reads. For larger tops, the throughput with
-a larger ratio of updates increases as the overhead of returning the larger tops to the clients becomes the dominating 
+a larger ratio of updates increases as the overhead of returning the larger tops to clients becomes the dominating 
 factor of the performance of the system.
 
 
