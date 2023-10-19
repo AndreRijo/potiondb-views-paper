@@ -355,11 +355,13 @@ To our knowledge, our work is the first to address the problem of maintaining ma
 
 \andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
-We evaluated PotionDb with \mbox{TPC-H} queries~\cite{tpch} and micro-benchmarks.
+PotionDB was evaluated with \mbox{TPC-H} queries~\cite{tpch} and micro-benchmarks.
 The results show that PotionDB provides much better performance to answer recurrent queries
-than alternative approaches.  Performance scales almost linearly with the number of replicas in the system.
-Furthermore, the overhead of maintaining materialized views is low, increasing slightly with
-the ratio of updates. 
+than alternatives.
+% approaches.  
+Performance scales almost linearly with the number of replicas. % in the system.
+Further, the overhead of maintaining materialized views is low, increasing slightly with
+\mbox{the ratio of updates.}
 
 % for maintaining materialized views impose 
 %low overhead when executing asynchronously replicating transactions, particularly
@@ -421,7 +423,7 @@ recurrent queries.
 PotionDB is a distributed database designed for supporting global services deployed at multiple data centers. 
 In these settings,
 it is common that (some) data items are only needed at some geographic locations. 
-As a running example, we will consider a large e-commerce company with online stores for different countries 
+As a running example, we  consider a large e-commerce company with online stores for different countries 
 and clients spread across the world. 
 The service includes data for millions of products, with some products available 
 only at some locations. The service also maintains information about customers and their purchases, 
@@ -683,7 +685,7 @@ Intuitively, in TCC different replicas may execute transactions in different ord
 A transaction accesses a causally-consistent database snapshot taken in the replica where the transaction executes
 at the time the transaction starts. 
 As in snapshot isolation~\cite{Berenson95Critique},  the snapshot reflects all updates of a transaction or none.   
-Furthermore, if a transaction $t$ is included in the snapshot, all transactions that 
+Moreover, if a transaction $t$ is included in the snapshot, all transactions that 
 happened-before~\cite{lamport78}  $t$ are also included in the snapshot.
 Unlike snapshot isolation, and similarly to parallel snapshot isolation~\cite{walter}, it is
 possible for two concurrent transactions to modify the same object, with updates
@@ -704,12 +706,15 @@ the view function in the snapshot, i.e.,  $v_n = \mathit{fun}_v(S_n)$
 The set of transactions reflected in snapshot $S$ is denoted by $Txn(S)$,
 e.g., $Txn(S_n) = \{t_1,\ldots,t_n\}$.
 
-Under Transactional Causal Consistency, a transaction $t$  executes initially in a database snapshot $S$.
+Under TCC, a transaction $t$  executes initially in a database snapshot $S$.
 The transaction executes in isolation, independently of other transactions concurrently being executed. 
 Thus, the result of a read operation, $r_i$, performed in transaction $t$, is obtained by executing $r_i$
 against the state $u_j(\ldots(u_1(S))$, with $u_1,\ldots,u_j$ the sequence of update operations executed 
-previously in $t$. After the transaction $t$ commits, the sequence of updates of the transaction are applied
-in the relevant replicas (as the database is partially replicated, a replica may execute only a subset (eventually empty) 
+previously in $t$. After the transaction $t$ commits, the sequence of updates 
+%of the transaction 
+are applied
+in the relevant replicas (as the database is partially replicated, a replica may execute only a subset 
+%(eventually empty) 
 of the updates of the transaction).
 
 We say that a transaction $t_a$
@@ -718,14 +723,14 @@ $t_a \! \prec \! t_b$ iff \mbox{$t_a \!\in \! Txn(S_b)$}.
 Transaction $t_a$ and $t_b$ are concurrent, $t_a \parallel  t_b$ iff
 $t_a \! \not \prec \! t_b  \wedge  t_b \! \not \prec \! t_a$ \cite{lamport78}.
 
-For an execution of a given set of transactions $T$, the happens-before relation defines
+For an execution of a  set of transactions $T$, the happens-before relation defines
 a partial order among transactions \mbox{$\mathcal{T} = (T,\prec)$}.
 We say $\mathcal{T'} = (T,<)$ is a valid serialization of $\mathcal{T} = (T,\prec)$
 if $\mathcal{T'}$ is a linear extension of $\mathcal{T}$, i.e., $<$ is a total order
 compatible with $\prec$.
-Under Transactional Causal Consistency, only database snapshots that result from the 
+Under TCC, only database snapshots that result from the 
 execution of a valid serialization of transactions to the initial database state can be used, i.e.,
-a transaction is always executed in a causally consistent snapshot.
+a transaction is always executed in a causally \mbox{consistent snapshot.}
 
 Transactions can execute concurrently, with each replica
 executing transactions according to a different valid
@@ -750,9 +755,9 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 
 \begin{figure}
 	\centering
-	\includegraphics[width=\linewidth]{PotionDBArch}
+	\includegraphics[width=0.9\linewidth]{PotionDBArch}
 	\caption{PotionDB Architecture}
-	\vspace{-15pt}
+	\vspace{-20pt}
 	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
 	%\caption{PotionDB Architecture~\carla{wasted space}}
 	\label{fig:arch}
@@ -1997,8 +2002,8 @@ should be considered when deciding whether to adopt this approach or not in a si
 \subsection{Scalability of different types of views}
 \label{subsec:microbenchmarks}
 
-This section studies how different views behave and scale for different configurations. 
-To this end,  we study the behavior of the underlying NuCRDTs used for supporting different types of 
+Next, we explore how different views behave and scale for different configurations. 
+Thus,  we study the behavior of the underlying NuCRDTs supporting different types of 
 views: simple limits (Top-K), limits over aggregations (Top-K counter), sum/count (Counter) and average (Average) aggregations.
 
 These experiments were performed using micro-benchmarks, where the underlying NuCRDTs are 
@@ -2069,7 +2074,7 @@ tend to be similar to that when performing read independently.
 	\includegraphics[width=0.76\linewidth]{singleQuery/topk_vs_topsum_5b}
 	%\caption{TopK vs TopSum for multiple Top sizes and update ratios}
 	\vspace*{-0.6em}
-	\caption{TopK vs TopSum for various K and update ratios}
+	\caption{TopK vs TopSum for various K and update ratios.}
 	\label{fig:topKVSTopSum}
 	\vspace*{-0.75em}
 \end{figure}
@@ -2124,10 +2129,10 @@ Multi-update transactions lock multiple shards instead of just one, so they redu
 	\caption{25\% updates.}
 	\label{fig:crdts_25-upd}
 	\end{subfigure}%
-	\vspace*{-0.65em}
+	\vspace*{-5pt}
 	\caption{Performance of Counter, Average and TopK NuCRDT.}
 	\label{fig:crdts:perf}
-	\vspace*{-0.8em}
+	\vspace*{-15pt}
 \end{figure}
 
 \paragraph{Impact of the number of replicas:}
@@ -2179,9 +2184,11 @@ Our work was influenced by works in several different areas.
 Database systems can be classified as being either strongly or weakly consistent.
 Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} provide a total order for transactions and are easier to work with.
 However, coordination between data centers is required, leading to high latency in geo-distributed scenarios and compromised availability under network partitions \cite{cap}.
-By relaxing the provided consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
+By relaxing consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
-Casual consistency is a weak consistency model that alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
+Casual consistency 
+%is a weak consistency model that 
+alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
 %Database systems can offer different levels of consistency, and are usually labelled as either strongly or weakly consistent.
 %Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
 %Strong consistency requires coordination between data centers, which leads to high latency in geo-distributed scenarios and, as implied by the CAP theorem \cite{cap}, network partitions compromise the system's availability.
@@ -2202,7 +2209,7 @@ Multiple systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} 
 Materialized views work as a cache for the result of a large query, thus avoiding expensive data recalculations.
 However, maintaining views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria}, %even though they can speed up queries considerably.
 despite their %considerable 
-query speed-up potential and usefulness for analytic queries \cite{analyticdb, hadad}.
+query speed-up potential and usefulness for analytic queries~\cite{analyticdb, hadad}.
 %To the best of our knowledge, 
 PotionDB is the first system to support materialized views of global data in a partially geo-replicated scenario.
 
@@ -2344,7 +2351,7 @@ transactions that access both base objects and view objects with
 transactional causal consistency.
 These views can be used to efficiently answer recurrent complex queries over data that is partitioned
 over different locations, without a single location holding all data.
-To support these views, we build on non-uniform CRDTs, extending previous proposals to make them practical.  
+To support these views, we build on non-uniform CRDTs, extending previous \mbox{proposals to make them practical. }
 %PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
 %PotionDB’s views can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
 %Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
