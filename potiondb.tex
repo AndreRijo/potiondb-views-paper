@@ -362,22 +362,22 @@ able to keep consistency between the base and view data in every replica.
 In this paper we make the following contributions:
 %\begin{enumerate*}[(label=\roman*)]
 \begin{compactitem}
-	\item the design of a geo-replicated key-value store  with support for partial replication
-	and views over partially replicated data; 
+	\item design of a geo-replicated key-value store  with support for partial replication
+	and views over partially replicated data (Section~\ref{sec:transactions}); 
 	\item replication algorithms for efficiently maintaining consistent materialized views over 
-	partially replicated data;
+	partially replicated data (Section~\ref{sec:views_for_apps});
 %	\item a language inspired in SQL for view specification in key-value stores, with view maintenance code automatically inferred from the specification;
-	 \item an implementation and evaluation of the proposed approach with micro-benchmarks
-	 and TPC-H.
+	 \item implementation and evaluation of the proposed approach with micro-benchmarks
+	 and TPC-H (Section~\ref{sec:evaluation}).
 \end{compactitem}
 
-The remainder of the paper is organized as follows.
-Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
-Section~\ref{sec:transactions} describes PotionDB's transactional and replication protocols.
-Section~\ref{sec:views_for_apps} discusses details on how PotionDB generates views and their automatic updating, as well as how we adapted TPC-H to PotionDB.
-%Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
-In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section~\ref{sec:related_work} presents related work and Section~\ref{sec:conclusion} concludes.
-\andre{On the description of Section \ref{sec:views_for_apps}, maybe change "their automatic updating" to "keeps them automatically up-to-date"?}
+%The remainder of the paper is organized as follows.
+%Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
+%Section~\ref{sec:transactions} describes PotionDB's transactional and replication protocols.
+%Section~\ref{sec:views_for_apps} discusses details on how PotionDB generates views and their automatic updating, as well as how we adapted TPC-H to PotionDB.
+%%Section~\ref{sec:views_for_apps} discusses how we adapted TPC-H to PotionDB, exemplifies how views can be specified given a query and discusses some details on how PotionDB generates views and their automatic updating.
+%In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H and micro-benchmarks, while Section~\ref{sec:related_work} presents related work and Section~\ref{sec:conclusion} concludes.
+%\andre{On the description of Section \ref{sec:views_for_apps}, maybe change "their automatic updating" to "keeps them automatically up-to-date"?}
 
 
 %\outline{topicos
@@ -395,7 +395,7 @@ In Section~\ref{sec:evaluation} we experimentally evaluate PotionDB using TPC-H 
 %\end{itemize}
 %}
 
-
+\vspace{-20pt}
 \section{System Overview}
 \label{sec:overview}
 
@@ -419,14 +419,16 @@ This allows PotionDB to reduce replication cost when
 compared to solutions featuring full replication, saving on both storage, processing, and networking costs.
 
 While some application operations access data objects directly (e.g. user, product, or purchase objects),
-other operations require data that is the result of an aggregation over  data (e.g.  top
-selling products worldwide and users that bought some product).  For supporting the latter, %operations,
+other operations require data that results from an aggregation (e.g.  top
+selling products worldwide)
+%and users that bought some product).  
+For supporting the latter, %operations,
 PotionDB provides materialized views that are the result of an aggregation 
 over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
-The key features of this example - global service with a large database with
+The key features of this example -- global service with a large database with
 data that is mostly access in a single (or few) location,  and some operations accessing the result
-of a global aggregation - are common to other global services, such as multi-user online games, and
+of a global aggregation -- are common to other global services, such as multi-user online games, and
 social news aggregation.
 
 
@@ -454,7 +456,7 @@ $\forall\, v \in \mathit{Views} : v \notin D_v$.
 
 Objects are uniquely identified by a tuple $\mathit{(key, bucket, type)}$.
 For presentation purposes, we assume this tuple is a property of the object and we define $\mathit{id} = \mathit{(key, bucket, type)}$.
-Whenever needed, we represent the aforementioned properties for a given object $o$ as
+When needed, we represent these properties for an object $o$ as
 $o^{\mathit{id}}$, $o^{\mathit{key}}$, $o^{\mathit{bucket}}$, $o^{\mathit{type}}$.
 Objects are stored in $\mathit{buckets}$, which are the unit of replication in PotionDB. 
 Buckets are further logically grouped in containers. %, as further detailed in Section \ref{subsec:buckets}. 
@@ -493,23 +495,24 @@ in the presence of concurrent updates.
 		%\multicolumn{2}{l}{\code{updateTx(clk, update$^+$) $\rightarrow$ clk}} \\
 		\bottomrule
 	\end{tabular}
-	\vspace{0.8em}
+	%\vspace{0.8em}
 	\caption{PotionDB's data manipulation API.}
 	\label{table:PotionDB_API}
+	\vspace{-15pt}
 \end{table}
 \end{small}
 
 PotionDB offers a key-value  transactional interface, as summarized in Table \ref{table:PotionDB_API}.
-An application can issue interactive transactions, by starting to execute operation \code{begin(clk)},
+An application issues interactive transactions, by executing operation \code{begin(clk)},
 where \code{clk} is used to enforce causality between consecutive transactions.
 A transaction proceeds with a sequence of operations: 
 \begin{inparaenum}[(i)] 
 \item \code{get(txId, id)}, which returns the full state of the object;
 \item \code{read(txId, id,op)}, which returns the result of read-only operation \code{op} executed in the object; and
-\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, creating the object if it does not exist; 
+\item \code{upsert(txId, id,op)}, which updates object \code{id} by executing operation \code{op}, or creates the object if it does not exist; 
 \item an object is deleted by issuing the \code{delete}  operation.
 \end{inparaenum}
-Operations defined in each object are type-specific - e.g. a set object includes a \code{contains(e)} operation to check
+Operations defined in each object are type-specific - e.g. a set object has a \code{contains(e)} operation to check
 if value \code{e} belongs to the set, and an \code{add(e)} and \code{remove(e)} to add or remove \code{e} from the set.
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
@@ -540,6 +543,7 @@ ORDER BY SumProfit DESC, NumSales DESC
 LIMIT 10
 \end{lstlisting}}
 	\caption{Specification of the view Monthly \emph{TopSales}.}
+	\vspace{-15pt}
 	\label{fig:viewtopsales}
 \end{figure}
 
@@ -577,8 +581,8 @@ restrict the number of elements with a \qcr{LIMIT} clause, and
 order the results using an \qcr{ORDER BY} clause. %which can be ordered using a \qcr{ORDER BY} clause.
 
 In recurrent queries, it is common that a generic query is instantiated with different values. 
-To support this, our language allows to include variables in the view definition, specified using 
-square brackets. 
+To support this, our language allows the use of variables in the view definition.
+%, specified using  square brackets. 
 In the example, we have variables \qcr{YEAR} and \qcr{MONTH}, 
 which will lead the system to maintain
 for each pair (year, month) that exists in the database, the top 10 sales.
@@ -590,8 +594,8 @@ for each pair (year, month) that exists in the database, the top 10 sales.
 %with  \qcr{ORDER BY} and  \qcr{LIMIT} clauses - in the example, for each month and year, only the 10 
 %top sold products will be maintained.
 
-Given a view definition, PotionDB automatically infers which objects will be used to store the view contents and
-which view updates are required to incrementally maintain the materialized view whenever a relevant base object 
+Given a view definition, PotionDB automatically infers the objects to be used to store the view contents and
+the view updates  required to incrementally maintain the materialized view whenever a relevant base object 
 is written. We detail this process in Section \ref{subsec:generated_view}.
 The data in a materialized view object is read in the same way as any other object, by issuing read
 operations to the view object.
@@ -671,7 +675,7 @@ being merged using CRDT rules.
 We now precisely define the guarantees provided by TCC.
 
 \noindent
-\textbf{Transactional Causal Consistency:}
+\textbf{Transactional Causal Consistency.}
 %\label{subsec:transactionalcausal}
 We consider a database composed by a set of objects $O$. Each object is replicated in a subset of 
 database locations (or replicas).
@@ -731,6 +735,7 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 	\centering
 	\includegraphics[width=\linewidth]{PotionDBArch}
 	\caption{PotionDB Architecture}
+	\vspace{-15pt}
 	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
 	%\caption{PotionDB Architecture~\carla{wasted space}}
 	\label{fig:arch}
@@ -986,7 +991,7 @@ After receiving the copy of the object, the shard will apply any updates perform
 there will be no updates, as $L_i$ does not replicate $o$.
 
 \noindent
-\textbf{Reads on NuCRDTs:}
+\textbf{Reads on NuCRDTs.}
 As mentioned in the previous Section, due to the way NuCRDTs work, they may temporarily expose 
 incorrect results when the execution of an operation $o$ changes the set of relevant operations.  
 As explained before, PotionDB maintains information for a replica to know if this is the case and
@@ -994,14 +999,14 @@ this is expected to be a rare situation. \andre{Shouldn't we mention again we ha
 Applications may select two behaviors when they start a transactions.
 First, to ignore the potential anomalies and immediately execute the read operation in the local replica.
 This guarantees fast replies at the cost of potential anomalies. 
-
+%
 Second, to strictly enforce TCC. In this case, the read blocks until the replica can gather 
 information that there is no missing relevant operation. This requires receiving information from
 all replicas that operation $o$ has been performed and all additional relevant operations, if any, have been
 propagated. This is done in the context of the replication process and explained later.
 
 \noindent
-\textbf{Triggers:}
+\textbf{Triggers.}
 %\label{subsec:triggers}
 PotionDB has an after update trigger mechanism that can be associated with 
 objects in a given bucket or container.
@@ -1011,7 +1016,7 @@ These updates are part of the transaction, being committed and propagated to oth
 as part of the transaction.
 
 Triggers can be used directly by applications, but its primary purpose is to support
-incremental view maintenance, as detailed in Section~\ref{sec:views_for_apps}.
+incremental view maintenance.%, as detailed in Section~\ref{sec:views_for_apps}.
 %In the next section
 
 \subsection{Replication}
@@ -1030,19 +1035,19 @@ propagated and applied in other replicas. We now start by describing how the rep
 guarantee that the updates of a transaction are propagated to all relevant locations. In the end of this section 
 we discuss the special case of NuCRDTs.
 
-The replication process works as follows. 
+Next describes the replication process. 
 When a transaction commits at a shard, that shard sends its part of the transaction to the replicator.  
-Given the way transactions are committed at a shard, it is guaranteed that a shard sends the transactions
-ordered by the commit timestamp.
+Given how transactions are committed at a shard, it is guaranteed the shard sends the transactions
+ordered by  commit timestamp.
 If the shard processes no transaction for some time, it sends a message notifying the replicator that there are
 no parts of transactions for the shard until the current timestamp, obtained from the HLC of the shard.
 
-The replicator processes the parts of transactions received from the shards in timestamp order. 
-For each transaction, the replicator groups the updates of the transactions and repartitions the
-updates, one for each bucket updated. The new parts of the transaction are then queued 
+The replicator processes the parts of transactions received from shards in timestamp order. 
+For each transaction, the replicator groups the transactions' updates and repartitions the
+updates, one for each updated bucket. The new transaction parts are then queued 
 for replication, one part for each bucket, being propagated in order to all other locations that 
 replicate the bucket. 
-We note that a location has a logical stream of updates not only for all buckets the location replicates,
+Note that a location has a logical stream of updates not only for all buckets the location replicates,
 but also for the buckets that a local transaction has updated an object.
 
 
@@ -1050,40 +1055,49 @@ The replicator integrates remote transactions locally as follows.
 A replicator subscribes to the logical streams of updates for the buckets it replicates from all other 
 locations. For the logical streams of each location, it processes transaction parts in timestamp order.
 For a given timestamp, the replicator groups the parts of the transaction $t$ and verifies if the causal dependencies 
-of the transaction are satisfied by checking that $t.rc \leq \mathit{vc}_G$. If not, some transactions
-from other locations need to be applied before executing $t$, and the replicator proceeds by processing
-the logical streams from other locations. If so, the replicator repartitions the transaction according to
-the local shards and forwards the transaction updates to the shards, where they are executed. 
-After all shards involved notify that they have executed their part of the transaction,  the global
-vector clock is updated to include the timestamp of $t$.
-Additionally, the replicator records the information that the transactions have been executed locally,
+of the transaction are satisfied by checking whether $t.rc \leq \mathit{vc}_G$.
+If true, the replicator repartitions the transaction according to
+the local shards and forwards the
+% transaction 
+updates to the shards, where they are executed. 
+After all shards involved notify they have concluded, 
+%that they have executed their part of the transaction,  
+the global
+vector clock is updated to include the timestamp of $t$. If false, then some transactions
+from other locations need to be applied before executing $t$. So, the replicator continues by processing
+the logical streams from other locations.
+Further, the replicator records the information that the transactions have been executed locally,
 which will be piggybacked to other locations.
 
-\textbf{Support for NuCRDTs:}
+\textbf{Support for NuCRDTs.}
 \label{subsec:nonuniform}
 %Note: we do not really guarantee causality when considering non-uniform CRDTs. How should we handle this? Do we mention this in the paper? Or maybe mention how we could "fix" this?
-NuCRDTs employ the non-uniform replication approach~\cite{Cabrita17Nonuniform}, in which some 
+NuCRDTs use a non-uniform replication approach~\cite{Cabrita17Nonuniform}, in which some 
 updates might not need to be propagated, as explained in Section~\ref{sec:tx:objs}.
-Not immediately propagating some updates is straightforward - as update operations generate 
-the \emph{effect} update to be propagated to other replicas, if an update operation has no
-effect in the observable state of the object, and hence does not need to be propagated to other replicas, 
+Not immediately propagating some updates is straightforward, as update operations generate 
+the \emph{effect} update to be remotely propagated,
+% to other replicas,
+If an update operation has no
+effect in the observable object state, hence does not need to be propagated, 
 the update operation just generates a null effect.
 
-As explained before, in NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{prv}$
+In NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{prv}$
 relevant, requiring this previous operation to be propagated to other replicas  
-(e.g. the \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
-maximum element relevant). There are two cases that need to be considered.
-
-The first case is when operation $o$ is executed initially. In this case, the effect of
+(e.g.  \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
+maximum element relevant). There are two cases to be considered.
+%
+The first case is when operation $o$ is executed initially. Then the effect of
 $o$ will include also the effect of $o_{prv}$. Thus, as the combined effects are propagated and applied in 
 the context of the same transaction, no anomaly is generated.
-
-The second case is what happens when the now relevant $o_{prv}$ operation was executed in some 
-other replica.  This is handled in the context of the replication process as follows.  When a location receives
-the replication stream from other replicas, it executes the received \emph{effects} in the local copy
-of the objects.  For NuCRDTs, the execution of an \emph{effect} operation may generate additional 
+%
+The second case happens when the now relevant $o_{prv}$ operation was executed in  
+another replica.  This is handled by replication process as follows.  When a location receives
+the replication stream from other replicas, it executes the received \emph{effects} in the objects' local copy.
+For NuCRDTs, the execution of an \emph{effect} operation may generate additional 
 \emph{effects} - in our example, the execution of the \emph{effect}s of $o$ would generate
-the effects of $o_{prv}$. These additional effects are propagated to other locations along with the 
+the effects of $o_{prv}$. These extra effects are remotely propagated 
+%to other locations 
+along with the 
 information that a given operation has been executed in the current location. 
 
 \section{Views and Experience}
@@ -1510,6 +1524,7 @@ GROUP BY N_Name
 ORDER BY Revenue DESC
 \end{lstlisting}}
 	\caption{Revenue of local suppliers (Q5).}
+	\vspace{-10pt}
 	\label{fig:viewlocalsupliers}
 \end{figure}
 
@@ -1547,6 +1562,7 @@ ORDER BY TotalPrice DESC, OrderDate ASC
 LIMIT 100
 	\end{lstlisting}
 	\caption{Large volume customer query (Q18).}
+	\vspace{-5pt}
 	\label{fig:q18_view}
 \end{figure}
 
