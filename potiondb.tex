@@ -513,7 +513,7 @@ Operations defined in each object are type-specific - e.g. a set object includes
 if value \code{el} belongs to the set, and an \code{add(el)} and \code{remove(el)} to add or remove \code{el} from the set.
 The application ends a transaction by issuing a \code{commit(txId)} for committing the transaction, making updates durable,  or \code{rollback(txId)} to abort the transaction.
 
-PotionDB also allows an application to issue an one-shot~\cite{??????} read-only or write-only transaction,
+PotionDB also allows an application to issue an one-shot~\cite{eiger} read-only or write-only transaction,
 by executing, respectively, \code{readTx(clk, (id, op)$^+$)} or \code{updateTx(clk, (id, op)$^+$)}.
 %for aborting 
 
@@ -842,7 +842,7 @@ First, in top-K objects,  instead of keeping only the value associated with an e
 attributes, as needed for maintaining the attributes of a view with a limit clause.
 
 \carla{I don't understand the next paragraph!}
-As such, a top-K object consists in a set of CRDT maps, rows, with two special elements - the key of the 
+As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
 row and the ordered value used for selecting the top rows.
 An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
 and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
@@ -853,13 +853,13 @@ This information consists in the timestamps of operations (transactions) that co
 this is the timestamp of the transaction with the \emph{remove} operation that deleted the previous maximum. 
 Given this information, and knowing the updates that replicas have seen (which is maintained by PotionDB), 
 a replica knows that no anomaly can occur if the operation has been seen by all replicas of the object, 
-which would have triggered replica to send the operations that could be relevant for the observable state, if any.
+which would have triggered replicas to send the operations that could be relevant for the observable state, if any.
  
 Third, we also extend NuCRDT specifications to maintain a larger observable state to minimize the 
 cases in which a replica may be exposing incorrect results in practice. In our example, the maximum NuCRDT
 maintains the two largest elements. Therefore, if the maximum element
 is deleted, replicas still have the new maximum. 
-Doing this is straightforward for all NuCRDTs we have defined, besides the top-K counter. 
+Doing this extension is straightforward for all NuCRDTs we have defined, besides the top-K counter. 
 \carla{What is "this" is the above sentence?}
 
 \nuno{explicar como fazer?}
