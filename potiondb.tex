@@ -1639,14 +1639,16 @@ to update these objects.
 \vspace{-5pt}
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
-CREATE VIEW (Q11_p1, views) WITH NATION == ANY (...) AS
+CREATE VIEW (Q11_p1, views) WITH NATION == ANY 
+(SELECT DISTINCT N_Name FROM nation) AS
 SELECT Partkey, SUM(Supplycost * Availqty) AS Value
 FROM Partsupp
 WHERE N_Name == [NATION]
 GROUP BY Partkey
 LIMIT 1000
 
-CREATE VIEW (Q11_p2, views) WITH NATION == ANY (...)  AS
+CREATE VIEW (Q11_p2, views) WITH NATION == ANY
+(SELECT DISTINCT N_Name FROM nation)  AS
 SELECT SUM(Supplycost * Availqty) AS Value
 FROM Partsupp
 WHERE N_Name == [NATION]
