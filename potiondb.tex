@@ -348,28 +348,30 @@ To our knowledge, our work is the first to address the problem of maintaining ma
 
 \andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
-We evaluated our system using micro-benchmarks and \mbox{TPC-H} queries~\cite{tpch}.
+We used micro-benchmarks and \mbox{TPC-H} queries~\cite{tpch} to evaluate PotionDB.
 The results show that our algorithms for maintaining materialized views impose 
 low overhead when executing asynchronously replicating transactions, particularly
 for views with limits. 
 \nuno{deviamos ter uns micro-benchmarks que comparassem o overhead com limites e sem limites}
 %Additionally, the results show that executing queries by relying on the materialized views is much more 
 %efficient than using alternative mechanisms.  
-Furthermore, our algorithms for maintaining materialized views in a decentralized way perform better 
-than alternative approaches where the view is computed in a single data center, while being
-able to keep consistency between the base and view data in every replica.
+Moreover, our algorithms for maintaining materialized views in a decentralized way perform better 
+than alternative approaches where the view is computed in a single data center, 
+while also keeping consistency between the base and view data in every replica.
 
 In this paper we make the following contributions:
 %\begin{enumerate*}[(label=\roman*)]
-\begin{compactitem}
-	\item design of a geo-replicated key-value store  with support for partial replication
+\begin{itemize}[noitemsep,topsep=0pt,parsep=0pt,partopsep=0pt,leftmargin=*]
+	\item 
+	%design of a 
+	geo-replicated key-value store  with support for partial replication
 	and views over partially replicated data (Section~\ref{sec:transactions}); 
-	\item replication algorithms for efficiently maintaining consistent materialized views over 
+	\item replication algorithms that efficiently maintain consistent materialized views over 
 	partially replicated data (Section~\ref{sec:views_for_apps});
 %	\item a language inspired in SQL for view specification in key-value stores, with view maintenance code automatically inferred from the specification;
 	 \item implementation and evaluation of the proposed approach with micro-benchmarks
 	 and TPC-H (Section~\ref{sec:evaluation}).
-\end{compactitem}
+\end{itemize}
 
 %The remainder of the paper is organized as follows.
 %Section~\ref{sec:overview} presents the system model, as well as PotionDB's architecture, consistency guarantees and API. %System model? Or Data Model?
@@ -395,7 +397,7 @@ In this paper we make the following contributions:
 %\end{itemize}
 %}
 
-\vspace{-20pt}
+
 \section{System Overview}
 \label{sec:overview}
 
@@ -1641,13 +1643,13 @@ In this section we evaluate PotionDB's prototype, aiming at answering the follow
 	\item \label{enum:q3} How do different types of views behave? 
 \end{enumerate*}
 
-Out prototype was implemented in Go and uses Google's protobufs to serialize/deserialize all data transmitted.
+Our prototype was implemented in Go and uses Google's protobufs to serialize/deserialize all data transmitted.
 
 \subsection{Experimental setup}
 \label{subsec:setup}
 
 In our experiments, we compare the following alternative approaches to maintain views:
-\begin{itemize}[leftmargin=10pt]
+\begin{itemize}[leftmargin=*,noitemsep,topsep=0pt,parsep=0pt,partopsep=0pt]
 	\item \emph{PotionDB}, our proposed approach where all servers replicate the complete materialized view;
 	\item \emph{Local}, where each server maintains a local view that includes only the objects replicated in the server - in this case, 
 	updates to the view result only from updates to the objects replicated in the server; 
@@ -1702,7 +1704,7 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 Figure \ref{fig:global_local_single_tc} shows the results of running all selected TPC-H queries for the three alternative approaches. 
 As expected, PotionDB throughput, latency and scalability are considerably better than alternative approaches, reaching 
 1.5 million queries/s with latency under 0.6 milliseconds. 
-This results from the fact that all queries are local, while in alternative approaches, global queries need to access data from 
+This results from all queries being local, while in alternative approaches, global queries need to access data from 
 remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading not only
 to higher latency but also to lower throughput. 
 
@@ -1740,7 +1742,7 @@ To conclude, having global, complete views replicated in every server allows all
 \label{subsec:data_locality}
 For better understanding the effects of data locality,  Figures \ref{fig:q3_tc} and \ref{fig:q5_tc} present, respectively, the performance when
 executing a single global query (TPC-H Q3) and local query (TPC-H Q5). 
-For the global query, the results are similar to the complete workload, with the main difference an increase in latency and reduction in the throughput for the \textit{Local} configuration. This is explained by the fact that in this case, all queries need to contact remote servers and results do not include the effects of operations that execute locally.
+For the global query, the results are similar to the complete workload, the main difference being an increase in latency and reduction in  throughput for the \textit{Local} configuration. In this case this is explained by all queries needing to contact remote servers and results do not include the effects of operations that execute locally.
 
 For the local query, the \textit{Local} configuration performs similarly to \textit{PotionDB}. The reason for this is that, in this case, queries only access the local server that has all necessary information - a client in a region only performs request for data of that region.
 In short, PotionDB is efficient for both global and local queries, while \textit{Local} is heavily hindered by latency for any query that is not fully local.
@@ -1827,16 +1829,16 @@ For instance, at PotionDB's maximum throughput for 25\% updates, the query-only 
 %The main observable difference in query latency is the latency at the middle of the throughput raising earlier.
 %We believe this may be due to network artifacts that lead to latency raising slightly when using over a certain amount of bandwidth - since update transactions have many updates, this threshold is reached with less clients. %TODO: This is... not really a good explanation. Sigh
 
-\textit{Local} throughput improves as the ratio of updates increase.  This results from the fact that we 
+\textit{Local} throughput improves as the ratio of updates increase.  This stems from the fact that we 
 are computing the number of executed operations, and the create transaction includes multiple updates. 
 Thus, the overhead for executing a transaction (messages for starting and committing a transaction) is paid
 only once for multiple operations\footnote{In PotionDB, if a transaction includes 5 queries/transaction the maximum throughput 
 goes to 4.83M op/s (with latency of 0.68ms), when compared with 1.5M ops/s with (with latency of 0.37 ms) for one query per transaction.}.  
-Additionally, update transactions do not need to contact other servers - view updates are propagated asynchronously -,  
+Moreover, update transactions do not need to contact other servers - view updates are propagated asynchronously -,  
 as 50\% of the orders are local to a region\footnote{This does not occur on the original TPC-H dataset, 
 whose orders' items are random. This modification adds locality to orders, which is more realistic for 
 an e-commerce scenario and helps \textit{Local} more than PotionDB.} and most other orders
-refer few regions.  This leads to a slightly lower average latency with higher update rates.
+refer few regions.  This leads to a slightly lower average latency \mbox{with higher update rates.}
 
 %fig:update_rates_single_tc
 \textit{Single} configuration has throughput losses comparable to PotionDB's, except for 25\% updates where the drop in throughput is smaller 
