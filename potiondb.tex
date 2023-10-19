@@ -807,9 +807,11 @@ We now explain the guarantees and uses of each type of objects.
 \noindent
 \textbf{CRDTs.} CRDTs are replicated objects that are guaranteed to converge
 after applying the same set of operations. In particular, PotionDB uses operation-based CRDTs,
-in which the convergence of replicas is guaranteed if operations are applied respecting causality. 
-This is the case in PotionDB, as a valid serialization of transaction must respect the happens-before
-relation, i.e., the causal order.
+in which the convergence of replicas is guaranteed if operations are causally applied.
+% respecting causality.  
+This is the case in PotionDB, as a valid transaction serialization must respect the happens-before
+relation.
+%, i.e., the causal order.
 
 Our prototype supports the following CRDTs: last-writer-wins register, for storing opaque values;
 add-wins set, for keeping a set where adding an elements wins over a concurrent removal of that element;
@@ -998,17 +1000,19 @@ there will be no updates, as $L_i$ does not replicate $o$.
 
 \noindent
 \textbf{Reads on NuCRDTs.}
-As mentioned in the previous Section, due to the way NuCRDTs work, they may temporarily expose 
+As mentioned, due to the way NuCRDTs work, they may temporarily expose 
 incorrect results when the execution of an operation $o$ changes the set of relevant operations.  
-As explained before, PotionDB maintains information for a replica to know if this is the case and
-this is expected to be a rare situation. \andre{Shouldn't we mention again we have mechanisms to make this situation even more rare to happen? (e.g., maintaining a top of double the size.)}
+As explained, PotionDB is able to detect this situation 
+%maintains information for a replica to know if this is the case 
+and
+it is expected to be a rare situation. \andre{Shouldn't we mention again we have mechanisms to make this situation even more rare to happen? (e.g., maintaining a top of double the size.)}
 Applications may select two behaviors when they start a transactions.
 First, to ignore the potential anomalies and immediately execute the read operation in the local replica.
 This guarantees fast replies at the cost of potential anomalies. 
 %
 Second, to strictly enforce TCC. In this case, the read blocks until the replica can gather 
-information that there is no missing relevant operation. This requires receiving information from
-all replicas that operation $o$ has been performed and all additional relevant operations, if any, have been
+information that no relevant operation is missing. This requires receiving information from
+all replicas that operation $o$ has  performed and all additional relevant operations, if any, have been
 propagated. This is done in the context of the replication process and explained later.
 
 \noindent
