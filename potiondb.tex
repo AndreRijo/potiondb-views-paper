@@ -1091,21 +1091,21 @@ If an update operation has no
 effect in the observable object state, hence does not need to be propagated, 
 the update operation just generates a null effect.
 
-In NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{prv}$
+In NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{p}$
 relevant, requiring this previous operation to be propagated to other replicas  
 (e.g.  \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
 maximum element relevant). There are two cases to be considered.
 %
 The first case is when operation $o$ is executed initially. Then the effect of
-$o$ will include also the effect of $o_{prv}$. Thus, as the combined effects are propagated and applied in 
+$o$ will include also the effect of $o_{p}$. Thus, as the combined effects are propagated and applied in 
 the context of the same transaction, no anomaly is generated.
 %
-The second case happens when the now relevant $o_{prv}$ operation was executed in  
+The second case happens when the now relevant $o_{p}$ operation was executed in  
 another replica.  This is handled by replication process as follows.  When a location receives
 the replication stream from other replicas, it executes the received \emph{effects} in the objects' local copy.
 For NuCRDTs, the execution of an \emph{effect} operation may generate additional 
 \emph{effects} - in our example, the execution of the \emph{effect}s of $o$ would generate
-the effects of $o_{prv}$. These extra effects are remotely propagated 
+the effects of $o_{p}$. These extra effects are remotely propagated 
 %to other locations 
 along with the 
 information that a given operation has been executed in the current location. 
@@ -1466,8 +1466,10 @@ update the view objects.
 \subsubsection{Data model}
 \label{subsec:dataset}
 
-We now describe our experience applying our proposed model to the queries defined in TPC-H.
-TPC-H data is representative of an e-commerce service with tables storing information about customers, suppliers, parts (products), orders, 
+We now describe our experience applying our 
+%proposed 
+model to the queries defined in TPC-H.
+TPC-H data is typical of an e-commerce service with tables storing information about customers, suppliers, parts (products), orders, 
 countries and regions (continents).
 Two extra tables represent associations: partsupply and lineitem represent, respectively, a part provided by a supplier
 and a product sold in an order. 
@@ -1619,6 +1621,7 @@ FROM Partsupp
 WHERE N_Name == [NATION]
 \end{lstlisting}
 	\caption{Important stock identification query (Q11).}
+	\vspace{-5pt}
 	\label{fig:q5_view}
 \end{figure}
 
