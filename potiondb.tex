@@ -1436,10 +1436,10 @@ In our experiments, we compare the following alternative approaches to maintain 
 	\item \emph{Local}, where each server maintains a local view that includes only the objects replicated in the server - in this case, 
 	updates to the view result only from updates to the objects replicated in the server; 
 	on reads, it may be necessary to contact multiple servers;
-	\item \emph{Global}, where the view is maintained in one server - in this case, a query needs to 
+	\item \emph{Single}, where the view is maintained in one server - in this case, a query needs to 
 	contact the server that holds the view, if this is not the local server. 
 \end{itemize}
-The alternative approaches are implemented using PotionDB codebase - in this way, propagation of view updates uses the same underlying mechanisms, but updates are only sent to the appropriate replicas; queries that require accessing views not locally replicated are propagated to the remote server, where the reads are executed and the results returned (as a consequence, in these alternatives, 
+The alternative approaches are implemented using PotionDB codebase - in this way, propagation of view updates uses the same underlying mechanisms, but updates are only sent to the appropriate replicas; queries that require accessing views not locally replicated are propagated to the remote server, where the reads are executed and the results returned (as a consequence, in \textit{Local} and \textit{Single}, 
 TCC may be violated).
 
 %We evaluate PotionDB using TPC-H's dataset, queries and updates, as well as with micro-benchmarks.
