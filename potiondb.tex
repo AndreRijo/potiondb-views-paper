@@ -876,7 +876,7 @@ in three ways to make them practical for PotionDB.
 First,  a top-K object,  instead of keeping only the value associated with an element,  keeps multiple
 attributes for each element, as needed for storing a complete view entry. An application can update
 the value used for establishing the top elements using a set operation (in top K) or an increment/decrement 
-operation (in a top-K counter).  Other attributes can also be updated (an in a map CRDT).
+operation (in a top-K counter).  Other attributes can also be updated (as in a map CRDT).
 
 %\carla{I don't understand the next paragraph!}
 %As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
@@ -1005,7 +1005,7 @@ that had modified $o$.
 %\label{subsec:operationsNonLocal}
 This is basically the Cure~\cite{cure} protocol for providing TCC.  
 Unlike the setting for which Cure was designed, PotionDB is partially replicated and a transaction 
-mayaccess an object $o$
+may access an object $o$
 %that is 
 not locally replicated.
 %, $L_i$. 
@@ -1256,7 +1256,7 @@ associated with it, which is used to select the bucket to use;
 \end{inparaenum}
 
 Each table row is stored as a map CRDT, with the key of the row (e.g. the identifier of a customer or the combination of part key and supplier key for partsupply) used as the key in PotionDB's identifier of the object. 
-Each columns is represented as a CRDT - e.g. the counter CRDT is used for numbers that are updated using numeric operations and the
+Each column is represented as a CRDT - e.g. the counter CRDT is used for numbers that are updated using numeric operations and the
 LWW register is used for strings and other numbers.
 When useful, we de-normalize the data model (as it is common in key-value stores and document databases). 
 
@@ -1313,8 +1313,8 @@ ORDER BY Revenue DESC
 Figure~\ref{fig:viewlocalsupliers} shows the view to support TPC-H query 5, which computes
 for each nation in a given region, the revenue from local suppliers. 
 This view can be supported by using for each region a map that stores for each nation the sum of the 
-revenue for each \emph{LineItem}. The map of each region is a CRDT map, with the name of the nation mapping
-directly to a CRDT counter with the revenue for that nation. When a new \emph{LineItem} is added (or deleted), 
+revenue for each \texttt{LineItem}. The map of each region is a CRDT map, with the name of the nation mapping
+directly to a CRDT counter with the revenue for that nation. When a new \texttt{LineItem} is added (or deleted), 
 the corresponding counter is updated. All replicas will have all the values for all nations.
 
 This contrast with the top sales shown in Figure~\ref{fig:viewtopsales}, that uses a
@@ -1369,7 +1369,7 @@ order is inserted (or updated), the four objects might need to be updated.
 \paragraph{Limitations.} The language for specifying views in PotionDB has several limitations, when
 compared with support for defining views in relational databases. The main limitations concern the 
 lack of support for joins and sub-queries, and the limited expressiveness in clauses like select and where. 
-This makes more difficult the specification of views for some complex queries and might even make it 
+This complicates the specification of views for some complex queries and might even make it 
 impossible to use our view definition language.  In this latter case, the programmer can resort to \emph{manually}
 define a view, by selecting the appropriate objects to store the information and defining the necessary triggers
 to update these objects.
@@ -1915,6 +1915,69 @@ imposing some additional load in all servers.
 %%%However, despite the number of updates effectively applied in each server being around 4 times higher with 5 replicas than with 1 replica, the loss on scalability is modest.
 %%This is because PotionDB's replication mechanism groups transactions together, allowing for efficient execution.
 %%This is because PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed efficiently. %TODO: Maybe add reference to Replication section if I mention this there.
+
+\subsection{PostgreSQL vs PotionDB}
+
+%TODO: Worth discussing: The data used for the query and update graph are different: for the query graph, there's no updates, while for the update graph, there's one client executing only updates and a varying number of query-only clients. My goal was to first focus in a query-only scenario (the best for Postgres), and then show how bad updates are for Postgres (and hence show only the throughput of updates). However this means I do not show the query throughput when executed with updates... is that ok?
+
+%For the sake of completion, 
+We now compare PotionDB with PostgreSQL \cite{PostgreSQL}, a well known, robust, open-source RDBMS.
+We deploy a single PostgreSQL instance on a 64GB RAM disk. %I also adjusted other settings to boost Postgre's performance, like increasing max number of connections, work memory, etc.
+PostgreSQL does not natively support incremental view maintenance, thus the pg\_ivm extension \cite{ivm} is used.
+Pg\_ivm has some limitations, namely it prevents the usage of PostgreSQL's Logical Replication \cite{ivm, PostgreSQLLogical}, hence the usage of a single server.
+The subset of SQL usable for specifying views with pg\_ivm is also limited, namely it is not possible to compose views, compose aggregations, do \emph{order by} among others, which limits the expressivity of views and negatively impacts query performance. %Not sure if I should mention this here. For our subset of queries, Q15 is the one affected by these limitations.
+For fairness, we focus on comparing PostgreSQL with Single PotionDB.
+Clients are assumed to be running in the same data center as the server(s). %TODO: Justification/motivation for this? I just wanted to leave clear we did not add any latency.
+
+\begin{figure}
+	\centering
+	\begin{subfigure}{.49\linewidth}
+		\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
+		\caption{Query throughput with no updates.}
+		\label{fig:postgres_query}
+		\vspace*{0.7em}
+	\end{subfigure}%
+	\hspace*{0.3em}
+	\begin{subfigure}{.47\linewidth}
+		\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnly}
+		\caption{Update throughput with varying query clients and a single update client.}
+		\label{fig:postgres_update}
+	\end{subfigure}%
+	\vspace*{-0.65em}
+	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, Single PotionDB and Postgres. All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
+	\label{fig:postgres}
+	\vspace*{-0.2em}
+\end{figure}
+
+%TODO: I think we didn't define anywhere what was our set of selected queries. Yet we refer to this 'set of selected queries' a few times through the evaluation section.
+Figure \ref{fig:postgres_query} compares PostgreSQL's query-only performance with Single PotionDB and PotionDB.
+Both Single and PotionDB outperform considerably PostgreSQL when executing all selected queries.
+This is mostly due to two of the selected queries - Q11 and Q15.
+Q3, Q5, Q14 and Q18 are well supported by PostgreSQL, even slightly outperforming Single PotionDB, but far from PotionDB's throughput.
+Q15 is not efficiently supported in PostgreSQL as pg\_ivm does not support both \emph{order by} nor aggregations of aggregations, thus to answer this query extra computation is required and multiple rows are scanned. %It needs to calculate a "max" manually.
+On the other hand, Q11 is efficiently supported but returns more data than other queries do - 100 rows, instead of 10 or less.
+Thus, Q11 has reduced performance in both Single, PotionDB and Postgres compared to other, simpler, queries. 
+However the max throughput reduction is much higher in Postgres (96.8\%) than Single (28.5\%) or PotionDB (25.5\%). %Maybe with raw numbers the difference looks more significant? Postgres: 320k -> 10k query/s. Single. 288k -> 206k. PotionDB: 1371k -> 1044k.
+
+The scenario is quite different when updates are considered.
+We consider a single update transaction to be a new order and its associated lineitems, however we count each order or item as one update.
+On average, a new order has 4 to 5 items.
+Figure \ref{fig:postgres_update} shows the update throughput when having a single client executing updates, and a varying number of query clients.
+In all cases, as the number of query clients increases, the update throughput diminishes. %I do not know what to say to justify this... basically the reason is that it's only 1 update client, so he will spend more time waiting for an "oportunity" to update among all ongoing queries. 
+Even with incremental view maintenance, view maintenance has a high impact on PostgreSQL's update throughput.
+This is observable as PostgreSQL has a reasonable throughput (up to 6.5k updates/s) when only Q11's views are deployed (Q11 does not require updating), however this throughput is quite lower with Q15, the cheapest view to update, and is unreasonable when views for more than one query are considered (e.g., Q11, Q14 and Q18) or all views are considered, going as low as 5 updates per second.
+On the other hand, both Single and PotionDB achieve higher update throughput in all situations, and have almost no observable impact of having multiple views to update. %Multiple update clients would be needed to saturate PotionDB, and it would lead to an even higher update throughput.
+%TODO: Should I replace the Q11_Q14_Q18 line with only Q14_Q18? To show that even with only 2 queries, it's already bad. My reasoning for leaving Q11 in, is because Q11 is "for free" when it comes to updates.
+
+We note the following limitations on our update experiments.
+First, only a single update client is used, as even a small amount of update clients easily overwhelm Postgres when having views for more than one query. %I don't know how to mention this, but let's say having 5-10 update clients will easily make inserting a new order take 10s. If needed I can get more precise data on this.
+Secondly, order removal is around 4 times slower than inserting a new order, thus our experiments only include insertions.
+Both limitations favor PostgreSQL, as PotionDB easily supports a high update ratio (see Section~\ref{subsec:potiondbsingledc}), and is not affected considerably by deletes vs insertions, except for very high update ratios. %NOTE: We do not have any graph in the paper to support the last statement.
+
+
+
+
+
 
 
 
@@ -4227,6 +4290,7 @@ Moreover, updates in PotionDB are unaffected by latency between servers.
 %\end{itemize}
 
 \subsection{PotionDB performance on a single data center}
+\label{subsec:potiondbsingledc}
 
 All experiments so far had latency imposed between servers to simulate a geo-distributed scenario.
 This scenario benefits PotionDB compared to the other analysed solutions, as all queries and updates execute locally in the client's server.
