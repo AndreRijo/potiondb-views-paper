@@ -1,0 +1,102 @@
+\documentclass[sigconf, nonacm]{acmart}
+
+
+\begin{document}
+
+%\showthe\columnwidth
+%\showthe\textwidth
+%\showthe\linewidth
+
+\title{Global Views on Partially Geo-Replicated Data}
+
+%%
+%% The "author" command and its associated commands are used to define the authors and their affiliations.
+%
+%\author{André Rijo, Carla Ferreira, Nuno Preguiça}
+%\affiliation{
+%\institution{NOVA LINCS, FCT, Universidade NOVA de Lisboa}
+%\country{Portugal}
+%}
+
+%I used this example provided by VLDB:
+%\author{Wang Xiu Ying}
+%\author{Zhe Zuo}
+%\affiliation{%
+%	\institution{East China Normal University}
+%	\city{Shanghai}
+%	\country{China}
+%}
+%\email{firstname.lastname@ecnu.edu.cn}
+
+%Maybe the mails should be used separately too as in their example?
+%\author{J\"org von \"Arbach}
+%\affiliation{%
+%	\institution{University of T\"ubingen}
+%	\city{T\"ubingen}
+%	\country{Germany}
+%}
+%\email{jaerbach@uni-tuebingen.edu}
+%\email{myprivate@email.com}
+%\email{second@affiliation.mail}
+
+%Note: from VLDB's guidelines: "list every author in its own author tag. The authors can, as shown in the template sample, share the same affiliations, but every author deserves his/her own author tag! There may not be any Additional Authors section."
+
+%\email{a.rijo@campus.fct.unl.pt}
+%\email{{nuno.preguica,carla.ferreira}@fct.unl.pt}
+%\email{a.rijo@campus.fct.unl.pt, \{nuno.preguica,carla.ferreira\}@fct.unl.pt}
+
+\begin{abstract}
+
+
+Geo-replication is a key technique for providing low latency and high
+availability in global services. As the number of data centers increase, so does the replication cost of full replication, which 
+makes partial replication an attractive approach.
+
+This paper presents PotionDB, a novel geo-distributed, partially replicated key-value store.  
+PotionDB transaction management and replication algorithms provide transactional causal consistency 
+for transaction that access local and remote objects. 
+For supporting recurrent queries over geo-partitioned data, PotionDB provides
+efficient materialized views, that allow these queries to be replied locally at all replicas.
+Our evaluation shows that queries concerning global data can be completed in less than one millisecond 
+while maintaining high throughput, despite the extra operations required to keep views up-to-date. 
+
+
+%Many existing web services at a global scale have strict latency, availability, and fault tolerance requirements.
+%To address these requirements,  services are often deployed in data centers distributed 
+%across the globe, with users accessing the closest data center.
+%As the number of servers increases, so does the replication cost, which makes partial replication an attractive approach.
+%However, some queries may require data not replicated in every server (e.g. in an e-commerce system, the best-selling products across the globe).
+%
+%In this paper, we present PotionDB, a novel geo-distributed key-value store that provides partial replication.
+%We present a replication scheme that allows data to be partially replicated, yet still, answer queries relative to global data efficiently.
+%We leverage existing partial and non-uniform replication algorithms to provide materialized views of data that may be split across multiple servers.
+%With these views, a client can obtain global information by querying a single server.
+%Our evaluation shows that queries concerning global data can be completed in less than one millisecond while maintaining high throughput, despite the extra operations required to keep views up-to-date. 
+
+
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+\label{sec:introduction}
+
+%	\item Num. DC a aumentar
+
+The increasing reliance on web services in many domains of activity leads to stringent requirements regarding latency, availability,
+and fault tolerance~\cite{Schurman2009latency,gomez}.
+To address these requirements, cloud platforms have been adding new data centers at different geographic 
+locations. By allowing users to contact the closest data center, a global service can
+provide low latency to users spread across the globe. 
+The increasing number of data centers also contributes
+for providing high availability,  as a user can access any
+available data center.
+
+
+\balance
+
+\end{document}
+%\bibliographystyle{abbrv}
+%\bibliographystyle{ACM-Reference-Format}
+%\bibliography{bib}
+
