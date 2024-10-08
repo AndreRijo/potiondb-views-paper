@@ -6,23 +6,11 @@
  % Optional: Comment out the CCS concepts and keywords.
 
 %
-\documentclass[sigconf, nonacm]{acmart}
-%%% The following content must be adapted for the final version
-%% paper-specific
-\newcommand\vldbdoi{XX.XX/XXX.XX}
-\newcommand\vldbpages{XXX-XXX}
-%% issue-specific
-\newcommand\vldbvolume{18}
-\newcommand\vldbissue{1}
-\newcommand\vldbyear{2025}
-%% should be fine as it is
-\newcommand\vldbauthors{\authors}
-\newcommand\vldbtitle{\shorttitle} 
-%% leave empty if no availability url should be set
-\newcommand\vldbavailabilityurl{} %TODO
-%%\newcommand\vldbavailabilityurl{URL_TO_YOUR_ARTIFACTS}
-%% whether page numbers should be shown or not, use 'plain' for review versions, 'empty' for camera ready
-\newcommand\vldbpagestyle{plain}
+\documentclass[sigconf, twocolumn,review,anonymous]{acmart}
+\acmSubmissionID{111} %TODO: Update this after abstract submission
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\settopmatter{printfolios=true,printacmref=false}
+
 
 \usepackage[utf8]{inputenc}
 \usepackage{times}
@@ -196,18 +184,30 @@
 
 \begin{abstract}
 
+%Andre: rewrote Abstract in order to make more clear our novelty and research challenge (mentioned by reviewers 370A, C and D)
 
-Geo-replication is a key technique for providing low latency and high
-availability in global services. As the number of data centers increases, so does the replication cost of full replication, which 
-makes partial replication an attractive approach.
+Geo-replication is a key technique for providing low latency and high availability in global services.
+As the number of data centers increases, so does the replication cost of full replication, 
+which makes partial replication an attractive approach.
+However, querying over geo-partitioned data is costly and challenging.
 
-This paper presents PotionDB, a novel geo-distributed, partially replicated key-value store.  
-PotionDB transaction management and replication algorithms provide transactional causal consistency 
-for transactions that access local and remote objects. 
-To enable the support of recurrent queries over geo-partitioned data, PotionDB provides
-efficient materialized views, that allow these queries to be replied locally at all replicas.
-Our evaluation shows that queries concerning global data can be completed in less than one millisecond 
-while maintaining high throughput, despite the extra operations required to keep views up-to-date. 
+This paper presents PotionDB, a novel geo-distributed, partially replicated key-value store with efficient materialized view support.
+PotionDB transaction management and replication algorithms provide transactional causal consistency for transactions that access local and remote objects.
+Our materialized views enable recurrent queries over geo-partitioned data to be answered locally and efficiently at any replica.
+Our evaluation shows that such queries can be completed in sub-millisecond time and achieve high throughput, despite the extra maintenance required to keep views updated.
+
+
+%Geo-replication is a key technique for providing low latency and high
+%availability in global services. As the number of data centers increases, so does the replication cost of full replication, which 
+%makes partial replication an attractive approach.
+
+%This paper presents PotionDB, a novel geo-distributed, partially replicated key-value store.  
+%PotionDB transaction management and replication algorithms provide transactional causal consistency 
+%for transactions that access local and remote objects. 
+%To enable the support of recurrent queries over geo-partitioned data, PotionDB provides
+%efficient materialized views, that allow these queries to be replied locally at all replicas.
+%Our evaluation shows that queries concerning global data can be completed in less than one millisecond 
+%while maintaining high throughput, despite the extra operations required to keep views up-to-date. 
 
 
 %Many existing web services at a global scale have strict latency, availability, and fault tolerance requirements.
@@ -299,8 +299,10 @@ A number of works have been addressing the challenges of
 partial replication, for example by proposing algorithms to manage partially 
 replicated data~\cite{spanner,saturn,sipre, practi} and to decide which data is replicated in each replica~\cite{slog, sipre}.
 
-This paper addresses the problem of querying data in a weakly consistent partially geo-replicated database, 
-focusing on recurrent queries. % for which the application could use a (materialized) view.
+However, querying over a partial, geo-distributed system is challenging, as no single replica has all the necessary data to answer the query. %Andre: trying to make the problem statement more obvious as a followup to reviewers 370A, C and D. TODO: Maybe it would be better to revert this one.
+%However, queries requiring a global vision of data are challenging in partial, geo-distributed systems.	
+%This paper addresses the problem of querying data in a weakly consistent partially geo-replicated database, 
+%focusing on recurrent queries.
 For example, consider an e-commerce system with users from multiple geographic locations.
 In this case, the data pertaining users of a given location does not need to be replicated in all data centers
 (but only in a few for fault tolerance). The same applies to other information, such as data on orders and 
@@ -310,10 +312,15 @@ is available for sale.
 Under this data placement, computing the list of best seller products is challenging, as it requires
 accessing data located at multiple data centers.
 
-This problem can be addressed using different approaches. 
-First, it is possible to have a \emph{main} data center that replicates all data, and forward queries to such data center.
+Our solution addresses this problem. %
+%This problem can be addressed using different approaches. 
+A possible approach would be to
+%First, it is possible to 
+have a \emph{main} data center that replicates all data, and forward queries to such data center.
 This makes the \emph{main} data center a central point of failure and a performance bottleneck, as it needs to execute all these queries.
-Second, it is possible to execute the query by accessing multiple locations,  using, for example, 
+%Second, 
+Alternatively, 
+it is possible to execute the query by accessing multiple locations,  using, for example, 
 a distributed processing system for geo-partitioned data~\cite{kloudas2015pixida,jetstream}.
 This requires running an additional external service, posing challenges for the consistency of the results returned and the data returned
 in other queries.
@@ -358,12 +365,8 @@ for partial replication and materialized views.
 PotionDB provides weak consistency, for improved latency and availability,  with transactional 
 causal consistency~\cite{cure}, for improved consistency.
 Views are kept up-to-date with the base data. 
-% without requiring any extra coding or update logic from 
-%the application programmer.
-%Maybe mention about how the view is kept up-to-date even without any of the base data present in the replica?  
+Our views enable replicas to locally and efficiently answer recurring queries over geo-partitioned data. %Andre: added this to make more obvious our contribution, as a followup to reviewers 370A, C and D. 
 To our knowledge, our work is the first to address the problem of maintaining materialized views in such setting.  
-
-\andre{We'll need to review the paragraph below after the evaluation section is ``finished for good''}
 
 PotionDB was evaluated with \mbox{TPC-H} queries~\cite{tpch} and micro-benchmarks.
 The results show that PotionDB provides much better performance to answer recurrent queries
@@ -541,7 +544,7 @@ A transaction proceeds with a sequence of operations:
 \end{inparaenum}
 Operations defined in each object are type-specific - e.g. a set has a \code{contains(e)} operation to check
 if value \code{e} belongs to the set, and an \code{add(e)} and \code{remove(e)} to add or remove \code{e} from the set.
-A transaction ends with a \code{commit(txId)} for committing the transaction%, making updates durable,  
+A transaction ends with a \code{commit(txId)} for committing the transaction %, making updates durable,  
 or \code{rollback(txId)} to abort the transaction.
 
 %PotionDB also allows an application to issue an one-shot~\cite{eiger} read-only or write-only transaction,
@@ -766,7 +769,7 @@ deterministic conflict resolution policies defined in the CRDT used for each dat
 
 \begin{figure}
 	\centering
-	\includegraphics[width=0.8\linewidth]{PotionDBArch}
+	\includegraphics[width=0.85\linewidth]{PotionDBArch}
 	\caption{PotionDB Architecture}
 	\vspace{-20pt}
 	%\includegraphics[width=.95\linewidth]{potiondb_architecture}
@@ -780,6 +783,7 @@ Each location only replicates a subset of the whole data.
 The system administrator has control over where each object is replicated.
 This allows to account for data locality to ensure fast access to data, while keeping replication and storage costs controlled.
 Objects without locality on their access pattern can be replicated everywhere if desired.
+Views can also be partially or fully replicated. %Review: added this to address Rev.A's  comment regarding that views should also be partially replicated in some cases. If needed to cut space, on the phrase "The system adminitrator has control over where each object is replicated", just change to "each object and view are replicated"
 We detail this more in Section~\ref{sec:replication}.
 
 %I think details on how transactions work and guarantees do not belong here. So this is OK (but still needs to be explained somewhere).
@@ -847,12 +851,13 @@ Our prototype supports the following CRDTs: last-writer-wins register, for stori
 add-wins set, for keeping a set where adding an elements wins over a concurrent removal of that element;
 add-wins map, for maintaining a map of values;
 counter, for maintaining a number that accepts concurrent increment and decrement operations;
-average, for maintaining the average of values added to this object.
+average, for maintaining the average of values added to this object;
+an integer register, that keeps the max/min value registered. %Andre: added max/min register, as it is used to implement max() and min() efficiently.
 
 \noindent
 \textbf{NuCRDTs.} Non-uniform CRDTs~\cite{Cabrita17Nonuniform} are CRDTs that guarantee that in a quiescent state, 
 the \emph{observable state} of all replicas is the same. 
-Two observable states are defined as equivalent iff, for each possible read operation, the result is equivalent when executed on either state.
+Two observable states are defined as equivalent iff, for each possible read operation, the result is equal when executed on either state.
 
 Unlike normal CRDTs, in NuCRDTs, during the replication process, it is only necessary to propagate
 updates that may affect the observable state. For example, consider a maximum object with a \code{insert(n)} and 
@@ -999,16 +1004,25 @@ In either case,  the transaction is removed from $\mathit{prep}_i$. If $t$'s pro
 then the Materializer verifies if any commit on hold can now be executed.
 
 The client is informed of the commit as soon as all shards in $t.WS$ acknowledge the commit message, even if 
-some shards queued the commit. Additionally, the TM sends information to update the global vector clock to
-include the timestamp of the committed transaction.
-Updating the local entry of the global vector clock with the timestamp of committed transactions immediately
-promotes freshness, as new transactions will always use the latest committed snapshot.
+some shards queued the commit.
+When all shards apply the commit, $\mathit{Vc}_G$ is updated to include $t\!.\mathit{ct}$.
+This promotes freshness, as new transactions will always use the latest committed snapshot.
+ %Additionally, the TM sends information to update the global vector clock to
+%include the timestamp of the committed transaction.
+%Updating the local entry of the global vector clock with the timestamp of committed transactions immediately
+%promotes freshness, as new transactions will always use the latest committed snapshot.
 
 However, this raises a problem, as some shards (not involved in the committed transaction) 
 may still have transactions to commit with smaller timestamps. 
 If a transaction that starts in the most recent snapshot issues a read (or update) operation on object $o$ in a shard that has
 pending transactions with smaller timestamps, the operation needs to block if there is a transaction prepared or on hold 
 that had modified $o$. 
+
+%Andre: added this paragraph to clarify a situation brought up by Reviewer 370B. In our reply, we mentioned this was unclear so... I explained it here. The question started with: "In fact from the text in this section, I do not understand how txs never end up with the same commit timestamp"
+It is possible that two transactions end up with the same $t\!.\mathit{ct}$.
+However, this is not problematic, as a new transaction $\mathit{t}_\mathit{new}$  in a shard first checks if the lowest timestamp in $\mathit{prep}_i$ is lower or equal than $\mathit{t}_\mathit{new}$'s read timestamp for the local replica - if this happens, then $\mathit{t}_\mathit{new}$ waits until no lower timestamp exists in $\mathit{prep}_i$.
+In practice, and as observed in our experiments, this is very unlikely due to  nanoseconds being used for local time. %IMPORTANT NOTE: while we do not evaluate directly this effect in our experiment, no considerable impact from this is observable (e.g., no considerable latency spikes).
+
 
 \noindent
 \textbf{Operations on objects not locally replicated.}
@@ -1182,7 +1196,7 @@ In any case, the elements of the view are maps with multiple columns, one for ea
 of the attributes specified in the  \emph{select} of the view definition.  
 
 For a given view definition, one or multiple objects are defined - in the language we defined for 
-specifying view,s  a view that includes variables will lead to multiple objects,
+specifying views  a view that includes variables will lead to multiple objects,
 one for each possible value of the variables. 
 In the top sales example presented in Figure~\ref{fig:viewtopsales}, one top-K counter
 object is created (as needed) for each month of each year, and its PotionDB key includes
@@ -1223,7 +1237,7 @@ elements.
 \label{subsec:programmer_view}
 
 When the PotionDB's view language is not sufficient for defining the views an application needs, 
-an application developer can define PotionDB object to maintain the view's data and the
+an application developer can define PotionDB objects to maintain the view's data and the
 triggers to update these view objects.
 
 The top-K and top-K counter NuCRDTs include the logic for replicating only the necessary 
@@ -1400,9 +1414,11 @@ CREATE VIEW (Q11_p2, views) WITH NATION == ANY
 SELECT N_Name, SUM(Supplycost * Availqty) AS Value
 FROM Partsupp
 WHERE N_Name == [NATION]
+ORDER BY value DESC
 \end{lstlisting}
 \vspace{-2pt}
-	\caption{Important stock identification query (Q11).}
+	\caption{Important stock identification query (Q11). %ORDER BY added to answer review.
+	}
 	\vspace{-5pt}
 	\label{fig:q5_view}
 \end{figure}
@@ -1454,10 +1470,19 @@ TCC may be violated).
 
 %We evaluate PotionDB using TPC-H's dataset, queries and updates, as well as with micro-benchmarks.
 %For the evaluation using TPC-H, we 
-We evaluate PotionDB on Grid'5000's \cite{Grid5000}, using TPC-H's benchmark \cite{tpch}.
+We evaluate PotionDB on Grid'5000's \cite{Grid5000}, using TPC-H's benchmark \cite{tpch}, with a scale factor of 1. %Andre: added at request of reviewer 370B.
 We have modeled the database as discussed in Section~\ref{subsec:dataset} and used data generated by the dbgen tool \cite{tpch}.
-In our evaluation we selected some queries to define views, trying to consider queries with different requirements. 
-For example, while some TPC-H queries concern worldwide data (e.g. query 18 mentioned before), others, \textit{local} queries, concern data of one continent and country (e.g.  queries 5 and 11). The former lead to \textit{global} views, with each entry combining data from all regions, and the latter lead to \textit{local} views, with each entry combining data from a single region.   
+
+%Andre: rewrote this whole paragraph to address reviewer 370B asking which queries we choose and for some more clarity.
+Unless otherwise stated, our  experiments execute TPC-H queries 3, 5, 11, 14, 15 and 18.
+This selection considers queries ranging from a single table (e.g. Q11) to multi-join (e.g. Q5), limits (e.g. Q18), averages (e.g. Q14), sums (e.g. Q5), among other factors.
+We include both queries concerning a region or country (Q5 and Q11) and worldwide (Q3, Q14, Q15, Q18) data.
+The former lead to \textit{local} views, which aggregate data of a region/country, while the latter lead to \textit{global} views, which aggregate worldwide data. 
+Note that despite PotionDB supporting views to be partially replicated (as evidenced by \textit{Local}), we replicate \textit{local} views everywhere in \textit{PotionDB}. %Andre: added this last phrase as for some reviewers it is not clear if local views are replicated everywhere. In the TPC-H  benchmarks, in PotionDB (not local/single), even local views are replicated everywhere. This was just because of convenience in implementing the client... so I do not know how to justify it here. Should I just adapt the experiments for Global to only replicate the local views locally?
+
+%In our evaluation we selected some queries to define views, trying to consider queries with different requirements. 
+%%For example, while some TPC-H queries concern worldwide data (e.g. query 18 mentioned before), others, \textit{local} queries, concern data of one continent and country (e.g.  queries 5 and 11). The former lead to \textit{global} views, with each entry combining data from all regions, and the latter lead to \textit{local} views, with each entry combining data from a single region. 
+
 
 In our experiments, we have used 10 machines, with a 2x Intel Xeon Gold 6130 with 192GB of RAM, interconnected with a 10Gbps Ethernet network. 
 We have divided the machines in 5 groups,  each one representing a region, with one machine for running the server and one machine for running the clients.  
@@ -1754,7 +1779,7 @@ approaches, which improve throughput and lower latency.
 
 To conclude, PotionDB's global views provide query throughput and latency unmatched by alternative 
 \textit{Local} and \emph{Single} approaches in every tested scenario.
-We note, however,  that there is additional memory used for maintaining views in all replicas and this
+We note, however,  that there is additional q used for maintaining views in all replicas and this
 should be considered when deciding whether to adopt this approach or not in a single data center.
 
 
@@ -1804,7 +1829,8 @@ Unless stated otherwise, each transaction consists in a batch of 5 operations.
 
 \noindent!
 \textbf{Scalability of Top-K and Top-K Counter.} %\hspace{0em}
-We start by studying the impact of batch size in the number of operations executed. 
+We start by analysing the performance benefit of clients batching operations. %Andre: added as reviewer 370B asked "where  is this batching happening" 
+%We start by studying the impact of batch size in the number of operations executed. 
 Figures \ref{fig:topSize_single} and \ref{fig:topSize_batch} present the results for a read-only workload accessing
 top-K objects, where transactions include, respectively, 1 read operation and 5 read operations.
 The results show that, for small tops - Top-1 and Top-10, the number of operations executed increases almost
