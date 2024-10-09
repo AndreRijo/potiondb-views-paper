@@ -6,7 +6,7 @@
  % Optional: Comment out the CCS concepts and keywords.
 
 %
-\documentclass[sigconf, twocolumn,review,anonymous]{acmart}
+\documentclass[sigplan,twocolumn,review,anonymous]{acmart}
 \acmSubmissionID{111} %TODO: Update this after abstract submission
 \renewcommand\footnotetextcopyrightpermission[1]{}
 \settopmatter{printfolios=true,printacmref=false}
@@ -701,9 +701,11 @@ at the time the transaction starts.
 As in snapshot isolation~\cite{Berenson95Critique},  the snapshot reflects all updates of a transaction or none.   
 Moreover, if a transaction $t$ is included in the snapshot, all transactions that 
 happened-before~\cite{lamport78}  $t$ are also included in the snapshot.
-Unlike snapshot isolation, and similarly to parallel snapshot isolation~\cite{walter}, it is
+Unlike snapshot isolation, and similarly to parallel snapshot isolation with p-set extension~\cite{walter}, %Andre: added "with p-set extension" to address Reviewer 370B. DO NOT REMOVE.
+it is
 possible for two concurrent transactions to modify the same object, with updates
-being merged using CRDT rules.
+being merged using CRDT rules, 
+thus avoiding write-write conflicts. %Andre: added to address Reviewer 370B. Can remove the part after "thus" if needed for space.
 
 We now precisely define the guarantees provided by TCC.
 
@@ -753,6 +755,10 @@ To guarantee state convergence, we use CRDTs~\cite{crdt,walter},
 which guarantee that after executing the same set of transactions according
 to a valid serialization, objects will have the same state (by relying on the
 deterministic conflict resolution policies defined in the CRDT used for each database object).
+
+Our transactional and replication protocols ensure that objects' states evolves monotonically.
+Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
+We detail this further in Section \ref{sec:transactions}. %Andre: added this to address Rev 370B.
 
 \nuno{Temos de dizer algums coisa sobre relaxado}
 %\noindent
@@ -891,7 +897,7 @@ in three ways to make them practical for PotionDB.
 First,  a top-K object,  instead of keeping only the value associated with an element,  keeps multiple
 attributes for each element, as needed for storing a complete view entry. An application can update
 the value used for establishing the top elements using a set operation (in top K) or an increment/decrement 
-operation (in a top-K counter).  Other attributes can also be updated (as in a map CRDT).
+operation (in a top-K counter).  Other attributes can also be updated (as in a map CRDT). %Andre: Rev 370B complained that "this sentence is rather obscure" but I think it's okay like this. If not, just say it is updated together with the set or increment/decrement (which is how it is done).
 
 %\carla{I don't understand the next paragraph!}
 %As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
@@ -935,6 +941,8 @@ as lock contention.
 \subsection{Metadata}
 \label{subsec:metadata}
 
+%Andre: Rev 370B suggested we using, instead of "global" and "local" clocks, a "replica" and "shard" clocks. Should we change that (i.e., does it actually make it more clear?)
+
 Let $L_1$, ..., $L_n$ be the set of locations in the system. 
 Each location $L_j$ keeps a global vector clock $\mathit{vc}_G$, with one entry for each $L_k \in L_1, ..., L_n$.
 This clock represents the latest snapshot available in $L_j$, summarizing the transactions integrated in the snapshot.
@@ -948,7 +956,8 @@ to be read by the transaction. On commit, a transaction is assigned a commit clo
 pair (timestamp, location identifier).  A transaction with commit clock $(n,r_i)$ is in snapshot $\mathit{vc}_G$ iff
 $\mathit{vc}_G[r_i] \geq n$.
 
-Each shard maintains an hybrid logical clock (HLC)~\cite{hlc} used to assign timestamps. An HLC uses the 
+%Andre: added the word "also" to address Rev 370B's comment. In the code, the HLC and vci are mixed together... our vci just use the HLC logic to generate the next timestamp. But technically it's as if we have both I suppose.
+Each shard also maintains an hybrid logical clock (HLC)~\cite{hlc} used to assign timestamps. An HLC uses the 
 physical clock of the computer to generate the next timestamp, unless the physical clock is smaller than a timestamp
 previously generated/observed. In this case, it returns the maximum previously observed timestamp plus one. 
 This guarantees that timestamps generated are monotonically increasing.
@@ -965,7 +974,7 @@ Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $\mat
 A client executes a transaction by interactively contacting a PotionDB server.
 The transaction execution is coordinated by the Transaction Manager (TM).
 %
-When the TM receives a \emph{begin} operation, it decides which snapshot the
+When the TM receives a \emph{begin} operation, it chooses which snapshot the
 transaction will access, i.e., the latest snapshot available at the current location,
 which is represented by the global vector clock $\mathit{vc}_G$.
 
@@ -992,7 +1001,7 @@ location identifier.
 A commit message is sent to all shards in $t.WS$ with the commit timestamp.
 
 When receiving a commit message for transaction $t$, a shard proceeds as follows.
-First, it checks if the commit can be applied,  by checking that no prepared transaction or commit on hold have a 
+First, it checks if the commit can be applied, by verifying that no prepared transaction or commit on hold have a 
 smaller timestamp.
 If so, updates from $t$ are marked as committed and the shard's local vector clock $\mathit{vc}_i[j]$ is 
 updated with $t\!.\mathit{ct}$. 
@@ -1487,7 +1496,7 @@ Note that despite PotionDB supporting views to be partially replicated (as evide
 In our experiments, we have used 10 machines, with a 2x Intel Xeon Gold 6130 with 192GB of RAM, interconnected with a 10Gbps Ethernet network. 
 We have divided the machines in 5 groups,  each one representing a region, with one machine for running the server and one machine for running the clients.  
 Data is partitioned as described in Section \ref{subsec:dataset}. 
-We have used the Linux \texttt{tc} command to add latency between nodes in different groups, using as reference the latency between AWS instances measured in \cite{AWSLatency} for regions EU (Paris), US (N.Virginia), Canada (Central), Asia (Tokyo) and Middle East (Bahrain). The highest latency is between Tokyo and Paris at 217ms.  This distribution does not include data centers in each continent, as there was no information for Oceania - we note that this is less favorable for PotionDB, as in PotionDB queries are always local, while in alternative approaches some queries need to access remote servers. 
+We have used the Linux \texttt{tc} command to add latency between nodes in different groups, using as reference the latency between AWS instances measured in \cite{AWSLatency} for regions EU (Paris), US (N.Virginia), Canada (Central), Asia (Tokyo) and Middle East (Bahrain). The highest latency is between Tokyo and Paris at 217ms.  This distribution does not include data centers in each continent, as there was no information for Oceania - we note that this is less favourable for PotionDB, as in PotionDB queries are always local, while in alternative approaches some queries need to access remote servers. 
 
 For each experiment, we restart the servers and load the initial database. 
 Each presented result is the average of three runs. 
@@ -1827,7 +1836,7 @@ Unless stated otherwise, each transaction consists in a batch of 5 operations.
 
 %TODO: Maybe not focus so much on serialization/deserialization: it may not be easy to justify/not the real cause
 
-\noindent!
+\noindent
 \textbf{Scalability of Top-K and Top-K Counter.} %\hspace{0em}
 We start by analysing the performance benefit of clients batching operations. %Andre: added as reviewer 370B asked "where  is this batching happening" 
 %We start by studying the impact of batch size in the number of operations executed. 
@@ -2047,6 +2056,20 @@ Clients are assumed to be running in the same data center as the server(s). %TOD
 	\label{fig:postgres}
 	\vspace*{-0.2em}
 \end{figure}
+
+%\begin{table}
+%	\begin{tabular}{l | a | b | a | b}
+%		\hline
+%		\rowcolor{LightCyan}
+%		\mc{}{}  & \mc{1}{x} & \mc{1}{y} & \mc{1}{w} & \mc{1}{z} \\
+%		\hline
+%		PotionDB & a & b & c & d \\
+%		 & a & b & c & d \\
+%		All & a & b & c & d \\
+%		SubQ & a & b & c & d
+%		 \hline
+%	\end{tabular}
+%\end{table}
 
 %TODO: I think we didn't define anywhere what was our set of selected queries. Yet we refer to this 'set of selected queries' a few times through the evaluation section.
 Figure \ref{fig:postgres_query} compares PostgreSQL's query-only performance with Single PotionDB and PotionDB.
