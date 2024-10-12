@@ -2057,6 +2057,15 @@ Clients are assumed to be running in the same data center as the server(s). %TOD
 	\vspace*{-0.2em}
 \end{figure}
 
+\begin{figure}
+	\centering
+	\includegraphics[width=0.5\linewidth]{postgres/postgresNoView}
+	%\vspace*{-0.65em}
+	\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is not in the scale of thousands.}
+	\label{fig:postgresNoViews}
+	%\vspace*{-0em}
+\end{figure}
+
 %\begin{table}
 %	\begin{tabular}{l | a | b | a | b}
 %		\hline
@@ -2096,8 +2105,10 @@ First, only a single update client is used, as even a small amount of update cli
 Secondly, order removal is around 4 times slower than inserting a new order, thus our experiments only include insertions.
 Both limitations favor PostgreSQL, as PotionDB easily supports a high update ratio (see Section~\ref{subsec:potiondbsingledc}), and is not affected considerably by deletes vs insertions, except for very high update ratios. %NOTE: We do not have any graph in the paper to support the last statement.
 
-
-
+Finally, Figure \ref{fig:postgresNoViews} showcases PostgreSQL's query-only performance when using indexes to support the queries instead of views.
+When comparing to Figure \ref{fig:postgres_query}, it follows up that the showcased TPC-H queries do not perform well even when using indexes optimized for these queries, as many rows still need to be scanned and joins calculated to answer the queries. %Q3 performs "OK" with indexes (1000Q/s), but that's still A LOT slower compared to with views (300000Q/s)
+Similar results is expected of other databases without views or some caching  mechanism.
+Without indexes, performance will degrade even further as full table scans will be necessary.
 
 
 %\newpage
