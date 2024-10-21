@@ -1474,8 +1474,7 @@ In our experiments, we compare the following alternative approaches to maintain 
 	\item \emph{Single}, where the view is maintained in one server - in this case, a query needs to 
 	contact the server that holds the view, if this is not the local server. 
 \end{itemize}
-The alternative approaches are implemented using PotionDB codebase - in this way, propagation of view updates uses the same underlying mechanisms, but updates are only sent to the appropriate replicas; queries that require accessing views not locally replicated are propagated to the remote server, where the reads are executed and the results returned (as a consequence, in \textit{Local} and \textit{Single}, 
-TCC may be violated).
+The alternative approaches are implemented using PotionDB codebase - in this way, propagation of view updates uses the same underlying mechanisms, but updates are only sent to the appropriate replicas; queries that require accessing views not locally replicated are propagated to the remote server, where the reads are executed and the results returned (as a consequence, in \textit{Local} and \textit{Single}, TCC may be violated).
 
 %We evaluate PotionDB using TPC-H's dataset, queries and updates, as well as with micro-benchmarks.
 %For the evaluation using TPC-H, we 
