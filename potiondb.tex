@@ -271,9 +271,9 @@ available data center.
 % Replicar totalmente tem problemas
 
 Global services running at multiple geographic locations need 
-to rely on a geo-replicated database~\cite{dynamo}.
+to rely on a geo-replicated database~\cite{dynamo, hildred2023caerus, nguyen2023detock}.
 %A number of geo-replicated databases have been proposed, providing different consistency semantics.
-Databases~\cite{spanner,cockroachdb,mdcc} that provide strong consistency give the illusion that 
+Databases \cite{spanner,cockroachdb,mdcc} that provide strong consistency give the illusion that 
 a single replica exists, requiring coordination among
 replicas for executing (update) operations. This leads to high latency and may compromise 
 availability in the presence of network partitions.
@@ -297,7 +297,7 @@ For addressing these problems, partial replication is an attractive approach, wi
 replicating only a subset of the data.
 A number of works have been addressing the challenges of 
 partial replication, for example by proposing algorithms to manage partially 
-replicated data~\cite{spanner,saturn,sipre, practi} and to decide which data is replicated in each replica~\cite{slog, sipre}.
+replicated data~\cite{spanner,sipre, practi, hildred2023caerus} and to decide which data is replicated in each replica~\cite{slog, sipre}.
 
 However, querying over a partial, geo-distributed system is challenging, as no single replica has all the necessary data to answer the query. %Andre: trying to make the problem statement more obvious as a followup to reviewers 370A, C and D. TODO: Maybe it would be better to revert this one.
 %However, queries requiring a global vision of data are challenging in partial, geo-distributed systems.	
@@ -1407,7 +1407,7 @@ impossible to use our view definition language.  In this latter case, the progra
 define a view, by selecting the appropriate objects to store the information and defining the necessary triggers
 to update these objects.
 
-\vspace{-5pt}
+%\vspace{-5pt}
 \begin{figure}[h]
 	\begin{lstlisting}[language=SQL]
 CREATE VIEW (Q11_p1, views) WITH NATION == ANY 
@@ -1710,6 +1710,7 @@ PotionDB keeps views updated while answering complex global queries in sub-milli
 %\end{itemize}
 
 \subsection{PotionDB performance on a single data center}
+\label{subsec:potiondbSingleDC}
 
 In this section we study whether keeping global views in all replicas is still an interesting approach when
 latency among replicas is smaller, using the extreme case where all servers are in the same data center
@@ -1977,41 +1978,72 @@ It may seem odd that with 3 types of queries, the throughput of P 25\% is lower 
 Meanwhile, in Local PotionDB, throughput decreases slightly as the number of views increases.
 This happens as orders whose items come from multiple regions imply updates to views spread across servers, leading to higher synchronization costs. %My excuse is that with Local, when adding a new order, many view updates need to be forwarded from one server to the other, wasting precious bandwith on every txn.
 
+%\begin{figure*}
+%	\centering
+%	\begin{subfigure}{.19\linewidth}
+%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_3Q}
+%		\includegraphics[width=1\linewidth]{queryScale/3Ops}
+%		\caption{Queries: 3, 11, 14.\\\hspace{\textwidth}}
+%		\label{fig:3Q}
+%		%\vspace*{0.7em}
+%	\end{subfigure}%
+%	\hspace*{0.3em}
+%	\begin{subfigure}{.19\linewidth}
+%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_6Q}
+%		\includegraphics[width=1\linewidth]{queryScale/6Ops}
+%		\caption{Queries:\\\hspace{\textwidth} 3, 5, 11, 14, 15, 18.}
+%		\label{fig:6Q}
+%		%\vspace*{0.7em}
+%	\end{subfigure}%
+%	\hspace*{0.3em}
+%	\begin{subfigure}{.19\linewidth}
+%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_9Q}
+%		\includegraphics[width=1\linewidth]{queryScale/9Ops}
+%		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5, 8, 11, 13-15, 18.}
+%		\label{fig:9Q}
+%		%\vspace*{0.7em}
+%	\end{subfigure}%
+%	\hspace*{0.3em}
+%	\begin{subfigure}{.19\linewidth}
+%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_12Q}
+%		\includegraphics[width=1\linewidth]{queryScale/12Ops}
+%		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5-8, 11, 13-15, 17, 18.}
+%		\label{fig:12Q}
+%		%\vspace*{0.7em}
+%	\end{subfigure}%
+%	\hspace*{0.3em}
+%	\begin{subfigure}{.19\linewidth}
+%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_15Q}
+%		\includegraphics[width=1\linewidth]{queryScale/15Ops}
+%		\caption{Queries:\\\hspace{\textwidth} 2-8, 11-15, 17, 18, 21.}
+%		\label{fig:15Q}
+%		%\vspace*{0.7em}
+%	\end{subfigure}%
+%	\vspace*{-0.65em}
+%	\caption{PotionDB and Local PotionDB  performance with multiple update rates and an increasing number of views.}
+%	\label{fig:queryScaleUpds}
+%	\vspace*{-0.2em}
+%\end{figure*}
+
 \begin{figure*}
 	\centering
-	\begin{subfigure}{.19\linewidth}
-		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_3Q}
+	\begin{minipage}{.58\linewidth}
+		\centering
+	\begin{subfigure}{.32\linewidth}
 		\includegraphics[width=1\linewidth]{queryScale/3Ops}
 		\caption{Queries: 3, 11, 14.\\\hspace{\textwidth}}
 		\label{fig:3Q}
 		%\vspace*{0.7em}
 	\end{subfigure}%
 	\hspace*{0.3em}
-	\begin{subfigure}{.19\linewidth}
-		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_6Q}
-		\includegraphics[width=1\linewidth]{queryScale/6Ops}
-		\caption{Queries:\\\hspace{\textwidth} 3, 5, 11, 14, 15, 18.}
-		\label{fig:6Q}
-		%\vspace*{0.7em}
-	\end{subfigure}%
-	\hspace*{0.3em}
-	\begin{subfigure}{.19\linewidth}
-		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_9Q}
+	\begin{subfigure}{.32\linewidth}
 		\includegraphics[width=1\linewidth]{queryScale/9Ops}
 		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5, 8, 11, 13-15, 18.}
 		\label{fig:9Q}
 		%\vspace*{0.7em}
 	\end{subfigure}%
 	\hspace*{0.3em}
-	\begin{subfigure}{.19\linewidth}
-		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_12Q}
-		\includegraphics[width=1\linewidth]{queryScale/12Ops}
-		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5-8, 11, 13-15, 17, 18.}
-		\label{fig:12Q}
-		%\vspace*{0.7em}
-	\end{subfigure}%
-	\hspace*{0.3em}
-	\begin{subfigure}{.19\linewidth}
+	\begin{subfigure}{.32\linewidth}
 		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_15Q}
 		\includegraphics[width=1\linewidth]{queryScale/15Ops}
 		\caption{Queries:\\\hspace{\textwidth} 2-8, 11-15, 17, 18, 21.}
@@ -2019,9 +2051,18 @@ This happens as orders whose items come from multiple regions imply updates to v
 		%\vspace*{0.7em}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{PotionDB and Local PotionDB  performance with multiple update rates and an increasing number of views.}
+	\caption{PotionDB and \emph{Local}  performance with multiple update rates and an increasing number of views.}
 	\label{fig:queryScaleUpds}
 	\vspace*{-0.2em}
+	\end{minipage}%
+	\hspace*{0.05\linewidth}
+	\begin{minipage}{.34\linewidth}
+		\centering
+		\includegraphics[width=0.8\linewidth]{postgres/postgresNoView}
+		%\vspace*{-0.65em}
+		\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
+		\label{fig:postgresNoViews}
+	\end{minipage}
 \end{figure*}
 
 \subsection{PostgreSQL vs PotionDB}
@@ -2039,31 +2080,23 @@ Clients are assumed to be running in the same data center as the server(s). %TOD
 
 \begin{figure}
 	\centering
-	\begin{subfigure}{.49\linewidth}
+	\begin{subfigure}{.482\linewidth}
 		\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
-		\caption{Query throughput with no updates.}
+		\caption{Query-only  throughput.}
 		\label{fig:postgres_query}
 		\vspace*{0.7em}
 	\end{subfigure}%
 	\hspace*{0.3em}
-	\begin{subfigure}{.47\linewidth}
-		\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnly}
-		\caption{Update throughput with varying query clients and a single update client.}
+	\begin{subfigure}{.483\linewidth}
+		\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
+		\caption{Throughput with multiple query clients and 1 update client.}
 		\label{fig:postgres_update}
 	\end{subfigure}%
 	\vspace*{-0.65em}
-	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, Single PotionDB and Postgres. All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
+	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
+		%All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
 	\label{fig:postgres}
 	\vspace*{-0.2em}
-\end{figure}
-
-\begin{figure}
-	\centering
-	\includegraphics[width=0.5\linewidth]{postgres/postgresNoView}
-	%\vspace*{-0.65em}
-	\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is not in the scale of thousands.}
-	\label{fig:postgresNoViews}
-	%\vspace*{-0em}
 \end{figure}
 
 %\begin{table}
@@ -2080,7 +2113,6 @@ Clients are assumed to be running in the same data center as the server(s). %TOD
 %	\end{tabular}
 %\end{table}
 
-%TODO: I think we didn't define anywhere what was our set of selected queries. Yet we refer to this 'set of selected queries' a few times through the evaluation section.
 Figure \ref{fig:postgres_query} compares PostgreSQL's query-only performance with Single PotionDB and PotionDB.
 Both Single and PotionDB outperform considerably PostgreSQL when executing all selected queries.
 This is mostly due to two of the selected queries - Q11 and Q15.
@@ -2103,7 +2135,7 @@ On the other hand, both Single and PotionDB achieve higher update throughput in 
 We note the following limitations on our update experiments.
 First, only a single update client is used, as even a small amount of update clients easily overwhelm Postgres when having views for more than one query. %I don't know how to mention this, but let's say having 5-10 update clients will easily make inserting a new order take 10s. If needed I can get more precise data on this.
 Secondly, order removal is around 4 times slower than inserting a new order, thus our experiments only include insertions.
-Both limitations favor PostgreSQL, as PotionDB easily supports a high update ratio (see Section~\ref{subsec:potiondbsingledc}), and is not affected considerably by deletes vs insertions, except for very high update ratios. %NOTE: We do not have any graph in the paper to support the last statement.
+Both limitations favor PostgreSQL, as PotionDB easily supports a high update ratio (see Section~\ref{subsec:potiondbSingleDC}), and is not affected considerably by deletes vs insertions, except for very high update ratios. %NOTE: We do not have any graph in the paper to support the last statement.
 
 Finally, Figure \ref{fig:postgresNoViews} showcases PostgreSQL's query-only performance when using indexes to support the queries instead of views.
 When comparing to Figure \ref{fig:postgres_query}, it follows up that the showcased TPC-H queries do not perform well even when using indexes optimized for these queries, as many rows still need to be scanned and joins calculated to answer the queries. %Q3 performs "OK" with indexes (1000Q/s), but that's still A LOT slower compared to with views (300000Q/s)
@@ -2123,13 +2155,13 @@ Our work was influenced by works in several different areas.
 \noindent
 \textbf{Consistency in geo-replication.}
 Database systems can be classified as being either strongly or weakly consistent.
-Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, megastore, sconekv, lu2021epoch} provide a total order for transactions and are easier to work with.
+Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, sconekv, lu2021epoch, hildred2023caerus, nguyen2023detock} provide a total order for transactions and are easier to work with.
 However, coordination between data centers is required, leading to high latency in geo-distributed scenarios and compromised availability under network partitions \cite{cap}.
 By relaxing consistency guarantees, weak consistency systems \cite{dynamo, couchDB, cassandra, chainreaction, cops, riak, eiger} can provide low latency, high throughput and better fault tolerance.
 However, concurrency conflicts make those solutions harder to work with.
 Casual consistency 
 %is a weak consistency model that 
-alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding}.
+alleviates this problem, however anomalies can still be observed even with cross-object causality \cite{cops, burckhardt2013understanding, ferreira2023antipode}.
 %Database systems can offer different levels of consistency, and are usually labelled as either strongly or weakly consistent.
 %Strong consistency systems \cite{spanner, slog, scatter, krikellas2010strongly, redblue, megastore} are easier to work with as they provide a total order for their transactions.
 %Strong consistency requires coordination between data centers, which leads to high latency in geo-distributed scenarios and, as implied by the CAP theorem \cite{cap}, network partitions compromise the system's availability.
@@ -2143,14 +2175,16 @@ alleviates this problem, however anomalies can still be observed even with cross
 \noindent
 \textbf{Indexes and views.}
 Both indexes and materialized views speed up query execution.
-Indexes provide quick access to a table or an object using a non-primary key, and are often used by queries requiring sorting or a given range of values.
-Multiple systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} and there are several proposals on efficient usage and storage of indexes~\cite{lee2020asymmetric, lisa, bindex, slik, abtree, kreachquery}.
+Indexes provide quick access to a table or an object using a non-primary key, often being used by queries requiring sorting or a given range of values.
+Many systems implement indexes~\cite{dynamo, couchDB, cassandra, megastore} and there are several proposals on efficient usage and storage of indexes~\cite{lee2020asymmetric, lisa, bindex, slik, xiong2024civet, xu2024bp, hao2024bf}.
+%slik
 %On the other hand, 
 %Conversely, 
-Materialized views work as a cache for the result of a large query, thus avoiding expensive data recalculations.
-However, maintaining views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria}, %even though they can speed up queries considerably.
+Materialized views work as a cache for the result of a large query, avoiding expensive %data 
+recalculations.
+However, keeping views consistent and automatically updated is challenging \cite{oracleViews, chronocache, birds, budiu2023dbsp} and few systems implement them \cite{chronocache, marviq, estocada, couchDB, oracleViews, noria, clickhouse2024}, %even though they can speed up queries considerably.
 despite their %considerable 
-query speed-up potential and usefulness for analytic queries~\cite{analyticdb, hadad}.
+query speed-up potential and usefulness for analytic queries~\cite{analyticdb, hadad, sioulas2023real, clickhouse2024}.
 %To the best of our knowledge, 
 PotionDB is the first system to support materialized views of global data in a partially geo-replicated scenario.
 
@@ -2163,9 +2197,9 @@ PotionDB is the first system to support materialized views of global data in a p
 
 \noindent
 \textbf{Partial replication.}
-Partial replication reduces storage costs and can potentially improve a system's performance, as less operations are applied on each server~\cite{sipre, optimisticPartial, coda}, and is thus of interest for geo-distribution.
+Partial replication reduces storage costs and can potentially improve a system's performance, as less operations are applied on each server~\cite{sipre, optimisticPartial, coda, nguyen2023detock}, and is thus of interest for geo-distribution.
 Careful data partitioning is essential to avoid clients having to contact far away servers, thus experiencing high latency~\cite{sipre, optimisticPartial, coda}.
-However, queries over data sharded across data centers is challenging and slow, specially when trying to provide a consistent snapshot.
+However, queries over data sharded across data centers is challenging and slow, specially when providing a consistent snapshot.
 PotionDB tackles this problem by providing views that summarize partially replicated data and directly answer such queries.
 
 %\noindent
@@ -4114,7 +4148,7 @@ To simulate this, we add latency in the connections between our servers as previ
 
 \begin{figure}
 	\centering
-	\includegraphics[width=0.6\linewidth]{singleQuery/all_queries_tc}
+	\includegraphics[width=0.55\linewidth]{singleQuery/all_queries_tc}
 	\vspace*{-0.75em}
 	\caption{Query-only performance of executing all queries.}
 	\label{fig:global_local_single_tc}
@@ -4122,7 +4156,7 @@ To simulate this, we add latency in the connections between our servers as previ
 \end{figure}%
 \begin{figure}
 	\centering
-	\includegraphics[width=0.72\linewidth]{singleQuery/single_TC_latencies}
+	\includegraphics[width=0.7\linewidth]{singleQuery/single_TC_latencies}
 	\vspace*{-0.6em}
 	\caption{Average latencies of clients in Single PotionDB, depending on the server they are connected to.}
 	\label{fig:single_tc_latencies}
