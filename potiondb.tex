@@ -2169,7 +2169,7 @@ These limitations are employed because in PostgresSQL, updates with incremental 
 Furthermore, we observed in other experiments (not included in this document) that if we allow several clients to execute updates, PostgresSQL's clients will spend a long time waiting for each other's updates to commit, thus achieving very low throughput.
 Finally, \emph{delete} updates are about 4 times slower than \emph{insert} updates.
 On a positive note, update execution in PostgresSQL does not have a visible impact in the throughput of query-only clients.
-We note that, as observed in Figures \ref{fig:upds_tc} and \ref{fig:update_rates_global_vs_local_noTC}, PotionDB supports modest update rates in all clients while still maintaining high query throughput, unlike PostgresSQL.
+We note that, as observed in Figures \ref{fig:upds_tc} and \ref{fig:update_rates_global_vs_local_noTC}, PotionDB supports modest update rates in all clients while still maintaining high throughput, as views updates are generated and applied quickly, unlike in PostgresSQL.
 
 Finally, Figure \ref{fig:postgresNoViews} showcases PostgreSQL's query-only performance when using indexes to support the queries instead of views.
 When comparing to Figure \ref{fig:postgres_query}, it follows up that the selected TPC-H queries do not perform well even when using indexes optimized for these queries, as many rows still need to be scanned and joins calculated to answer the queries. %Q3 performs "OK" with indexes (1000Q/s), but that's still A LOT slower compared to with views (300000Q/s)
