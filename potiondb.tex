@@ -1967,57 +1967,88 @@ imposing some additional load in all servers.
 %%This is because PotionDB's replication mechanism groups transactions together, allowing for efficient execution.
 %%This is because PotionDB's replication mechanism groups updates from different transactions, allowing them to be executed efficiently. %TODO: Maybe add reference to Replication section if I mention this there.
 
-\subsection{Scalability of number of views}
-
-%IMPORTANT NOTE: I believe with batching of queries, the throughput would decrease as the number of views increase. But for now, the major cost is on communication and locking (lock for TM's clock) in TM.
-
-Next, we experiment how the number of views affects PotionDB's performance.
-As keeping materialized views up-to-date imposes extra updates when a new order is added, it is expected for PotionDB's performance to worsen with a higher number of supported views. %Maybe this phrase is not necessary.
-
-Figure \ref{fig:queryScaleUpds} showcases PotionDB's and Local PotionDB's performance, with different update rates and number of supported TPC-H queries.
-In a query-only scenario (P 0\% and L 0\%), there is no observable impact, as well as with P 1\% and P 10\%. %And I suppose (for 0% upd rate) this makes sense for as long as there's enough RAM available.
-Even with a high update ratio (P 25\%), PotionDB still achieves high throughput.
-It may seem odd that with 3 types of queries, the throughput of P 25\% is lower than with more queries - this happens as with a lower variety of queries, they have to wait more often for updates to finish. %Not sure if this is clear - my theory is that with few types of queries, when a query arrives it's very likely its view is being updated. If we have many different queries, it's possible some queries arrive for views that already finished updating. Remember that in this experiments we're using Read Commited consistency. 
-%Even with a modest update ratio (P 25\%), PotionDB still maintains a high throughput. 
-%I think one of the queries I picked for 9 queries is costly for updating.
-Meanwhile, in Local PotionDB, throughput decreases slightly as the number of views increases.
-This happens as orders whose items come from multiple regions imply updates to views spread across servers, leading to higher synchronization costs. %My excuse is that with Local, when adding a new order, many view updates need to be forwarded from one server to the other, wasting precious bandwith on every txn.
-
+%\subsection{Scalability of number of views}
+%
+%%IMPORTANT NOTE: I believe with batching of queries, the throughput would decrease as the number of views increase. But for now, the major cost is on communication and locking (lock for TM's clock) in TM.
+%
+%Next, we experiment how the number of views affects PotionDB's performance.
+%As keeping materialized views up-to-date imposes extra updates when a new order is added, it is expected for PotionDB's performance to worsen with a higher number of supported views. %Maybe this phrase is not necessary.
+%
+%Figure \ref{fig:queryScaleUpds} showcases PotionDB's and Local PotionDB's performance, with different update rates and number of supported TPC-H queries.
+%In a query-only scenario (P 0\% and L 0\%), there is no observable impact, as well as with P 1\% and P 10\%. %And I suppose (for 0% upd rate) this makes sense for as long as there's enough RAM available.
+%Even with a high update ratio (P 25\%), PotionDB still achieves high throughput.
+%It may seem odd that with 3 types of queries, the throughput of P 25\% is lower than with more queries - this happens as with a lower variety of queries, they have to wait more often for updates to finish. %Not sure if this is clear - my theory is that with few types of queries, when a query arrives it's very likely its view is being updated. If we have many different queries, it's possible some queries arrive for views that already finished updating. Remember that in this experiments we're using Read Commited consistency. 
+%%Even with a modest update ratio (P 25\%), PotionDB still maintains a high throughput. 
+%%I think one of the queries I picked for 9 queries is costly for updating.
+%Meanwhile, in Local PotionDB, throughput decreases slightly as the number of views increases.
+%This happens as orders whose items come from multiple regions imply updates to views spread across servers, leading to higher synchronization costs. %My excuse is that with Local, when adding a new order, many view updates need to be forwarded from one server to the other, wasting precious bandwith on every txn.
+%
+%%\begin{figure*}
+%%	\centering
+%%	\begin{subfigure}{.19\linewidth}
+%%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_3Q}
+%%		\includegraphics[width=1\linewidth]{queryScale/3Ops}
+%%		\caption{Queries: 3, 11, 14.\\\hspace{\textwidth}}
+%%		\label{fig:3Q}
+%%		%\vspace*{0.7em}
+%%	\end{subfigure}%
+%%	\hspace*{0.3em}
+%%	\begin{subfigure}{.19\linewidth}
+%%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_6Q}
+%%		\includegraphics[width=1\linewidth]{queryScale/6Ops}
+%%		\caption{Queries:\\\hspace{\textwidth} 3, 5, 11, 14, 15, 18.}
+%%		\label{fig:6Q}
+%%		%\vspace*{0.7em}
+%%	\end{subfigure}%
+%%	\hspace*{0.3em}
+%%	\begin{subfigure}{.19\linewidth}
+%%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_9Q}
+%%		\includegraphics[width=1\linewidth]{queryScale/9Ops}
+%%		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5, 8, 11, 13-15, 18.}
+%%		\label{fig:9Q}
+%%		%\vspace*{0.7em}
+%%	\end{subfigure}%
+%%	\hspace*{0.3em}
+%%	\begin{subfigure}{.19\linewidth}
+%%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_12Q}
+%%		\includegraphics[width=1\linewidth]{queryScale/12Ops}
+%%		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5-8, 11, 13-15, 17, 18.}
+%%		\label{fig:12Q}
+%%		%\vspace*{0.7em}
+%%	\end{subfigure}%
+%%	\hspace*{0.3em}
+%%	\begin{subfigure}{.19\linewidth}
+%%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_15Q}
+%%		\includegraphics[width=1\linewidth]{queryScale/15Ops}
+%%		\caption{Queries:\\\hspace{\textwidth} 2-8, 11-15, 17, 18, 21.}
+%%		\label{fig:15Q}
+%%		%\vspace*{0.7em}
+%%	\end{subfigure}%
+%%	\vspace*{-0.65em}
+%%	\caption{PotionDB and Local PotionDB  performance with multiple update rates and an increasing number of views.}
+%%	\label{fig:queryScaleUpds}
+%%	\vspace*{-0.2em}
+%%\end{figure*}
+%
 %\begin{figure*}
 %	\centering
-%	\begin{subfigure}{.19\linewidth}
-%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_3Q}
+%	\begin{minipage}{.58\linewidth}
+%		\centering
+%	\begin{subfigure}{.32\linewidth}
 %		\includegraphics[width=1\linewidth]{queryScale/3Ops}
 %		\caption{Queries: 3, 11, 14.\\\hspace{\textwidth}}
 %		\label{fig:3Q}
 %		%\vspace*{0.7em}
 %	\end{subfigure}%
 %	\hspace*{0.3em}
-%	\begin{subfigure}{.19\linewidth}
-%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_6Q}
-%		\includegraphics[width=1\linewidth]{queryScale/6Ops}
-%		\caption{Queries:\\\hspace{\textwidth} 3, 5, 11, 14, 15, 18.}
-%		\label{fig:6Q}
-%		%\vspace*{0.7em}
-%	\end{subfigure}%
-%	\hspace*{0.3em}
-%	\begin{subfigure}{.19\linewidth}
-%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_9Q}
+%	\begin{subfigure}{.32\linewidth}
 %		\includegraphics[width=1\linewidth]{queryScale/9Ops}
 %		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5, 8, 11, 13-15, 18.}
 %		\label{fig:9Q}
 %		%\vspace*{0.7em}
 %	\end{subfigure}%
 %	\hspace*{0.3em}
-%	\begin{subfigure}{.19\linewidth}
-%		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_12Q}
-%		\includegraphics[width=1\linewidth]{queryScale/12Ops}
-%		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5-8, 11, 13-15, 17, 18.}
-%		\label{fig:12Q}
-%		%\vspace*{0.7em}
-%	\end{subfigure}%
-%	\hspace*{0.3em}
-%	\begin{subfigure}{.19\linewidth}
+%	\begin{subfigure}{.32\linewidth}
 %		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_15Q}
 %		\includegraphics[width=1\linewidth]{queryScale/15Ops}
 %		\caption{Queries:\\\hspace{\textwidth} 2-8, 11-15, 17, 18, 21.}
@@ -2025,50 +2056,19 @@ This happens as orders whose items come from multiple regions imply updates to v
 %		%\vspace*{0.7em}
 %	\end{subfigure}%
 %	\vspace*{-0.65em}
-%	\caption{PotionDB and Local PotionDB  performance with multiple update rates and an increasing number of views.}
+%	\caption{PotionDB and \emph{Local}  performance with multiple update rates and an increasing number of views.}
 %	\label{fig:queryScaleUpds}
 %	\vspace*{-0.2em}
+%	\end{minipage}%
+%	\hspace*{0.05\linewidth}
+%	\begin{minipage}{.34\linewidth}
+%		\centering
+%		\includegraphics[width=0.8\linewidth]{postgres/postgresNoView}
+%		%\vspace*{-0.65em}
+%		\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
+%		\label{fig:postgresNoViews}
+%	\end{minipage}
 %\end{figure*}
-
-\begin{figure*}
-	\centering
-	\begin{minipage}{.58\linewidth}
-		\centering
-	\begin{subfigure}{.32\linewidth}
-		\includegraphics[width=1\linewidth]{queryScale/3Ops}
-		\caption{Queries: 3, 11, 14.\\\hspace{\textwidth}}
-		\label{fig:3Q}
-		%\vspace*{0.7em}
-	\end{subfigure}%
-	\hspace*{0.3em}
-	\begin{subfigure}{.32\linewidth}
-		\includegraphics[width=1\linewidth]{queryScale/9Ops}
-		\caption{Queries:\\\hspace{\textwidth} 2, 3, 5, 8, 11, 13-15, 18.}
-		\label{fig:9Q}
-		%\vspace*{0.7em}
-	\end{subfigure}%
-	\hspace*{0.3em}
-	\begin{subfigure}{.32\linewidth}
-		%\includegraphics[width=1\linewidth]{queryScale/queries_scale_15Q}
-		\includegraphics[width=1\linewidth]{queryScale/15Ops}
-		\caption{Queries:\\\hspace{\textwidth} 2-8, 11-15, 17, 18, 21.}
-		\label{fig:15Q}
-		%\vspace*{0.7em}
-	\end{subfigure}%
-	\vspace*{-0.65em}
-	\caption{PotionDB and \emph{Local}  performance with multiple update rates and an increasing number of views.}
-	\label{fig:queryScaleUpds}
-	\vspace*{-0.2em}
-	\end{minipage}%
-	\hspace*{0.05\linewidth}
-	\begin{minipage}{.34\linewidth}
-		\centering
-		\includegraphics[width=0.8\linewidth]{postgres/postgresNoView}
-		%\vspace*{-0.65em}
-		\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
-		\label{fig:postgresNoViews}
-	\end{minipage}
-\end{figure*}
 
 \subsection{PostgreSQL vs PotionDB}\label{sec:eval:postgrs}
 
@@ -2083,26 +2083,57 @@ The subset of SQL usable for specifying views with pg\_ivm is also limited, name
 For fairness, we focus on comparing PostgreSQL with Single PotionDB.
 Clients are assumed to be running in the same data center as the server(s). %TODO: Justification/motivation for this? I just wanted to leave clear we did not add any latency.
 
-\begin{figure}
+\begin{figure*}
 	\centering
-	\begin{subfigure}{.482\linewidth}
-		\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
-		\caption{Query-only  throughput.}
-		\label{fig:postgres_query}
-		\vspace*{0.7em}
-	\end{subfigure}%
-	\hspace*{0.3em}
-	\begin{subfigure}{.483\linewidth}
-		\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
-		\caption{Throughput with multiple query clients and 1 update client.}
-		\label{fig:postgres_update}
-	\end{subfigure}%
-	\vspace*{-0.65em}
-	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
+	\begin{minipage}{.55\linewidth}
+		\begin{subfigure}{.482\linewidth}
+			\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
+			\caption{Query-only throughput.}
+			\label{fig:postgres_query}
+			\vspace*{0.7em}
+		\end{subfigure}%
+		\hspace*{0.3em}
+		\begin{subfigure}{.483\linewidth}
+			\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
+			\caption{Throughput with multiple query clients and 1 update client.}
+			\label{fig:postgres_update}
+		\end{subfigure}%
+		\vspace*{-0.65em}
+		\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
 		%All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
-	\label{fig:postgres}
+		\label{fig:postgres}
 	\vspace*{-0.2em}
-\end{figure}
+	\end{minipage}%
+	\hspace*{0.05\linewidth}
+	\begin{minipage}{.38\linewidth}
+		\centering
+		\includegraphics[width=0.85\linewidth]{postgres/postgresNoView}
+		%\vspace*{-0.65em}
+		\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
+		\label{fig:postgresNoViews}
+	\end{minipage}
+\end{figure*}
+
+%\begin{figure}
+%	\centering
+%	\begin{subfigure}{.482\linewidth}
+%		\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
+%		\caption{Query-only  throughput.}
+%		\label{fig:postgres_query}
+%		\vspace*{0.7em}
+%	\end{subfigure}%
+%	\hspace*{0.3em}
+%	\begin{subfigure}{.483\linewidth}
+%		\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
+%		\caption{Throughput with multiple query clients and 1 update client.}
+%		\label{fig:postgres_update}
+%	\end{subfigure}%
+%	\vspace*{-0.65em}
+%	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
+%		%All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
+%	\label{fig:postgres}
+%	\vspace*{-0.2em}
+%\end{figure}
 
 %\begin{table}
 %	\begin{tabular}{l | a | b | a | b}
@@ -2124,28 +2155,41 @@ This is mostly due to two of the selected queries - Q11 and Q15.
 Q3, Q5, Q14 and Q18 are well supported by PostgreSQL, even slightly outperforming Single PotionDB, but far from PotionDB's throughput.
 Q15 is not efficiently supported in PostgreSQL as pg\_ivm does not support both \emph{order by} nor aggregations of aggregations, thus to answer this query extra computation is required and multiple rows are scanned. %It needs to calculate a "max" manually.
 On the other hand, Q11 is efficiently supported but returns more data than other queries do - 100 rows, instead of 10 or less.
-Thus, Q11 has reduced performance in both Single, PotionDB and Postgres compared to other, simpler, queries. 
-However the max throughput reduction is much higher in Postgres (96.8\%) than Single (28.5\%) or PotionDB (25.5\%). %Maybe with raw numbers the difference looks more significant? Postgres: 320k -> 10k query/s. Single. 288k -> 206k. PotionDB: 1371k -> 1044k.
+Thus, Q11 has reduced performance in both Single, PotionDB and PostgresSQL compared to other, simpler, queries. 
+However the max throughput reduction is much higher in PostgresSQL (96.8\%) than Single (28.5\%) or PotionDB (25.5\%). %Maybe with raw numbers the difference looks more significant? PostgresSQL: 320k -> 10k query/s. Single. 288k -> 206k. PotionDB: 1371k -> 1044k.
 
-The scenario is quite different when updates are considered.
-We consider a single update transaction to be a new order and its associated lineitems, however we count each order or item as one update.
-On average, a new order has 4 to 5 items.
-Figure \ref{fig:postgres_update} shows the update throughput when having a single client executing updates, and a varying number of query clients.
-In all cases, as the number of query clients increases, the update throughput diminishes. %I do not know what to say to justify this... basically the reason is that it's only 1 update client, so he will spend more time waiting for an "oportunity" to update among all ongoing queries. 
-Even with incremental view maintenance, view maintenance has a high impact on PostgreSQL's update throughput.
-This is observable as PostgreSQL has a reasonable throughput (up to 6.5k updates/s) when only Q11's views are deployed (Q11 does not require updating), however this throughput is quite lower with Q15, the cheapest view to update, and is unreasonable when views for more than one query are considered (e.g., Q11, Q14 and Q18) or all views are considered, going as low as 5 updates per second.
-On the other hand, both Single and PotionDB achieve higher update throughput in all situations, and have almost no observable impact of having multiple views to update. %Multiple update clients would be needed to saturate PotionDB, and it would lead to an even higher update throughput.
-%TODO: Should I replace the Q11_Q14_Q18 line with only Q14_Q18? To show that even with only 2 queries, it's already bad. My reasoning for leaving Q11 in, is because Q11 is "for free" when it comes to updates.
-
-We note the following limitations on our update experiments.
-First, only a single update client is used, as even a small amount of update clients easily overwhelm Postgres when having views for more than one query. %I don't know how to mention this, but let's say having 5-10 update clients will easily make inserting a new order take 10s. If needed I can get more precise data on this.
-Secondly, order removal is around 4 times slower than inserting a new order, thus our experiments only include insertions.
-Both limitations favor PostgreSQL, as PotionDB easily supports a high update ratio (see Section~\ref{subsec:potiondbSingleDC}), and is not affected considerably by deletes vs insertions, except for very high update ratios. %NOTE: We do not have any graph in the paper to support the last statement.
+Figure \ref{fig:postgres_update} showcases PostgresSQL's performance with both queries and updates.
+At a first glance, it looks similar to Figure \ref{fig:postgres_query}.
+However, this is due to two key limitations in this experiment:
+\begin{enumerate*}[label=(\roman*)]
+\item \label{post1} updates insert only new orders - there is no removes;
+\item \label{post2} a single client is dedicated to execute updates - all other clients are query-only.
+\end{enumerate*}
+These limitations are employed because in PostgresSQL, updates with incremental view maintenance are very slow, easily reaching latencies in order of seconds when deploying views for more than one query.
+Furthermore, we observed in other experiments (not included in this document) that if we allow several clients to execute updates, PostgresSQL's clients will spend a long time waiting for each other's updates to commit, thus achieving very low throughput.
+Finally, \emph{delete} updates are about 4 times slower than \emph{insert} updates.
+On a positive note, update execution in PostgresSQL does not have a visible impact in the throughput of query-only clients.
+We note that, as observed in Figures \ref{fig:upds_tc} and \ref{fig:update_rates_global_vs_local_noTC}, PotionDB supports modest update rates in all clients while still maintaining high query throughput, unlike PostgresSQL.
 
 Finally, Figure \ref{fig:postgresNoViews} showcases PostgreSQL's query-only performance when using indexes to support the queries instead of views.
-When comparing to Figure \ref{fig:postgres_query}, it follows up that the showcased TPC-H queries do not perform well even when using indexes optimized for these queries, as many rows still need to be scanned and joins calculated to answer the queries. %Q3 performs "OK" with indexes (1000Q/s), but that's still A LOT slower compared to with views (300000Q/s)
+When comparing to Figure \ref{fig:postgres_query}, it follows up that the selected TPC-H queries do not perform well even when using indexes optimized for these queries, as many rows still need to be scanned and joins calculated to answer the queries. %Q3 performs "OK" with indexes (1000Q/s), but that's still A LOT slower compared to with views (300000Q/s)
 Similar results is expected of other databases without views or some caching  mechanism.
-Without indexes, performance will degrade even further as full table scans will be necessary.
+Without indexes, performance would degrade even further as full table scans would be necessary.
+
+%The scenario is quite different when updates are considered.
+%We consider a single update transaction to be a new order and its associated lineitems, however we count each order or item as one update.
+%On average, a new order has 4 to 5 items.
+%Figure \ref{fig:postgres_update} shows the update throughput when having a single client executing updates, and a varying number of query clients.
+%In all cases, as the number of query clients increases, the update throughput diminishes. %I do not know what to say to justify this... basically the reason is that it's only 1 update client, so he will spend more time waiting for an "oportunity" to update among all ongoing queries. 
+%Even with incremental view maintenance, view maintenance has a high impact on PostgreSQL's update throughput.
+%This is observable as PostgreSQL has a reasonable throughput (up to 6.5k updates/s) when only Q11's views are deployed (Q11 does not require updating), however this throughput is quite lower with Q15, the cheapest view to update, and is unreasonable when views for more than one query are considered (e.g., Q11, Q14 and Q18) or all views are considered, going as low as 5 updates per second.
+%On the other hand, both Single and PotionDB achieve higher update throughput in all situations, and have almost no observable impact of having multiple views to update. %Multiple update clients would be needed to saturate PotionDB, and it would lead to an even higher update throughput.
+%TODO: Should I replace the Q11_Q14_Q18 line with only Q14_Q18? To show that even with only 2 queries, it's already bad. My reasoning for leaving Q11 in, is because Q11 is "for free" when it comes to updates.
+
+%We note the following limitations on our update experiments.
+%First, only a single update client is used, as even a small amount of update clients easily overwhelm Postgres when having views for more than one query. %I don't know how to mention this, but let's say having 5-10 update clients will easily make inserting a new order take 10s. If needed I can get more precise data on this.
+%Secondly, order removal is around 4 times slower than inserting a new order, thus our experiments only include insertions.
+%Both limitations favor PostgreSQL, as PotionDB easily supports a high update ratio (see Section~\ref{subsec:potiondbSingleDC}), and is not affected considerably by deletes vs insertions, except for very high update ratios. %NOTE: We do not have any graph in the paper to support the last statement.
 
 
 %\newpage
@@ -2238,6 +2282,7 @@ ChronoCache \cite{chronocache} is a middleware caching layer for geo-replicated 
 While the caching can speed up future requests, complex queries may still need to contact multiple servers and updates can invalidade the cache or else clients read stale data.
 
 Caerus \cite{hildred2023caerus} implements a novel transaction algorithm for strongly consistent geo-dstributed databases.
+% which commits transactions with a single RTT.
 Data locality is leveraged on to reduce transaction latency.
 However, complex global queries still need to gather and process large amounts of data from multiple regions.
 Furthermore, update transactions involving multiple regions still need to pay a full RTT.
