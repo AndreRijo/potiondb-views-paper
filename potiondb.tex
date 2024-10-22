@@ -1693,7 +1693,7 @@ In short, \textit{PotionDB} is efficient for both global and local queries, whil
 \begin{figure}
 	\centering
 	\begin{subfigure}{.47\linewidth}
-		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc_short}
+		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc}
 	\vspace{-10pt}
 		\caption{Local.}
 		\label{fig:update_rates_local_tc}
@@ -1802,13 +1802,13 @@ as in availability zones in a cloud region, using the extreme case with no added
 
 \begin{figure}
 	\centering
-	\begin{subfigure}{.49\linewidth}
+	\begin{subfigure}{.485\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/all_queries_noTC}
 		\caption{All queries}
 		\label{fig:all_queries_noTC}
 	\end{subfigure}%
-	\hspace*{0.2em}
-	\begin{subfigure}{.49\linewidth}
+	\hspace*{0.4em}
+	\begin{subfigure}{.485\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/q3_q5_noLatency}
 		\caption{Single type of query}
 		\label{fig:q3_q5_noTC}
@@ -2200,36 +2200,39 @@ For speeding up PostgeSQL, we use asynchronous commit with read committed and a 
 
 \begin{figure*}[t]
 	\centering
-	\begin{minipage}{.55\linewidth}
+	\begin{minipage}{.57\linewidth}
 		\begin{subfigure}{.482\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
 	\vspace{-10pt}
 			\caption{Query-only.}
 			\label{fig:postgres_query}
-			\vspace*{0.7em}
 		\end{subfigure}%
-		\hspace*{0.3em}
+		\hspace*{0.4em}
 		\begin{subfigure}{.483\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
 	\vspace{-10pt}
-			\caption{Multiple query clients and 1 update client.}
+			\caption{1 update, multiple query clients.}
 			\label{fig:postgres_update}
 		\end{subfigure}%
-		\vspace*{-0.65em}
+	\vspace{-10pt}
 		\caption{Comparison with PostgreSQL - All represents all selected queries; Sub consists of Q3, Q5, Q14 and Q18.}
 %	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
 		%All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
 		\label{fig:postgres}
 	\vspace*{-0.2em}
 	\end{minipage}%
-	\hspace*{0.05\linewidth}
-	\begin{minipage}{.38\linewidth}
+	\hspace*{0.07\linewidth}
+	\begin{minipage}{.36\linewidth}
 		\centering
-		\includegraphics[width=0.85\linewidth]{postgres/postgresNoView}
-		%\vspace*{-0.65em}
+		\includegraphics[width=0.85\linewidth]{postgres/postgresViewVsIndex}
+		%\includegraphics[width=0.85\linewidth]{postgres/postgresNoView}
+		\vspace*{-10pt}
 		\caption{PostgreSQL query-only performance with indexes.}
+		%\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
 		\label{fig:postgresNoViews}
+	\vspace{-10pt}
 	\end{minipage}
+	\vspace{-10pt}
 \end{figure*}
 
 %\begin{figure}
@@ -2293,8 +2296,8 @@ turns out to be slower in PostgreSQL when compared with PotionDB.
 Figure \ref{fig:postgres_update} shows performance in a workload with queries and updates - results are similar to
 the read-only workload. 
 However, unlike the results presented in previous sections, these results were obtained having a single client executing
-updates - in PorgreSQL, when there are concurrent update transactions in a database with multiple views (with incremental view maintenance), 
-latency becomes very high and can reach a few seconds, which would lead to low performance if all clients preformed updates. 
+updates - in PostgreSQL, when there are concurrent update transactions in a database with multiple views (with incremental view maintenance), 
+latency becomes very high and can reach a few seconds, which would lead to low performance if all clients performed updates. 
 We note that is not the case in PotionDB, which can provide TCC with high throughput in workloads with up to 25\% of updates.
 
 
