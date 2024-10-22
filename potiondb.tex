@@ -312,7 +312,7 @@ accessing data located at multiple data centers.
 
 This paper addresses this problem. %
 %This problem can be addressed using different approaches. 
-A possible approach would be to
+A possible solution is to
 %First, it is possible to 
 have a \emph{main} data center that replicates all data, and forward queries to such data center.
 This makes the \emph{main} data center a central point of failure and a performance bottleneck, as it needs to execute all these queries.
@@ -320,14 +320,19 @@ This makes the \emph{main} data center a central point of failure and a performa
 Alternatively, 
 it is possible to execute the query by accessing multiple locations, using, for example, 
 a distributed processing system for geo-partitioned data~\cite{kloudas2015pixida,jetstream}.
-This requires running an additional external service, posing challenges for the consistency of the results returned and the data returned
-in other queries.
+This requires running an additional external service, posing challenges for the consistency of these results and 
+queries executed in the database.
+The same problems occurs when caching results of these queries~\cite{chronocache}.
 %, mostly when adopting weak consistency models (a local update that should
 %be reflected in the result of the query may not be returned, as the update might have not been read by the 
 %external service that accessed a different replica).
 
-We propose a different approach: to maintain materialized views, as commonly available in centralized 
-relational databases.
+We propose a different approach: to maintain materialized views for recurrent queries.
+%, as commonly available in centralized 
+%relational databases. 
+Although the frequency of recurrent
+queries depends on the application, the popularity of application caches (e.g. memcached and Redis)  
+and database caches \cite{chronocache} shows that recurrent queries are common in practice.
 Implementing such feature efficiently in a partially geo-replicated database requires 
 addressing two main challenges. 
 First, it is necessary to maintain the materialized views consistent with the remaining data
@@ -437,10 +442,9 @@ In this paper we make the following contributions:
 \section{System Overview}
 \label{sec:overview}
 
-This section overviews PotionDB, focusing on support for recurrent queries, and in particular for
-complex recurrent queries, such as those present in TPC-H~\cite{tpch}. Although the frequency of recurrent
-queries depends on the application, the popularity of application caches (e.g. memcached and Redis)  
-and database caches \cite{chronocache} shows that recurrent queries are common in practice.
+%This section overviews PotionDB, focusing on support for recurrent queries.
+%, and in particular for
+%complex recurrent queries, such as those present in TPC-H~\cite{tpch}. 
 
 PotionDB is a distributed database designed for supporting global services deployed at multiple data centers. 
 In these settings, (some) data items are only needed at some geographic locations. 
@@ -465,10 +469,15 @@ For supporting the latter, %operations,
 PotionDB provides materialized views that are the result of an aggregation 
 over geo-partitioned data and provides algorithms to efficiently maintain these views consistent.
 
-The key features of this example - global service with a large database with
-data that is mostly accessed in a single (or few) location,  and some operations accessing the result
-of a global aggregation - are common to other global services, such as multi-user online games, and
-social news aggregation.
+Other global services, such as multi-user online games and
+social news aggregation, share similar features - having a large database with
+data accessed mostly in a single location and operations accessing the result
+of a global aggregation.
+
+%The key features of this example - global service with a large database with
+%data accessed mostly in a single location and operations accessing the result
+%of a global aggregation - are common to other global services, such as multi-user online games, and
+%social news aggregation.
 
 
 %What do I want to define?
@@ -578,8 +587,8 @@ as a map CRDT, with each element of the map having its own type.
 \small{
 \begin{lstlisting}[language=SQL]
 CREATE VIEW (MonthlyTopSales, views) WITH 
-YEAR == ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
-MONTH ==  ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
+YEAR==ANY (SELECT DISTINCT SaleDate.Year FROM sales), 
+MONTH==ANY (SELECT DISTINCT SaleDate.Month FROM sales) AS
 SELECT ProdName, SaleDate.Month, SaleDate.Year, SUM(Price - Cost) AS SumProfit, COUNT(*) AS NumSales
 FROM Sales
 WHERE SaleDate.Month == [MONTH] AND SaleDate.Year == [YEAR]
@@ -589,7 +598,7 @@ LIMIT 10
 \end{lstlisting}}
 	\vspace{-5pt}
 	\caption{Specification of the view Monthly \emph{TopSales}.}
-	\vspace{-10pt}
+	\vspace{-15pt}
 	\label{fig:viewtopsales}
 \end{figure}
 
@@ -765,11 +774,11 @@ serialization.
 To guarantee state convergence, we use CRDTs~\cite{crdt,walter},
 which guarantee that after executing the same set of transactions according
 to a valid serialization, objects will have the same state (by relying on the
-deterministic conflict resolution policies defined in the CRDT used for each database object).
+deterministic conflict resolution rules defined in the CRDT used for each database object).
 
-Our transactional and replication protocols ensure that objects' states evolves monotonically.
-Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
-We detail this further in Section \ref{sec:transactions}. %Andre: added this to address Rev 370B.
+%Our transactional and replication protocols ensure that objects' states evolves monotonically.
+%Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
+%We detail this further in Section \ref{sec:transactions}. %Andre: added this to address Rev 370B.
 
 \nuno{Temos de dizer algums coisa sobre relaxado}
 %\noindent
@@ -865,7 +874,8 @@ and execute transactions with TCC in PotionDB.
 \subsection{Objects}
 \label{sec:tx:objs}
 
-PotionDB stores two types of CRDTs: common CRDTs~\cite{crdt} and non-uniform CRDTs (NuCRDTs)~\cite{Cabrita17Nonuniform}.
+PotionDB stores two types of CRDTs: common CRDTs~\cite{crdt} and non-uniform CRDTs (NuCRDTs)~\cite{Cabrita17Nonuniform}, 
+which encode the type-specific aspects of PotionDB operation.
 %We now explain the guarantees and uses of each type of objects.
 
 \noindent
@@ -874,15 +884,15 @@ after applying the same set of operations. In particular, PotionDB uses operatio
 in which the convergence of replicas is guaranteed if operations are causally applied.
 % respecting causality.  
 This is the case in PotionDB, as a valid transaction serialization must respect the happens-before
-relation.
+relation, thus guaranteeing that PotionDB replicas converge.
 %, i.e., the causal order.
 
 Our prototype supports the following CRDTs: last-writer-wins register, for storing opaque values;
-add-wins set, for keeping a set where adding an elements wins over a concurrent removal of that element;
-add-wins map, for maintaining a map of values;
-counter, for maintaining a number that accepts concurrent increment and decrement operations;
+add-wins set, for sets where adding an elements wins over concurrent removals;
+add-wins map, for maps of values;
+counter, for numbers that accepts concurrent increments and decrements;
 average, for maintaining the average of values added to this object;
-an integer register, that keeps the max/min value registered. %Andre: added max/min register, as it is used to implement max() and min() efficiently.
+and an integer register, that keeps the max/min value registered. %Andre: added max/min register, as it is used to implement max() and min() efficiently.
 
 \noindent
 \textbf{NuCRDTs.} Non-uniform CRDTs~\cite{Cabrita17Nonuniform} are CRDTs that guarantee that in a quiescent state, 
@@ -994,6 +1004,11 @@ Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $\mat
 
 \subsection{Transaction processing}
 \label{subsec:txnproc}
+
+Our transactional and replication protocols ensure that objects' states evolves monotonically.
+Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
+We detail this further in Section \ref{sec:transactions}. %Andre: added this to address Rev 370B.
+
 
 A client executes a transaction by interactively contacting a PotionDB server.
 The transaction execution is coordinated by the Transaction Manager (TM).
