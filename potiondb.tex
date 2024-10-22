@@ -904,13 +904,13 @@ updates that may affect the observable state. For example, consider a maximum ob
 \code{getMax()} operations. An \emph{insert} executed in a replica only needs to be propagated 
 to other replicas if the inserted value can be the new maximum. 
 
-NuCRDTs allow to save on both replication, processing and storage costs, as not all updates for a given NuCRDT object need 
+NuCRDTs allow to save on both replication, processing and storage costs, as not all updates need 
 to be replicated and applied everywhere.
-In PotionDB, we support the following NuCRDTs, previously proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}: 
+In PotionDB, we support the following NuCRDTs~\cite{Cabrita17Nonuniform}: 
 \begin{inparaenum}[(i)]
 \item maximum and minimum objects, for storing the maximum or minimum of the objects added to the object;
-\item top-K,  for storing the K entries with largest values;
-\item top-K counter  for storing the K map key, value entries with largest values, where the value
+\item top-K, for storing the K entries with largest values;
+\item top-K counter, for storing the K (key, value) entries with largest values, where the value
 can be updated by issuing increment/decrement operations.
 \end{inparaenum}
 NuCRDTs can be used directly by applications, but are more commonly used for supporting 
@@ -918,46 +918,83 @@ views, as detailed in Section~\ref{sec:views_for_apps}.
 
 \nuno{Dar mais detalhes de como funcionam?}
 
-By not propagating all operations, in some cases, a NuCRDT may temporarily expose an incorrect state.
-Consider the maximum NuCRDT.  Each replica keeps only the maximum element and 
-the elements that were inserted locally. If the maximum NuCRDT also includes a \code{remove(n)} operation,
-and the maximum element is removed in a given replica, the replica might not have the new maximum element,
-because it might have been inserted in some other replica.  All replicas of the maximum NuCRDT eventually 
-converge to the maximum value, as every replica will propagate the local maximum element after receiving the 
-remove operation, guaranteeing that all replicas will receive the new maximum value.
+As proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}, by not propagating all operations, in some cases, 
+a NuCRDT may temporarily expose an incorrect state.
+Consider the maximum NuCRDT. Each replica keeps only the maximum element and 
+the elements that were inserted locally. If the maximum NuCRDT has a \code{remove(n)} operation,
+when the maximum element is removed in some replica, the replica may not have the new maximum,
+as it may have been inserted in some other replica.  
+All replicas of the maximum NuCRDT eventually 
+converge to the new maximum value, as every replica will propagate the local maximum element after receiving the 
+remove operation, guaranteeing that all replicas will receive the new maximum.
 
-Our work extends the NuCRDTs specifications proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}
-in three ways to make them practical for PotionDB.
-First,  a top-K object,  instead of keeping only the value associated with an element,  keeps multiple
+Tu support views in PotionDB, we had to extend existing NuCRDTs specifications
+in three ways.
+First, top-K objects, instead of keeping only the value of the element,  keeps multiple
 attributes for each element, as needed for storing a complete view entry. An application can update
-the value used for establishing the top elements using a set operation (in top K) or an increment/decrement 
-operation (in a top-K counter).  Other attributes can also be updated (as in a map CRDT). %Andre: Rev 370B complained that "this sentence is rather obscure" but I think it's okay like this. If not, just say it is updated together with the set or increment/decrement (which is how it is done).
+the value used for establishing the top elements using a set operation (in top-K) or an increment/decrement 
+(in a top-K counter). Other attributes can also be updated (as in a map CRDT). %Andre: Rev 370B complained that "this sentence is rather obscure" but I think it's okay like this. If not, just say it is updated together with the set or increment/decrement (which is how it is done).
 
-%\carla{I don't understand the next paragraph!}
-%As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
-%row and the ordered value used to select the top rows.
-%An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
-%and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
-%row, with the operations of the data type.% associated with the row element.
-% \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
 
-Second, we extend NuCRDT to include information that allows a replica to know if it might be exposing incorrect results. 
-This information consists in the timestamps of transactions that could cause the anomaly - e.g. in our maximum NuCRDT, 
-this is the timestamp of the transaction with the \emph{remove} operation that deleted the previous maximum. 
-Given this information, and knowing the updates that replicas have seen (which is maintained by PotionDB), 
-a replica knows that no anomaly can occur if the operation has been seen by all replicas, 
-which would have triggered replicas to send operations relevant for the observable state, if any.
+
+
+%By not propagating all operations, in some cases, a NuCRDT may temporarily expose an incorrect state.
+%Consider the maximum NuCRDT.  Each replica keeps only the maximum element and 
+%the elements that were inserted locally. If the maximum NuCRDT also includes a \code{remove(n)} operation,
+%and the maximum element is removed in a given replica, the replica might not have the new maximum element,
+%because it might have been inserted in some other replica.  All replicas of the maximum NuCRDT eventually 
+%converge to the maximum value, as every replica will propagate the local maximum element after receiving the 
+%remove operation, guaranteeing that all replicas will receive the new maximum value.
+%
+%
+%NuCRDTs can be used directly by applications, but are more commonly used for supporting 
+%views, as detailed in Section~\ref{sec:views_for_apps}.
+%
+%
+%Our work extends the NuCRDTs specifications proposed by Cabrita et. al.~\cite{Cabrita17Nonuniform}
+%in three ways to make them practical for PotionDB.
+%First,  a top-K object,  instead of keeping only the value associated with an element,  keeps multiple
+%attributes for each element, as needed for storing a complete view entry. An application can update
+%the value used for establishing the top elements using a set operation (in top K) or an increment/decrement 
+%operation (in a top-K counter).  Other attributes can also be updated (as in a map CRDT). %Andre: Rev 370B complained that "this sentence is rather obscure" but I think it's okay like this. If not, just say it is updated together with the set or increment/decrement (which is how it is done).
+%
+%%\carla{I don't understand the next paragraph!}
+%%As such, a top-K object consists in a set of CRDT maps (rows) with two special elements - the key of the 
+%%row and the ordered value used to select the top rows.
+%%An application can update the ordered value associated with a key by issuing a set value operation in top-K objects
+%%and increments/decrements in top-K counter objects. Other elements can also be updated, given the key of the
+%%row, with the operations of the data type.% associated with the row element.
+%% \andre{In the implementation, a Top-K entry is a key, value and "an array of bytes" (so, not other CRDTs inside the Top-K). Should we change the text to reflect that?}
+
+
+%Second, we extend NuCRDT to include information that allows a replica to know if it might be exposing incorrect results. 
+%This information consists in the timestamps of transactions that could cause the anomaly - e.g. in our maximum NuCRDT, 
+%this is the timestamp of the transaction with the \emph{remove} operation that deleted the previous maximum. 
+%Given this information, and knowing the updates that replicas have seen (which is maintained by PotionDB), 
+%a replica knows that no anomaly can occur if the operation has been seen by all replicas, 
+%which would have triggered replicas to send operations relevant for the observable state, if any.
  
-Third, we extended NuCRDT specifications to maintain a larger observable state to 
-reduce the instances in which a replica may be exposing incorrect results.
- % in practice. 
-In our example, the maximum NuCRDT
-can maintain the two largest elements. Therefore, if the maximum element
-is deleted, replicas still have the new maximum. 
-This extension is simple for all NuCRDTs we have defined.% besides the top-K counter. 
-%\carla{What is "this" is the above sentence?}
+Second, we extended NuCRDTs to maintain a larger observable state to 
+reduce the cases in which a replica may be exposing incorrect results - e.g. 
+the maximum NuCRDT maintains the two largest elements, guaranteeing that replicas have 
+the new maximum if a single remove is issued.
+In most practical situations this guarantees that replicas have the correct values - e.g. 
+a Top-10 object that keeps the largest 20 elements exposes no anomaly unless
+more than 10 concurrent removes of top elements occur, which is very unlikely in practice.
 
-\nuno{explicar como fazer?}
+Third, we extend NuCRDTs to include information to know if it might be exposing incorrect results. 
+This information consists in the timestamps of transactions that could cause the anomaly - e.g. in the maximum NuCRDT, 
+the transactions that \emph{remove} the maximum.
+Knowing the updates that replicas have seen (which is maintained by PotionDB), 
+a replica knows that no anomaly can occur if the problematic operation has been seen by all replicas, 
+which would have triggered replicas to send operations relevant for the observable state, if any.
+PotionDB uses this to block reads, as detailed in Section~\ref{sec:replication}.
+
+%In NuCRDTs, when such operations is received by a replica, it sends operations relevant for the observable state to other replicas, 
+%if any - e.g. the new maximum in the maximum NuCRDT. Thus, a replica knows it has the correct value when it has the information
+%that the problematic operation has been seen in all replicas, which can be verified using information maintained in PotionDB.
+%This is used in PotionDB to block reads, as detailed in Section~\ref{sec:replication}.
+
 
 
 \subsection{Sharding}
@@ -965,10 +1002,9 @@ This extension is simple for all NuCRDTs we have defined.% besides the top-K cou
 
 PotionDB adopts a sharded model, where objects replicated in a location are 
 split into multiple shards. For durability, each shard could be replicated in multiple
-servers using some replication protocol \cite{paxos,raft}. %\cite{paxos,raft,chainreplication}.
-
-In each server,  a shard has a dedicated thread, adopting an approach used in other
-database systems, such as H-store~\cite{h-store}. This avoids using locks when 
+servers \cite{paxos,raft}. %\cite{paxos,raft,chainreplication}.
+In each server, a shard has a dedicated thread, adopting an approach used in other
+database systems, such as H-Store~\cite{h-store}. This avoids using locks when 
 accessing objects, simplifying the implementation and avoiding issues 
 as lock contention.
 
