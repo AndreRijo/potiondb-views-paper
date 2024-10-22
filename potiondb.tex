@@ -2285,8 +2285,8 @@ turns out to be slower in PostgreSQL when compared with PotionDB.
 Figure \ref{fig:postgres_update} shows performance in a workload with queries and updates - results are similar to
 the read-only workload. 
 However, unlike the results presented in previous sections, these results were obtained having a single client executing
-updates - in PorgreSQL, when there are concurrent update transactions in a database with multiple views (with incremental view maintenance), 
-latency becomes very high and can reach a few seconds, which would lead to low performance if all clients preformed updates. 
+updates - in PostgreSQL, when there are concurrent update transactions in a database with multiple views (with incremental view maintenance), 
+latency becomes very high and can reach a few seconds, which would lead to low performance if all clients performed updates. 
 We note that is not the case in PotionDB, which can provide TCC with high throughput in workloads with up to 25\% of updates.
 
 
