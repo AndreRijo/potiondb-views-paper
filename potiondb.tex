@@ -1016,8 +1016,8 @@ as lock contention.
 Let $L_1$, ..., $L_n$ be the set of locations in the system. 
 Each location $L_j$ keeps a global vector clock $\mathit{vc}_G$, with one entry for each $L_k \in L_1, ..., L_n$.
 This clock represents the latest snapshot available in $L_j$, summarizing the transactions integrated in the snapshot.
-Each shard $\mathit{sh}_i$ also keeps a local vector clock $\mathit{vc}_i$.
-The local vector clock represents the latest snapshot available in $sh_i$, which may be different 
+Each shard $\mathit{sh}_i$ also keeps a local vector clock $\mathit{vc}_i$, with its 
+latest snapshot, which may be different 
 from $\mathit{vc}_G$.
 Any shard can access the server's physical clock, $\mathit{pc}$.
 
@@ -1027,9 +1027,9 @@ pair (timestamp, location identifier).  A transaction with commit clock $(n,r_i)
 $\mathit{vc}_G[r_i] \geq n$.
 
 %Andre: added the word "also" to address Rev 370B's comment. In the code, the HLC and vci are mixed together... our vci just use the HLC logic to generate the next timestamp. But technically it's as if we have both I suppose.
-Each shard also maintains an hybrid logical clock (HLC)~\cite{hlc} used to assign timestamps. An HLC uses the 
-physical clock of the computer to generate the next timestamp, unless the physical clock is smaller than a timestamp
-previously generated/observed. In this case, it returns the maximum previously observed timestamp plus one. 
+Each shard also has an hybrid logical clock (HLC)~\cite{hlc} to assign timestamps. An HLC uses the 
+physical clock to generate the next timestamp, unless the physical clock is smaller than a timestamp
+previously generated/observed. In this case, it returns this value plus one. 
 This guarantees that timestamps generated are monotonically increasing.
 %Different shards may concurrently generate the same timestamp - in this case, the shard's id is used to break the tie.
 %In fact, any monotonically increasing clock would suffice for implementing $\mathit{pc}$.
@@ -1041,24 +1041,20 @@ Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $\mat
 \subsection{Transaction processing}
 \label{subsec:txnproc}
 
-Our transactional and replication protocols ensure that objects' states evolves monotonically.
-Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
-We detail this further in Section \ref{sec:transactions}. %Andre: added this to address Rev 370B.
 
-
-A client executes a transaction by interactively contacting a PotionDB server.
-The transaction execution is coordinated by the Transaction Manager (TM).
+A client executes a transaction by interactively contacting the 
+Transaction Manager (TM) in a PotionDB server.
 %
-When the TM receives a \emph{begin} operation, it chooses which snapshot the
-transaction will access, i.e., the latest snapshot available at the current location,
-which is represented by the global vector clock $\mathit{vc}_G$.
+When the TM receives a \emph{begin} operation, it chooses the latest snapshot available,
+$\mathit{vc}_G$, as the snapshot 
+the transaction will access.
 
-When receiving an update operation, the TM asks the Materializer to execute the update in
-a private copy of the object for the transaction snapshot. When receiving a read operation, 
-the TM asks the Materializer to execute the read operation in the private copy 
-of the object - if no update has been executed before in the object, a shared copy with the version 
-of the transaction snapshot is used. We represent by $t.WS$ and $t.RS$ the sets of objects updated 
-and read in transaction $t$.
+For an update operation, the TM asks the Materializer to execute the update in
+a private copy of the object for the transaction. For a read operation, 
+the TM asks the Materializer to execute the read in the private copy - if no 
+update has been executed before in the object, a shared copy with the version 
+of the transaction snapshot is used. We represent by $t.WS$ and $t.RS$ the update 
+and read sets of transaction $t$.
 
 When the TM receives a commit, it needs to assign the commit timestamp to the transaction. 
 For assigning the commit timestamp, the TM runs a two phase protocol with the shards of the objects
@@ -1089,54 +1085,62 @@ then the Materializer verifies if any commit on hold can now be executed.
 
 The client is informed of the commit as soon as all shards in $t.WS$ acknowledge the commit message, even if 
 some shards queued the commit.
-When all shards apply the commit, $\mathit{Vc}_G$ is updated to include $t\!.\mathit{ct}$.
+When all shards apply the commit, $\mathit{vc}_G$ is updated to include $t\!.\mathit{ct}$.
 This promotes freshness, as new transactions will always use the latest committed snapshot.
  %Additionally, the TM sends information to update the global vector clock to
 %include the timestamp of the committed transaction.
 %Updating the local entry of the global vector clock with the timestamp of committed transactions immediately
 %promotes freshness, as new transactions will always use the latest committed snapshot.
 
-However, this raises a problem, as some shards (not involved in the committed transaction) 
-may still have transactions to commit with smaller timestamps. 
-If a transaction that starts in the most recent snapshot issues a read (or update) operation on object $o$ in a shard that has
+However, some shards (not involved in the committed transaction) 
+may have transactions to commit with smaller timestamps. 
+If a transaction that starts in the most recent snapshot issues an operation on $o$ in a shard that has
 pending transactions with smaller timestamps, the operation needs to block if there is a transaction prepared or on hold 
-that had modified $o$. 
+that modified $o$. 
+
+
+%However, this raises a problem, as some shards (not involved in the committed transaction) 
+%may still have transactions to commit with smaller timestamps. 
+%If a transaction that starts in the most recent snapshot issues a read (or update) operation on object $o$ in a shard that has
+%pending transactions with smaller timestamps, the operation needs to block if there is a transaction prepared or on hold 
+%that had modified $o$. 
 
 %Andre: added this paragraph to clarify a situation brought up by Reviewer 370B. In our reply, we mentioned this was unclear so... I explained it here. The question started with: "In fact from the text in this section, I do not understand how txs never end up with the same commit timestamp"
 It is possible that two transactions end up with the same $t\!.\mathit{ct}$.
-However, this is not problematic, as a new transaction $\mathit{t}_\mathit{new}$  in a shard first checks if the lowest timestamp in $\mathit{prep}_i$ is lower or equal than $\mathit{t}_\mathit{new}$'s read timestamp for the local replica - if this happens, then $\mathit{t}_\mathit{new}$ waits until no lower timestamp exists in $\mathit{prep}_i$.
-In practice, and as observed in our experiments, this is very unlikely due to  nanoseconds being used for local time. %IMPORTANT NOTE: while we do not evaluate directly this effect in our experiment, no considerable impact from this is observable (e.g., no considerable latency spikes).
+This is not problematic, as a new transaction $\mathit{t}_\mathit{new}$  in a shard first checks if the lowest timestamp in $\mathit{prep}_i$ is lower or equal than $\mathit{t}_\mathit{new}$'s read timestamp for the local replica - if this happens, $\mathit{t}_\mathit{new}$ waits until no such timestamp exists in $\mathit{prep}_i$.
+In practice, this is unlikely as nanoseconds are used for time. %IMPORTANT NOTE: while we do not evaluate directly this effect in our experiment, no considerable impact from this is observable (e.g., no considerable latency spikes).
 
 
 \noindent
 \textbf{Operations on objects not locally replicated.}
 %\label{subsec:operationsNonLocal}
-This is basically the Cure~\cite{cure} protocol for providing TCC.  
-Unlike the setting for which Cure was designed, PotionDB is partially replicated and a transaction 
-may access an object $o$
-%that is 
-not locally replicated.
-%, $L_i$. 
-Extending Cure to support this case was simple. 
+The protocol presented so far is basically the Cure~\cite{cure} protocol for providing TCC with full replication.
+We now show how we extended this protocol to support partial replication and NuCRDTs.
+%Unlike the setting for which Cure was designed, PotionDB is partially replicated and a transaction 
+%may access an object $o$
+%%that is 
+%not locally replicated.
+%%, $L_i$. 
+%Extending Cure to support this case was simple. 
 
 When an operation is executed in an object $o$ that is not locally replicated, 
-the shard that should hold $o$ fetches 
-a copy of the object from a remote replica. The version of the object 
+the shard $L_i$ that should hold $o$ fetches 
+a copy of the object from a remote replica. The version
 requested is that
 of the transaction snapshot,  $t\!.\mathit{rc}$ ignoring the entry for the current location.
-It is important to ignore the current location to guarantee a quick reply. 
-Otherwise, as updates are propagated asynchronously, the remote replica would need to wait to
-receive all transactions from $L_i$ reflected in the transaction snapshot before returning a copy
-of $o$.
-After receiving the copy of the object, the shard will apply any updates performed to $o$ at $L_i$. Typically,
+%It is important to ignore the current location to guarantee a quick reply. 
+%Otherwise, as updates are propagated asynchronously, the remote replica would need to wait to
+%receive all transactions from $L_i$ reflected in the transaction snapshot before returning a copy
+%of $o$.
+After receiving the copy of the object, the shard will apply any updates previously performed to $o$ locally. Typically,
 there will be no updates, as $L_i$ does not replicate $o$.
-After this, the transaction accesses the object as any other locally replicated object. When the transaction commit, 
-the updates to the object are propagated in the context of the transaction.
+After this, the transaction accesses $o$ as any other locally replicated object. When the transaction commits, 
+the updates to $o$ are propagated in the context of the transaction.
 
 \noindent
 \textbf{Reads on NuCRDTs.}
-As mentioned, due to the way NuCRDTs work, they may temporarily expose 
-incorrect results when an operation $o$ changes the set of relevant operations.  
+As mentioned, NuCRDTs may temporarily expose 
+incorrect results when an operation $op$ changes the set of relevant operations.  
 As explained, PotionDB is able to detect this situation, which is expected to be rare. 
 %maintains information for a replica to know if this is the case 
 %and
@@ -1147,22 +1151,24 @@ This guarantees fast replies at the cost of potential anomalies.
 %
 Second, to strictly enforce TCC. In this case, the read blocks until the replica gathers 
 information that no relevant operation is missing. This requires receiving information from
-all replicas that operation $o$ was performed and all additional relevant operations, if any, have been
-propagated. This is done in the context of the replication process and explained later.
+all replicas that $op$ was performed and all new relevant operations, if any, have been
+received. This is explained in the context of the replication process.
+% and explained later.
 
 \noindent
 \textbf{Triggers.}
 %\label{subsec:triggers}
 PotionDB has an after update trigger mechanism that can be associated with 
-objects in a given bucket or container.
-When a transaction is executed at the initial replica, after an update, the code
-of the trigger will run and it may issue reads and updates to the same or to a different object.
-These updates are part of the transaction, being committed and propagated to other replicas
+objects in a bucket or container.
+When a transaction executes at the initial replica, after an update, the
+trigger runs and it may issue reads and updates to the same or other object.
+These updates are committed and propagated to other replicas
 as part of the transaction.
 
-Triggers can be used directly by applications, but its primary purpose is to support
+Triggers can be used by applications for any purpose, but its primary goal is to support
 incremental view maintenance.%, as detailed in Section~\ref{sec:views_for_apps}.
 %In the next section
+
 
 \subsection{Replication}
 \label{sec:replication}
@@ -1249,6 +1255,11 @@ the effects of $o_{p}$. These extra effects are remotely propagated
 %to other locations 
 along with the 
 information that a given operation has been executed in the current location. 
+
+%Our transactional and replication protocols ensure that objects' states evolves monotonically.
+%Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
+%We detail this further in Section \ref{sec:transactions}. %Andre: added this to address Rev 370B.
+
 
 \section{Views and Experience}
 \label{sec:views_for_apps}
