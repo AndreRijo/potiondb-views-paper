@@ -1409,7 +1409,7 @@ WHERE C_NationKey == S_NationKey AND R_Name == [REGION]
 GROUP BY N_Name
 ORDER BY Revenue DESC
 \end{lstlisting}}
-	\vspace{-5pt}
+	\vspace{-10pt}
 	\caption{Revenue of local suppliers (Q5).}
 	\vspace{-10pt}
 	\label{fig:viewlocalsupliers}
@@ -1439,7 +1439,7 @@ from the insert (or update) of an order, in the top-K counter, the value of an e
 aggregation over multiple values (in the previous example, \texttt{LineItem}s of different orders).
 
 
-\begin{figure}[h]
+\begin{figure}[t]
 	\begin{lstlisting}[language=SQL]
 CREATE VIEW (Q18, views) WITH QUANTITY == [312..315] AS
 SELECT CustName, CustKey, OrderKey, OrderDate, TotalPrice, TotalQuantity
@@ -1448,9 +1448,9 @@ WHERE TotalQuantity > [QUANTITY]
 ORDER BY TotalPrice DESC, OrderDate ASC
 LIMIT 100
 	\end{lstlisting}
-	\vspace{-5pt}
+	\vspace{-10pt}
 	\caption{Large volume customer query (Q18).}
-	\vspace{-5pt}
+	\vspace{-10pt}
 	\label{fig:q18_view}
 \end{figure}
 
@@ -1483,7 +1483,7 @@ define a view, by selecting the appropriate objects to store the information and
 to update these objects.
 
 %\vspace{-5pt}
-\begin{figure}[h]
+\begin{figure}[t]
 	\begin{lstlisting}[language=SQL]
 CREATE VIEW (Q11_p1, views) WITH NATION == ANY 
 (SELECT DISTINCT N_Name FROM nation) AS
@@ -1500,10 +1500,10 @@ FROM Partsupp
 WHERE N_Name == [NATION]
 ORDER BY value DESC
 \end{lstlisting}
-\vspace{-2pt}
+\vspace{-10pt}
 	\caption{Important stock identification query (Q11). %ORDER BY added to answer review.
 	}
-	\vspace{-5pt}
+	\vspace{-10pt}
 	\label{fig:q5_view}
 \end{figure}
 
@@ -1589,18 +1589,18 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 \begin{figure}
 	\centering
 	\includegraphics[width=0.6\linewidth]{singleQuery/all_queries_tc}
-	\vspace*{-0.75em}
+	\vspace*{-0.85em}
 	\caption{Query-only performance of executing all queries.}
 	\label{fig:global_local_single_tc}
-	\vspace*{-0.9em}
+	\vspace*{-11pt}
 \end{figure}%
 \begin{figure}
 	\centering
 	\includegraphics[width=0.72\linewidth]{singleQuery/single_TC_latencies}
-	\vspace*{-0.6em}
-	\caption{Average latencies of clients in \textit{Single}, depending on the server they are connected to.}
+	\vspace*{-0.85em}
+	\caption{Average latency in \textit{Single}, per server.}
 	\label{fig:single_tc_latencies}
-	\vspace*{-1em}
+	\vspace*{-11pt}
 \end{figure}%
 
 \noindent
@@ -1627,20 +1627,22 @@ To conclude, having global, complete views replicated in every server allows all
 	\centering
 	\begin{subfigure}{.49\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/q3_latency}
-		\caption{Q3-only (global query).}
+	\vspace*{-10pt}
+			\caption{Q3-only (global query).}
 		\label{fig:q3_tc}
 	\end{subfigure}%
 	\hspace*{0.2em}
 	\begin{subfigure}{.49\linewidth}
 		%\raggedright
 		\includegraphics[width=1\linewidth]{singleQuery/q5_latency}
+	\vspace*{-10pt}
 		\caption{Q5-only (local query).}
 		\label{fig:q5_tc}
 	\end{subfigure}%
-	\vspace*{-0.55em}
+	\vspace*{-10pt}
 	\caption{Query performance when executing only Q3 or Q5.}
 	\label{fig:q3_q5_tc}
-	\vspace*{-1.1em}
+	\vspace*{-10pt}
 \end{figure}
 
 %TODO: Effects of query locality or data locality?
@@ -1692,19 +1694,21 @@ In short, \textit{PotionDB} is efficient for both global and local queries, whil
 	\centering
 	\begin{subfigure}{.47\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc_short}
-		\caption{Local configuration.}
+	\vspace{-10pt}
+		\caption{Local.}
 		\label{fig:update_rates_local_tc}
 	\end{subfigure}%
 	\hspace*{0.2em}
 	\begin{subfigure}{.52\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_tc_global_vs_single}
-		\caption{PotionDB and \textit{Single} configurations.}
+	\vspace{-10pt}
+		\caption{PotionDB and \textit{Single}.}
 		\label{fig:update_rates_global_single_tc}
 	\end{subfigure}%
-	\vspace*{-0.65em}
+	\vspace{-10pt}
 	\caption{Performance with multiple update rates.}
 	\label{fig:upds_tc}
-	\vspace*{-1.2em}
+	\vspace{-15pt}
 \end{figure}
 
 
@@ -1832,10 +1836,10 @@ for \textit{Local} and \textit{Single}, due to the low latency for contacting ot
 \begin{figure}
 	\centering
 	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
-	\vspace*{-0.65em}
-	\caption{PotionDB and \textit{Local} performance with multiple update rates, without added latency.}
+	\vspace{-10pt}
+	\caption{Performance with updates and no added latency.}
 	\label{fig:update_rates_global_vs_local_noTC}
-	\vspace*{-1.3em}
+	\vspace{-12pt}
 \end{figure}
 
 %TODO: Would be really nice if I could trim this one further
@@ -1903,19 +1907,21 @@ Unless stated otherwise, each transaction consists in a batch of 5 operations.
 	\centering
 	\begin{subfigure}{.471\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_upd}
-		\caption{1 read per txn.}
+	\vspace*{-10pt}
+			\caption{1 read per txn.}
 		\label{fig:topSize_single}
 	\end{subfigure}%
 	\hspace*{0.2em}
 	\begin{subfigure}{.509\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/bench_top_size_0_upd_5b}
+	\vspace*{-10pt}
 		\caption{5 reads per txn (log scale).}
 		\label{fig:topSize_batch}
 	\end{subfigure}%
-	\vspace*{-0.65em}
+	\vspace*{-10pt}
 	\caption{TopK query performance for multiple top sizes.}
 	\label{fig:topSize}
-	\vspace*{-0.2em} %TODO: Increase this once we can pull higher the text
+	\vspace*{-10pt} %TODO: Increase this once we can pull higher the text
 \end{figure}
 
 %TODO: Maybe not focus so much on serialization/deserialization: it may not be easy to justify/not the real cause
@@ -1952,7 +1958,7 @@ tend to be similar to that of when performing reads independently.
 	\includegraphics[width=0.76\linewidth]{singleQuery/topk_vs_topsum_5b}
 	%\caption{TopK vs TopSum for multiple Top sizes and update ratios}
 	\vspace*{-0.6em}
-	\caption{Top K vs Top K Counter (TopCnt) for various K and update ratios.}
+	\caption{Performance of Top K vs Top K Counter (TopCnt).}
 	\label{fig:topKVSTopSum}
 	\vspace*{-0.75em}
 \end{figure}
@@ -1994,21 +2000,24 @@ Multi-update transactions lock multiple shards instead of just one, so they redu
 	\centering
 	\begin{subfigure}{.325\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/n_servers_0_upd_5b}
+	\vspace*{-10pt}
 		\caption{Query-only}
 		\label{fig:crdts_0_upd}
 	\end{subfigure}%
 	\begin{subfigure}{.325\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/n_servers_0_1_upd_5b}
+	\vspace*{-10pt}
 		\caption{10\% updates.}
 		\label{fig:crdts_10_upd}
 	\end{subfigure}%
 	\begin{subfigure}{.34\linewidth}
 	\includegraphics[width=1\linewidth]{singleQuery/n_servers_0_25_upd_5b}
+	\vspace*{-10pt}
 	\caption{25\% updates.}
 	\label{fig:crdts_25-upd}
 	\end{subfigure}%
-	\vspace*{-5pt}
-	\caption{Performance of Counter, Average and TopK NuCRDT.}
+	\vspace*{-10pt}
+	\caption{Performance of NuCRDT.}
 	\label{fig:crdts:perf}
 	\vspace*{-15pt}
 \end{figure}
@@ -2189,19 +2198,21 @@ For speeding up PostgeSQL, we use asynchronous commit with read committed and a 
 %For fairness, we focus on comparing PostgreSQL with Single PotionDB.
 %Clients are assumed to be running in the same data center as the server(s). %TODO: Justification/motivation for this? I just wanted to leave clear we did not add any latency.
 
-\begin{figure*}
+\begin{figure*}[t]
 	\centering
 	\begin{minipage}{.55\linewidth}
 		\begin{subfigure}{.482\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
-			\caption{Query-only  throughput.}
+	\vspace{-10pt}
+			\caption{Query-only.}
 			\label{fig:postgres_query}
 			\vspace*{0.7em}
 		\end{subfigure}%
 		\hspace*{0.3em}
 		\begin{subfigure}{.483\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
-			\caption{Throughput with multiple query clients and 1 update client.}
+	\vspace{-10pt}
+			\caption{Multiple query clients and 1 update client.}
 			\label{fig:postgres_update}
 		\end{subfigure}%
 		\vspace*{-0.65em}
@@ -2216,7 +2227,7 @@ For speeding up PostgeSQL, we use asynchronous commit with read committed and a 
 		\centering
 		\includegraphics[width=0.85\linewidth]{postgres/postgresNoView}
 		%\vspace*{-0.65em}
-		\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
+		\caption{PostgreSQL query-only performance with indexes.}
 		\label{fig:postgresNoViews}
 	\end{minipage}
 \end{figure*}
@@ -2316,7 +2327,7 @@ In this paper, we show how to circumvent these challenges and provide low latenc
 by keeping views that support TCC access.
 From the results presented in this section we can also conclude that the results for \textit{Local} presented in previous sections can be seen
 as an upper bound (and probably much better) of the performance that could be achieve in a geo-partitioned key-value store that 
-does not maintain local views. 
+does not maintain any views. 
 
 
 %Finally, Figure \ref{fig:postgresNoViews} showcases PostgreSQL's query-only performance when using indexes to support the queries instead of views.
