@@ -2236,9 +2236,8 @@ This result is even more relevant as the PostgreSQL database included the indexe
 queries in the workload. 
 Executing TPC-H queries is challenging, as shown by Dreseler et. al. \cite{dreseler20quantifying}. 
 In this paper, we show how to circumvent these challenges and provide low latency and high throughput 
-by keeping views and supporting TCC transactions that access these views. 
+by keeping views that support TCC access.
 
-that support TCC  
 
 %Finally, Figure \ref{fig:postgresNoViews} showcases PostgreSQL's query-only performance when using indexes to support the queries instead of views.
 %When comparing to Figure \ref{fig:postgres_query}, it follows up that the selected TPC-H queries do not perform well even when using indexes optimized for these queries, as many rows still need to be scanned and joins calculated to answer the queries. %Q3 performs "OK" with indexes (1000Q/s), but that's still A LOT slower compared to with views (300000Q/s)
@@ -2346,20 +2345,21 @@ PotionDB tackles this problem by providing views that summarize partially replic
 %In PotionDB every object is a CRDT and, in particular, we leverage on both computational and non-uniform CRDTs to support our views.
 
 \noindent
-\textbf{Existing solutions.}
-ChronoCache \cite{chronocache} is a middleware caching layer for geo-replicated databases which focus on combining multiple queries into one request and caching query results.
-While the caching can speed up future requests, complex queries may still need to contact multiple servers and updates can invalidade the cache or else clients read stale data.
+\textbf{Geo-distributed databases.}
+Dynamo \cite{dynamo} and Cassandra \cite{cassandra} are eventually consistent databases.
+Both provide indexes to speed up some queries but not materialized views, thus complex queries may need to access large amounts of objects.
+CouchDB \cite{couchDB} provides both indexes and materialized views, however views can only refer to data in one partition.
 
-Caerus \cite{hildred2023caerus} implements a novel transaction algorithm for strongly consistent geo-dstributed databases.
-% which commits transactions with a single RTT.
-Data locality is leveraged on to reduce transaction latency.
-However, complex global queries still need to gather and process large amounts of data from multiple regions.
-Furthermore, update transactions involving multiple regions still need to pay a full RTT.
+ChronoCache \cite{chronocache} is a caching middleware for geo-replicated databases. 
+% which focus on combining multiple queries into one request and caching query results.
+While caching speeds up future requests, complex queries may still need to contact multiple servers and 
+updates need to invalidade the cache or else clients read stale data.
 
-ParCuR \cite{sioulas2023real} focus on optimizing analytic queries, recognizing the importance of low response times for analytic queries.
-ParCuR combine two non-trivial techniques - subexpression materialization and work-sharing.
-However, recurrent queries still require many repeated work, as materialized views are not directly deployed. 
-Furthermore, neither geo or partial replication are considered, unlike in PotionDB.
+%Caerus \cite{hildred2023caerus} implements a novel transaction algorithm for strongly consistent geo-dstributed databases.
+%% which commits transactions with a single RTT.
+%Data locality is leveraged on to reduce transaction latency.
+%However, complex global queries still need to gather and process large amounts of data from multiple regions.
+%%Furthermore, update transactions involving multiple regions still need to pay a full RTT.
 
 %AnalyticDB \cite{analyticdb} focus on optimizing analytic queries. 
 %It separates write and read paths to prevent complex queries from slowing down writes. 
@@ -2376,32 +2376,29 @@ Furthermore, neither geo or partial replication are considered, unlike in Potion
 %Not too relevant
 %ESTOCADA \cite{estocada} is a system designed to work with polystores and focus on taking advantage of each database's stronger points and make extensive usage of the materialized views provided on each.
 
-Marviq \cite{marviq} tackles the specific situation of efficiently providing a visualization (e.g., scatterplot) of a large data set.
-Marvig leverages on materialized views to handle range queries and summarize large datasets.
-%While a very specific scenario, it showcases the need of summarizing large datasets.
-%Marviq leverages on materialized views for handling range queries.
-%While a more specific scenario than the one PotionDB aims for, it showcases similar challenges - large datasets that need to be sumarized and queried efficiently.
-%They make usage of materialized views to handle range queries on the datasets.
+%Marviq \cite{marviq} tackles the specific situation of efficiently providing a visualization (e.g., scatterplot) of a large data set.
+%Marvig leverages on materialized views to handle range queries and summarize large datasets.
+%%While a very specific scenario, it showcases the need of summarizing large datasets.
+%%Marviq leverages on materialized views for handling range queries.
+%%While a more specific scenario than the one PotionDB aims for, it showcases similar challenges - large datasets that need to be sumarized and queried efficiently.
+%%They make usage of materialized views to handle range queries on the datasets.
 
-Magrino et. al. \cite{treaties} propose predictive treaties.
-The insight is that some computations can be expressed by treaties, and it is possible to anticipate a range of how a value might change over time.
-Compared to PotionDB, treaties use less data than materialized views but can give incorrect query replies, as the range may be inaccurate.
+Magrino et. al. \cite{treaties} propose predictive treaties for efficient distributed computations. 
+%The insight is that some computations can be expressed by treaties, and it is possible to anticipate a range of how a value might change over time.
+Treaties use less data than PotionDB's materialized views but can give incorrect query replies as the ranges may be inaccurate.
 Furthermore, it is unfeasible to predict changes for some data.
-Finally, given strong consistency is assumed, queries regarding global data will be slow when synchronization is required and prone to network partitions.
-%Magrino et. al. \cite{treaties} propose predictive treaties. 
-%The insight is that some computations can be expressed by treaties, and is possible to anticipate a range of how a value might change over time.
-%While this can lead to fast query replies and less duplicated data compared to views, since those treaties are not enforced as invariants, it is possible to read incorrect values.
-%It may also be unfeasable to predict changes for some data.
-%Finally, since a strong consistency scenario is assumed, care is needed to specify treaties in such a way that synchronization is kept to close-by replicas, which may make it difficult or unfeasible to specify treaties concerning global data.
+%Finally, given strong consistency is assumed, queries regarding global data will be slow when synchronization is required and prone to network partitions.
 
 Noria \cite{noria} is a streaming data-flow system.
 It leverages on views and partial data to provide fast query reply with reasonable memory usage.
 While it features high throughput, it only offers eventual consistency, which complicates application development.
 There is also concerns on the performance of queries when a view needs to be rebuilt and data is sharded.
 
-Dynamo \cite{dynamo} and Cassandra \cite{cassandra} are eventually consistent databases.
-Both provide indexes to speed up some queries but not materialized views, thus complex queries may need to access large amounts of objects.
-CouchDB \cite{couchDB} provides both indexes and materialized views, however views can only refer to data in one partition.
+ParCuR \cite{sioulas2023real} focus on optimizing analytic queries, recognizing the importance of low response times for analytic queries.
+ParCuR combine two non-trivial techniques - subexpression materialization and work-sharing.
+However, recurrent queries still require many repeated work, as materialized views are not directly deployed. 
+Furthermore, neither geo or partial replication are considered, unlike in PotionDB.
+
 
 %Should prob make a general comparison to MongoDB/Cassandra/Dynamo
 
