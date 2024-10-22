@@ -1456,7 +1456,7 @@ reach the percentage ratio specified in the query).
 We evaluated PotionDB's prototype to answer the following questions: 
 \begin{enumerate*}[label=(\roman*)]
 	\item  \label{enum:q1} Can global views over partially geo-replicated data provide better performance than alternative approaches? 	     
-	\item \label{enum:q2} Are global views still worthwhile in a single data center scenario?
+	\item \label{enum:q2} Are global views still worthwhile with low latency among servers?
 	\item \label{enum:q3} How do different types of views behave? 
 \end{enumerate*}
 
@@ -1507,7 +1507,7 @@ For each configuration, we run experiments with an increasing number of clients.
 
 
 
-\subsection{PotionDB performance with geo-replication}
+\subsection{Performance with geo-replication}
 
 We start by analysing PotionDB's performance in our targeted partially geo-replicated scenario.
 
@@ -1531,7 +1531,7 @@ We start by analysing PotionDB's performance in our targeted partially geo-repli
 \noindent
 \textbf{Query performance and benefits of views.}
 Figure \ref{fig:global_local_single_tc} shows the results of running all selected TPC-H queries for the three alternative approaches. 
-As expected, PotionDB's throughput, latency and scalability are considerably better than alternative approaches, reaching 
+As expected, \textit{PotionDB}'s throughput, latency and scalability are considerably better than alternative approaches, reaching 
 1.5 million queries/s with latency under 0.6 milliseconds. 
 This results from all queries being local, while in alternative approaches, global queries need to access data from 
 remote replicas. In this case, servers end up consuming most of the time managing communications with other replicas, leading 
@@ -1544,7 +1544,7 @@ When comparing the results of \textit{Single} and \textit{Local}, the \textit{Si
 end up executing a much higher number of requests than clients in other regions, which experience high latency- this can be 
 seen in Figure \ref{fig:single_tc_latencies}, that shows the latency of clients in each region.
 
-To conclude, having global, complete views replicated in every server allows all clients to achieve low latency and high throughput in PotionDB, while \textit{Local} and \textit{Single} approaches suffer from comparatively high latency and low throughput.
+To conclude, having global, complete views replicated in every server allows all clients to achieve low latency and high throughput in \textit{PotionDB}, while \textit{Local} and \textit{Single} approaches suffer from comparatively high latency and low throughput.
 
 
 
@@ -1575,8 +1575,8 @@ For better understanding the effects of data locality,  Figures \ref{fig:q3_tc} 
 executing a single global query (TPC-H Q3) and local query (TPC-H Q5). 
 For the global query, the results are similar to the complete workload, the main difference being an increase in latency and reduction in  throughput for the \textit{Local} configuration. In this case this is explained by all queries needing to contact remote servers and results do not include the effects of operations that execute locally.
 
-For the local query, the \textit{Local} configuration performs similarly to PotionDB. The reason for this is that, in this case, queries only access the local server that has all necessary information - a client in a region only performs requests for data of that region.
-In short, PotionDB is efficient for both global and local queries, while \textit{Local} is heavily hindered by latency for any query that is not fully local.
+For the local query, the \textit{Local} configuration performs similarly to \textit{PotionDB}. The reason for this is that, in this case, queries only access the local server that has all necessary information - a client in a region only performs requests for data of that region.
+In short, \textit{PotionDB} is efficient for both global and local queries, while \textit{Local} is heavily hindered by latency for any query that is not fully local.
 
 %II have to do these two graphs (I have the necessary data however).
 %Here's what those graphs will show.
@@ -1635,9 +1635,9 @@ In short, PotionDB is efficient for both global and local queries, while \textit
 
 \noindent
 \textbf{Impact of updates.}
-PotionDB's approach of maintaining a copy of the views in every server imposes additional load on the system
+\textit{PotionDB}'s approach of maintaining a copy of the views in every server imposes additional load on the system
 for keeping views updated,  when compared with the \textit{Local} and \textit{Single} approaches. 
-In PotionDB, a view update needs to be executed in every replica while in the other approaches the view update 
+In \textit{PotionDB}, a view update needs to be executed in every replica while in the other approaches the view update 
 is applied only in a single replica. 
 
 To evaluate the impact of updates we consider workloads consisting in different ratios of updates and queries, with
@@ -1649,13 +1649,13 @@ are presented in Figure~\ref{fig:upds_tc}.
 
 %0: 1.511M ops/s, 0.01: 1.517M ops/s,  0.05: 1.46M, 0.1: 1.45M, 0.15: 1.43M, 0.25: 1.157M
 %PotionDB has small throughput losses for modest update rates (between 0.1\% and 5.4\% for update rates up to 15\%), while for 25\% it has a significant drop of 23.4\%.
-The results show that for PotionDB, for 1\% update rate, the impact in throughput is unnoticeable, when compared with a read-only workload.
+The results show that for \textit{PotionDB}, for 1\% update rate, the impact in throughput is unnoticeable, when compared with a read-only workload.
 The throughput starts decreasing as the ratio of updates increases - 4\% drop for 10\% updates and 23.4\% for 25\% of updates.
 The reduction in performance results not only from the fact that view updates need to be executed in all replicas, but also because 
 updates are inherently slower as the commit of a transaction requires coordination among the multiple shards involved in the transaction. 
 Note that queries' latency only raises slightly as, in practice, they seldom need to wait for updates.
 %25\%: 0.273304; 0\%: 0.245562
-For instance, at PotionDB's maximum throughput for 25\% updates, the query-only latency is 0.273ms, which compares to 0.246ms for 0\% of updates.
+For instance, at \textit{PotionDB}'s maximum throughput for 25\% updates, the query-only latency is 0.273ms, which compares to 0.246ms for 0\% of updates.
 
 %To execute an update transaction, shards have to synchronize to apply the commit protocol (Section \ref{subsec:commit}) - thus, as the update rate gets higher, this synchronization happens more often, potentially making other queries/updates wait.
 %This synchronization, as well as multiple updates being in the same transaction, is why update transactions have higher latency than queries, as seen on Figure \ref{fig:update_latency}.
@@ -1666,17 +1666,17 @@ For instance, at PotionDB's maximum throughput for 25\% updates, the query-only 
 \textit{Local} throughput improves as the ratio of updates increase. This results from reporting
 the number of executed operations, and that the create transaction includes multiple updates. 
 The overhead for executing a transaction (messages for starting and committing a transaction) is paid
-only once for multiple operations\footnote{In PotionDB, if a transaction includes 5 queries/transaction the maximum throughput 
+only once for multiple operations\footnote{In \textit{PotionDB}, if a transaction includes 5 queries/transaction the maximum throughput 
 goes to 4.83M op/s (with latency of 0.68ms), when compared with 1.5M ops/s with (with latency of 0.37 ms) for one query per transaction.}.  
 Moreover, update transactions contact less servers (as updates propagate asynchronously and 
 orders are local - 50\% \footnote{This does not occur on the original TPC-H dataset, 
 whose orders' items are random. This modification adds locality to orders, which is more realistic for 
-an e-commerce scenario and helps \textit{Local} more than PotionDB.}- or refer few regions). 
+an e-commerce scenario and helps \textit{Local} more than \textit{PotionDB}.}- or refer few regions). 
 This leads to a slightly lower average latency \mbox{with higher update rates.}
 
 %fig:update_rates_single_tc
-\textit{Single} configuration has throughput losses comparable to PotionDB's, except for 25\% updates where the drop in throughput is smaller 
-than PotionDB's due to not having to replicate view updates.
+\textit{Single} configuration has throughput losses comparable to \textit{PotionDB}'s, except for 25\% updates where the drop in throughput is smaller 
+than \textit{PotionDB}'s due to not having to replicate view updates.
 However, even for 25\% updates, \textit{Single}'s throughput is less than 1/4 of PotionDB.
 
 In summary, PotionDB scales well with modest update ratios, which are common in practice.
@@ -1714,12 +1714,11 @@ PotionDB provides TCC views while answering complex global queries in sub-millis
 %	\item Explain why Local PotionDB is affected by the added latency. Explain why Local PotionDB's throughput increases with the higher update ratio and why latency decreases (reason: updates have lower latency than queries because only a subset of the servers need to be contacted, instead of all, so often the highest latency connection can be avoided. Furthermore, updates have more operations per transaction than queries, i.e., more operations per round trip.)
 %\end{itemize}
 
-\subsection{PotionDB performance on a single data center}
+\subsection{Performance under low latency among servers}
 \label{subsec:potiondbSingleDC}
 
-In this section we study whether keeping global views in all replicas is still an interesting approach when
-latency among replicas is smaller, using the extreme case where all servers are in the same data center
-(and have no added latency for communication among them).
+We now study whether keeping global views in all replicas is still interesting with low latency among replicas,
+as in availability zones in a cloud region, using the extreme case with no added latency among servers running in the same DC.
 
 
 \begin{figure}
@@ -1743,10 +1742,10 @@ latency among replicas is smaller, using the extreme case where all servers are 
 
 
 Figure \ref{fig:global_local_single_noTC} present the results for read-only workloads.
-The results for PotionDB are similar to the previous results - this is expected as all operations are local.
+The results for \textit{PotionDB} are similar to the previous results - this is expected as all operations are local.
 \textit{Local} and \emph{Single} have much lower latency and higher throughput when compared with the
-geo-distributed setting.  This is expected as the cost of contacting other replicas is much lower now - only the
-latency of contacting a node in the same data center.  The maximum throughput is still much lower than that
+geo-distributed setting. This is expected as the cost of contacting other replicas is much lower now - only the
+latency of contacting a node in the same data center. The maximum throughput is still much lower than that
 of \textit{PotionDB}, as the need to contact multiple servers for replying to a query induces 
 an higher load in the servers. 
 
@@ -1794,29 +1793,32 @@ approaches, which improve throughput and lower latency.
 
 To conclude, PotionDB's global views provide query throughput and latency unmatched by alternative 
 \textit{Local} and \emph{Single} approaches in every tested scenario.
-We note, however,  that there is additional q used for maintaining views in all replicas and this
+We note, however,  that there are additional resources used for maintaining views in all replicas and this
 should be considered when deciding whether to adopt this approach or not in a single data center.
 
 
 %\subsection{Types of views (or maybe, Views type benchmarking?}
-\subsection{Scalability of different types of views}
+\subsection{Performance of different types of views}
 \label{subsec:microbenchmarks}
 
 Next, we explore how different views behave and scale for different configurations. 
-Thus,  we study the behavior of the underlying NuCRDTs supporting different types of 
+We study the behavior of the underlying NuCRDTs supporting different types of 
 views: simple limits (Top-K), limits over aggregations (Top-K counter), sum/count (Counter) and average (Average) aggregations.
 
-These experiments were performed using micro-benchmarks, where the underlying NuCRDTs are 
-accessed directly by clients - this allows to measure the performance of maintaining the views 
+These experiments use micro-benchmarks, where clients access NuCRDTs directly - this 
+measures the performance of maintaining the views 
 only, without the overhead of storing the base data.
-We run the experiments with the same configuration as the previous experiments - 10 machines
+We run the experiments with the same configuration - 10 machines
 divided in 5 groups, with one machine for the server and another for running clients, with no
 additional latency added to communications.  
-In each experiment, we have 20 CRDTs with random initial data.
+%We run the experiments with the same configuration as the previous experiments - 10 machines
+%divided in 5 groups, with one machine for the server and another for running clients, with no
+%additional latency added to communications.  
+In each experiment, we have 20 CRDTs.
 Top K and Top K Counter CRDTs are initialized with 10K elements. 
 Clients execute transactions consisting in read and updates operations, with each operation 
-executed in a CRDT selected randomly using an uniform distribution. For Top K, update operations
-are insert and remove of a random elements; for top K counter, update operations are increment 
+executed in a CRDT selected randomly using an uniform distribution. For Top K, updates
+are insert and remove of a random elements; for top K counter, updates are increment 
 and decrement to a random element.
 Unless stated otherwise, each transaction consists in a batch of 5 operations.
 
@@ -1849,9 +1851,9 @@ We start by analysing the performance benefit of clients batching operations. %A
 Figures \ref{fig:topSize_single} and \ref{fig:topSize_batch} present the results for a read-only workload accessing
 top-K objects, where transactions include, respectively, 1 read operation and 5 read operations.
 The results show that, for small tops - Top-1 and Top-10, the number of operations executed increases almost
-linearly with the number of reads in the transaction.  This shows that in this case,  the fixed overhead of setting 
+linearly with the number of reads in the transaction. In this case, the fixed overhead of setting 
 up a transaction and sending messages dominates the load. 
-For larger tops, the number of operations executed increases less. This shows that the amount of data 
+For larger tops, the number of operations executed increases less. In this case, the amount of data 
 transmitted becomes increasingly more relevant in the performance of the system.
 We expect that with tops larger than 1000, the number of operations performed when using batches will 
 tend to be similar to that of when performing reads independently.
@@ -1938,15 +1940,15 @@ Multi-update transactions lock multiple shards instead of just one, so they redu
 \noindent
 \textbf{Impact of the number of replicas.}
 We now evaluate how NuCRDTs that support views scale with the number of replicas. 
-Figure \ref{fig:crdts:perf} shows the throughput of NuCRDTs with different numbers of replicas per NuCRDT 
+Figure \ref{fig:crdts:perf} shows the throughput of NuCRDTs with different numbers of replicas
 (for top K,  we used K = 10). 
 %Results are presented in Figure~\ref{fig:crdts:perf}. 
-The first observation is that, 
-for each configuration the performance is similar.  This seems to show that the internal implementation of
-the CRDT has little impact in the overall performance of the system, even if internally NuCRDTs are
+We observe that, 
+for each configuration the throughput is similar.  This shows that the internal implementation of
+the CRDT has little impact in the overall throughput of the system, even if internally NuCRDTs are
 considerably different.
 
-The second observation is that for read-only workloads, the throughput with 5 replicas is almost 5$\times$
+For read-only workloads, the throughput with 5 replicas is almost 5$\times$
 the throughput with a single replica - this is expected as operations execute locally in each replica. 
 For workloads with updates, the throughput for 25\% updates in a system with 5 replicas is
 close to 4$\times$ the
@@ -2030,6 +2032,26 @@ imposing some additional load in all servers.
 %%	\vspace*{-0.2em}
 %%\end{figure*}
 %
+%\subsection{Scalability of number of views}
+
+%IMPORTANT NOTE: I believe with batching of queries, the throughput would decrease as the number of views increase. But for now, the major cost is on communication and locking (lock for TM's clock) in TM.
+
+%Keeping materialized views up-to-date requires updating all affected views when a new order is added. 
+%We now evaluate how the number of views impacts PotionDB's performance.
+
+
+%Next, we experiment how the number of views affects PotionDB's performance.
+%As keeping materialized views up-to-date imposes extra updates when a new order is added, it is expected for PotionDB's performance to worsen with a higher number of supported views. %Maybe this phrase is not necessary.
+
+%Figure \ref{fig:queryScaleUpds} showcases \textit{PotionDB}'s and \textit{Local}'s performance, with different update rates and number of supported TPC-H queries.
+%In a query-only scenario (P 0\% and L 0\%), there is no observable impact, as well as with P 1\% and P 10\%. %And I suppose (for 0% upd rate) this makes sense for as long as there's enough RAM available.
+%Even with a high update ratio (P 25\%), PotionDB still achieves high throughput.
+%It may seem odd that with 3 types of queries, the throughput of P 25\% is lower than with more queries - this happens as with a lower variety of queries, they have to wait more often for updates to finish. %Not sure if this is clear - my theory is that with few types of queries, when a query arrives it's very likely its view is being updated. If we have many different queries, it's possible some queries arrive for views that already finished updating. Remember that in this experiments we're using Read Commited consistency. 
+%Even with a modest update ratio (P 25\%), PotionDB still maintains a high throughput. 
+%I think one of the queries I picked for 9 queries is costly for updating.
+%Meanwhile, in Local PotionDB, throughput decreases slightly as the number of views increases.
+%This happens as orders whose items come from multiple regions imply updates to views spread across servers, leading to higher synchronization costs. %My excuse is that with Local, when adding a new order, many view updates need to be forwarded from one server to the other, wasting precious bandwith on every txn.
+
 %\begin{figure*}
 %	\centering
 %	\begin{minipage}{.58\linewidth}
@@ -2070,25 +2092,34 @@ imposing some additional load in all servers.
 %	\end{minipage}
 %\end{figure*}
 
-\subsection{PostgreSQL vs PotionDB}\label{sec:eval:postgrs}
-
-%TODO: Worth discussing: The data used for the query and update graph are different: for the query graph, there's no updates, while for the update graph, there's one client executing only updates and a varying number of query-only clients. My goal was to first focus in a query-only scenario (the best for Postgres), and then show how bad updates are for Postgres (and hence show only the throughput of updates). However this means I do not show the query throughput when executed with updates... is that ok?
+\subsection{Comparison with PostgreSQL}\label{sec:eval:postgrs}
 
 %For the sake of completion, 
-We now compare PotionDB with PostgreSQL \cite{PostgreSQL}, a well known, robust, open-source RDBMS.
-We deploy a single PostgreSQL instance on a 64GB RAM disk. %I also adjusted other settings to boost Postgre's performance, like increasing max number of connections, work memory, etc.
-PostgreSQL does not natively support incremental view maintenance, thus the pg\_ivm extension \cite{ivm} is used.
-Pg\_ivm has some limitations, namely it prevents the usage of PostgreSQL's Logical Replication \cite{ivm, PostgreSQLLogical}, hence the usage of a single server.
-The subset of SQL usable for specifying views with pg\_ivm is also limited, namely it is not possible to compose views, compose aggregations, do \emph{order by} among others, which limits the expressivity of views and negatively impacts query performance. %Not sure if I should mention this here. For our subset of queries, Q15 is the one affected by these limitations.
-For fairness, we focus on comparing PostgreSQL with Single PotionDB.
-Clients are assumed to be running in the same data center as the server(s). %TODO: Justification/motivation for this? I just wanted to leave clear we did not add any latency.
+
+In this section we compare PotionDB with PostgreSQL \cite{PostgreSQL}.  
+
+\noindent
+\textbf{Incremental view maintenance.} %\hspace{0em}
+In these experiments, we used PostgreSQL's incremental view maintenance extension \cite{ivm}. 
+As this extension cannot be used with PostgreSQL's Logical Replication \cite{PostgreSQLLogical}, our configuration with PostgreSQL can only
+use a single server, with all operations being propagated to this server. Thus, we focus on comparing PostgreSQL with \emph{Single}.
+We deploy a single PostgreSQL instance on a 64GB RAM disk.
+
+
+%We now compare PotionDB with PostgreSQL \cite{PostgreSQL}, a well known, robust, open-source RDBMS.
+%We deploy a single PostgreSQL instance on a 64GB RAM disk. %I also adjusted other settings to boost Postgre's performance, like increasing max number of connections, work memory, etc.
+%PostgreSQL does not natively support incremental view maintenance, thus the pg\_ivm extension \cite{ivm} is used.
+%Pg\_ivm has some limitations, namely it prevents the usage of PostgreSQL's Logical Replication \cite{ivm, PostgreSQLLogical}, hence the usage of a single server.
+%The subset of SQL usable for specifying views with pg\_ivm is also limited, namely it is not possible to compose views, compose aggregations, do \emph{order by} among others, which limits the expressivity of views and negatively impacts query performance. %Not sure if I should mention this here. For our subset of queries, Q15 is the one affected by these limitations.
+%For fairness, we focus on comparing PostgreSQL with Single PotionDB.
+%Clients are assumed to be running in the same data center as the server(s). %TODO: Justification/motivation for this? I just wanted to leave clear we did not add any latency.
 
 \begin{figure*}
 	\centering
 	\begin{minipage}{.55\linewidth}
 		\begin{subfigure}{.482\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
-			\caption{Query-only throughput.}
+			\caption{Query-only  throughput.}
 			\label{fig:postgres_query}
 			\vspace*{0.7em}
 		\end{subfigure}%
@@ -2099,7 +2130,8 @@ Clients are assumed to be running in the same data center as the server(s). %TOD
 			\label{fig:postgres_update}
 		\end{subfigure}%
 		\vspace*{-0.65em}
-		\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
+		\caption{Comparison with PostgreSQL - All represents all selected queries; Sub consists of Q3, Q5, Q14 and Q18.}
+%	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
 		%All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
 		\label{fig:postgres}
 	\vspace*{-0.2em}
@@ -2149,11 +2181,14 @@ Clients are assumed to be running in the same data center as the server(s). %TOD
 %	\end{tabular}
 %\end{table}
 
-Figure \ref{fig:postgres_query} compares PostgreSQL's query-only performance with Single PotionDB and PotionDB.
-Both Single and PotionDB outperform considerably PostgreSQL when executing all selected queries.
+Figure \ref{fig:postgres_query} presents query-only performance.
+Both \textit{Single} and \textit{PotionDB} outperform considerably \textit{PostgreSQL} (PG) when executing all selected queries.
 This is mostly due to two of the selected queries - Q11 and Q15.
-Q3, Q5, Q14 and Q18 are well supported by PostgreSQL, even slightly outperforming Single PotionDB, but far from PotionDB's throughput.
-Q15 is not efficiently supported in PostgreSQL as pg\_ivm does not support both \emph{order by} nor aggregations of aggregations, thus to answer this query extra computation is required and multiple rows are scanned. %It needs to calculate a "max" manually.
+The other queries (Q3, Q5, Q14 and Q18) are well supported by PostgreSQL, even slightly outperforming \emph{Single}, 
+but far from \emph{PotionDB}'s throughput.
+
+Q15 is not efficiently supported in PostgreSQL as pg\_ivm does not support both \emph{order by} nor aggregations of aggregations, thus to 
+answer this query extra computation is required and multiple rows are scanned. %It needs to calculate a "max" manually.
 On the other hand, Q11 is efficiently supported but returns more data than other queries do - 100 rows, instead of 10 or less.
 Thus, Q11 has reduced performance in both Single, PotionDB and PostgresSQL compared to other, simpler, queries. 
 However the max throughput reduction is much higher in PostgresSQL (96.8\%) than Single (28.5\%) or PotionDB (25.5\%). %Maybe with raw numbers the difference looks more significant? PostgresSQL: 320k -> 10k query/s. Single. 288k -> 206k. PotionDB: 1371k -> 1044k.
