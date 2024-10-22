@@ -1616,7 +1616,8 @@ In short, \textit{PotionDB} is efficient for both global and local queries, whil
 \begin{figure}
 	\centering
 	\begin{subfigure}{.47\linewidth}
-		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc_short}
+		%\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc_short}
+		\includegraphics[width=1\linewidth]{singleQuery/upd_rate_local_tc}
 		\caption{Local configuration.}
 		\label{fig:update_rates_local_tc}
 	\end{subfigure}%
@@ -1723,13 +1724,13 @@ as in availability zones in a cloud region, using the extreme case with no added
 
 \begin{figure}
 	\centering
-	\begin{subfigure}{.49\linewidth}
+	\begin{subfigure}{.485\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/all_queries_noTC}
 		\caption{All queries}
 		\label{fig:all_queries_noTC}
 	\end{subfigure}%
-	\hspace*{0.2em}
-	\begin{subfigure}{.49\linewidth}
+	\hspace*{0.4em}
+	\begin{subfigure}{.485\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/q3_q5_noLatency}
 		\caption{Single type of query}
 		\label{fig:q3_q5_noTC}
@@ -1756,7 +1757,7 @@ for \textit{Local} and \textit{Single}, due to the low latency for contacting ot
 
 \begin{figure}
 	\centering
-	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
+	\includegraphics[width=0.64\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
 	\vspace*{-0.65em}
 	\caption{PotionDB and \textit{Local} performance with multiple update rates, without added latency.}
 	\label{fig:update_rates_global_vs_local_noTC}
@@ -2116,14 +2117,14 @@ We deploy a single PostgreSQL instance on a 64GB RAM disk.
 
 \begin{figure*}
 	\centering
-	\begin{minipage}{.55\linewidth}
+	\begin{minipage}{.57\linewidth}
 		\begin{subfigure}{.482\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresQueryOnly}
 			\caption{Query-only  throughput.}
 			\label{fig:postgres_query}
 			\vspace*{0.7em}
 		\end{subfigure}%
-		\hspace*{0.3em}
+		\hspace*{0.4em}
 		\begin{subfigure}{.483\linewidth}
 			\includegraphics[width=1\linewidth]{postgres/postgresUpdateOnlyOps}
 			\caption{Throughput with multiple query clients and 1 update client.}
@@ -2136,12 +2137,14 @@ We deploy a single PostgreSQL instance on a 64GB RAM disk.
 		\label{fig:postgres}
 	\vspace*{-0.2em}
 	\end{minipage}%
-	\hspace*{0.05\linewidth}
-	\begin{minipage}{.38\linewidth}
+	\hspace*{0.07\linewidth}
+	\begin{minipage}{.36\linewidth}
 		\centering
-		\includegraphics[width=0.85\linewidth]{postgres/postgresNoView}
+		%\includegraphics[width=0.85\linewidth]{postgres/postgresNoView}
 		%\vspace*{-0.65em}
-		\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
+		%\caption{PostgreSQL query performance with indexes instead of materialized views. Notice that the x axis is in the scale of units.}
+		\includegraphics[width=0.85\linewidth]{postgres/postgresViewVsIndex}
+		\caption{PostgreSQL query performance with indexes instead of views}
 		\label{fig:postgresNoViews}
 	\end{minipage}
 \end{figure*}
