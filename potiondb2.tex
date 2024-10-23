@@ -1021,13 +1021,13 @@ information provided by objects for different semantics.
 
 %Andre: Rev 370B suggested we using, instead of "global" and "local" clocks, a "replica" and "shard" clocks. Should we change that (i.e., does it actually make it more clear?)
 
-Let $L_1$,..., $L_n$ be the set of locations in the system. 
-Each location $L_j$ keeps a global vector clock $\mathit{vc}_G$, with one entry for each $L_k \in L_1,..., L_n$.
+Let $L_1,...,L_n$ be the locations in the system. 
+Each location $L_j$ keeps a global vector clock $\mathit{vc}_G$, with one entry for each $L_k \in L_1,...,L_n$.
 This clock represents the latest snapshot available in $L_j$, summarizing the transactions integrated in the snapshot.
 Each shard $\mathit{sh}_i$ also keeps a local vector clock $\mathit{vc}_i$, with its 
-latest snapshot, which may be different 
+latest snapshot, which may be differ 
 from $\mathit{vc}_G$.
-Any shard can access the server's physical clock, $\mathit{pc}$.
+Shards can access the server's physical clock, $\mathit{pc}$.
 
 A transaction $t$ has an associated read vector clock, $t\!.\mathit{rc}$,  that represent the snapshot
 to be read by the transaction. On commit, a transaction is assigned a commit clock, $t\!.\mathit{ct}$, consisting in a 
@@ -1046,28 +1046,25 @@ Each shard $\mathit{sh}_i$ also maintains a list of prepared transactions, $\mat
 %While we leverage on physical clocks for our protocols, the correctness of our protocols is independent of the skew of physical clocks between servers.
 
 
-\subsection{Transaction processing}
-\label{subsec:txnproc}
-
-
+\subsubsection{Transaction processing}
 A client executes a transaction by interactively contacting the 
-Transaction Manager (TM) in a PotionDB server.
+Transaction Manager (TM).
 %
-When the TM receives a \emph{begin} operation, it chooses the latest snapshot available,
+For a \emph{begin} operation, th TM chooses the latest snapshot available,
 $\mathit{vc}_G$, as the snapshot 
 the transaction will access.
 
 For an update operation, the TM asks the Materializer to execute the update in
-a private copy of the object for the transaction. For a read operation, 
+a private copy of the object. For a read operation, 
 the TM asks the Materializer to execute the read in the private copy - if no 
-update has been executed before in the object, a shared copy with the version 
+private copy exists, a shared copy with the version 
 of the transaction snapshot is used. We represent by $t.WS$ and $t.RS$ the update 
 and read sets of transaction $t$.
 
 When the TM receives a commit, it needs to assign the commit timestamp to the transaction. 
 For assigning the commit timestamp, the TM runs a two phase protocol with the shards of the objects
 updated in the transaction. 
-\andre{shouldn't it be named "two phase commit protocol"?}
+
 
 In the first phase,  the TM sends a \emph{prepare} message to all shards in $t.WS$.
 A shard $\mathit{sh}_i$ replies with a timestamp proposal, $(n,i)$, where $n$ is the timestamp
@@ -1173,19 +1170,19 @@ trigger runs and it may issue reads and updates to the same or other objects.
 These updates are committed and propagated to other replicas
 as part of the transaction.
 
-Triggers can be used by applications for any purpose, but its primary goal is to support
-incremental view maintenance.%, as detailed in Section~\ref{sec:views_for_apps}.
+Triggers can be used by applications for any purpose, 
+but its primary goal is to support incremental view maintenance.%, as detailed in Section~\ref{sec:views_for_apps}.
 %In the next section
 
 
-\subsection{Replication}
+\subsubsection{Replication}
 \label{sec:replication}
 
 Buckets are the unit of replication in PotionDB.  Each location decides which buckets to replicate.
 In our e-commerce example, there is a bucket for 
 the customers of each online store.  The container \emph{customers} includes all customer buckets.
 The EU customers bucket is  replicated in the EU location and
-in one or more additional locations for fault tolerance.
+in one or more locations for fault tolerance.
 
 PotionDB adopts operation-based replication, with transaction updates 
 being propagated to other replicas. To be more precise, an update
@@ -1208,11 +1205,11 @@ replicate the bucket.
 A location has a logical stream of updates for all buckets the location replicates
 and for the buckets that a local transaction has updated an object.
 
-The replicator integrates remote transactions as follows.
-A replicator subscribes to the logical streams of updates for the buckets it replicates from all other 
+The replicator integrates remote transactions by subscribing 
+to the logical streams of updates for the buckets it replicates from all other 
 locations. For the logical streams of each location, it processes transaction parts in timestamp order.
-For a given timestamp, the replicator groups the parts of the transaction $t$ and verifies if the causal dependencies 
-of $t$ are satisfied by checking whether $t.rc \leq \mathit{vc}_G$.
+For a given timestamp, the replicator groups the parts of the transaction $t$ and verifies if its causal dependencies 
+are satisfied by checking if $t.rc \leq \mathit{vc}_G$.
 If true, the replicator 
 %repartitions the transaction according to
 %the local shards and 
@@ -1222,12 +1219,12 @@ transaction updates to the local shards for execution.
 After all shards involved in $t$ end, 
 %that they have executed their part of the transaction,  
 the global
-vector clock is updated to include the timestamp of $t$. If false, then some transactions
-from other locations need to be applied before $t$. So, the replicator continues by processing
+vector clock is updated to include the timestamp of $t$. If false, some transactions
+from other locations need to be applied before $t$ and the replicator proceeds by processing
 the logical streams from other locations.
-Furthermore, the replicator piggybacks to other locations the information about locally executed transactions.
+The replicator piggybacks to all locations the information of locally executed transactions.
 For fault-tolerance, a location forwards updates from a failed
-location to other locations.
+location to others.
 
 \textbf{Support for NuCRDTs.}
 \label{subsec:nonuniform}
@@ -2577,20 +2574,28 @@ Furthermore, neither geo or partial replication are considered, unlike in Potion
 \label{sec:conclusion}
 
 PotionDB is a weakly consistent, partially geo-replicated database designed to efficiently support
-workloads with repetitive queries. 
-PotionDB's key feature is the support for materialized views which can be accessed in the context of 
-transactions that access both base objects and view objects with  
-transactional causal consistency.
-These views can be used to efficiently answer recurrent complex queries over data that is partitioned
-over different locations, without a single location holding all data.
-To support these views, we build on non-uniform CRDTs, extending previous \mbox{proposals to make them practical. }
-%PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
-%PotionDB’s views can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
-%Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
+workloads with recurring queries. 
+It is the first system to provide materialized views over geo-partitioned data with incremental view
+maintenance, providing TCC access to the base and view objects.
+These views can be used to efficiently answer recurrent complex queries. 
+To support different types of base objects and views, PotionDB combines generic protocols for transaction processing and partial replication 
+with type-specific information encoded in NuCRDTs.
+Our evaluation shows that PotionDB can answer complex queries with lower latency and highher throughput when 
+compared with alternative approaches, even with reasonable update ratios.
 
-Our evaluation shows that PotionDB can answer complex queries with low latency and high throughput when 
-compared with alternative approaches, even under scenarios with considerable update ratios.
-%Our implementation and analysis of TPC-H benchmark showcases both the expressivity and efficiency of PotionDB.
+
+%PotionDB provides transactional causal consistency for transactions accessing 
+%both base objects and materialized view objects.
+%Materialized views can be used to efficiently answer recurrent complex queries over data that is partitioned
+%over different locations, without a single location holding all data.
+%To support these views, we build on non-uniform CRDTs, extending previous \mbox{proposals to make them practical. }
+%%PotionDB’s key feature is the provision of efficient and automatically maintained materialized views.
+%%PotionDB’s views can efficiently answer queries concerning large amounts of global data with a single read operation, even if the base data required to build the view is partitioned across multiple servers.
+%%Furthermore, PotionDB ensures views and their base data are always consistent by providing transactional causal consistency.
+%
+%Our evaluation shows that PotionDB can answer complex queries with low latency and high throughput when 
+%compared with alternative approaches, even under scenarios% with considerable update ratios.
+%%Our implementation and analysis of TPC-H benchmark showcases both the expressivity and efficiency of PotionDB.
 
 %Anything else I should mention? Like the replication/transaction algorithms?
 
