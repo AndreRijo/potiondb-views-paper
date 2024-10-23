@@ -337,7 +337,7 @@ Implementing such feature efficiently in a partially geo-replicated database req
 addressing two main challenges. 
 First, it is necessary to maintain the materialized views consistent with the remaining data
 accessed by the application. 
-To achieve this, we designed mechanisms for transaction execution and replication where updates 
+To achieve this, we designed protocols for transaction execution and replication where updates 
 to the base data and views are made visible atomically in each replica.
 
 Second, it is necessary to efficiently support materialized views. 
@@ -1119,8 +1119,8 @@ In practice, this is unlikely as nanoseconds are used for time. %IMPORTANT NOTE:
 \noindent
 \textbf{Operations on objects not locally replicated.}
 %\label{subsec:operationsNonLocal}
-The protocol presented so far is basically the Cure~\cite{cure} protocol for providing TCC with full replication.
-We now show how we extended this protocol to support partial replication and NuCRDTs.
+The protocol presented so far provides TCC with full replication, being similar to Cure~\cite{cure}.
+We extended the protocol for supporting partial replication and NuCRDTs.
 %Unlike the setting for which Cure was designed, PotionDB is partially replicated and a transaction 
 %may access an object $o$
 %%that is 
@@ -1129,7 +1129,7 @@ We now show how we extended this protocol to support partial replication and NuC
 %Extending Cure to support this case was simple. 
 
 When an operation is executed in an object $o$ that is not locally replicated, 
-the shard $L_i$ that should hold $o$ fetches 
+the shard $sh_i$ that should hold $o$ fetches 
 a copy of the object from a remote replica. The version
 requested is that
 of the transaction snapshot,  $t\!.\mathit{rc}$ ignoring the entry for the current location.
@@ -1138,7 +1138,7 @@ of the transaction snapshot,  $t\!.\mathit{rc}$ ignoring the entry for the curre
 %receive all transactions from $L_i$ reflected in the transaction snapshot before returning a copy
 %of $o$.
 After receiving the copy of the object, the shard will apply any updates previously performed to $o$ locally. Typically,
-there will be no updates, as $L_i$ does not replicate $o$.
+there will be no updates, as $sh_i$ does not replicate $o$.
 After this, the transaction accesses $o$ as any other locally replicated object. When the transaction commits, 
 the updates to $o$ are propagated in the context of the transaction.
 
@@ -1869,15 +1869,15 @@ for \textit{Local} and \textit{Single}, due to the low latency for contacting ot
 	\centering
 	\includegraphics[width=0.62\linewidth]{singleQuery/upd_rate_noTC_global_vs_local}
 	\vspace{-10pt}
-	\caption{Performance with updates and no added latency.}
+	\caption{Performance with updates and no added latency for \textit{PotionDB} (P) and \textit{Local} (L).}
 	\label{fig:update_rates_global_vs_local_noTC}
 	\vspace{-12pt}
 \end{figure}
 
 %TODO: Would be really nice if I could trim this one further
 The results for workloads with updates, presented in Figure~\ref{fig:update_rates_global_vs_local_noTC}, 
-shows similar trends - PotionDB maintains a significantly better performance than alternative
-approaches, which improve throughput and lower latency.  
+shows similar trends - PotionDB exhibits significantly better performance than alternative
+approaches, with higher throughput and lower latency.  
 
 
 %similar trends occur with updates, similar conclusions can be taken - Figure \ref{fig:update_rates_global_vs_local_noTC} showcases PotionDB's and Local PotionDB's throughputs for multiple update rates.
@@ -2247,7 +2247,7 @@ For speeding up PostgeSQL, we use asynchronous commit with read committed and a 
 			\label{fig:postgres_update}
 		\end{subfigure}%
 	\vspace{-10pt}
-		\caption{Comparison with PostgreSQL - All represents all selected queries; Sub consists of Q3, Q5, Q14 and Q18.}
+		\caption{Comparison with PostgreSQL - all selected queries (All); Q3, Q5, Q14 and Q18 (Sub); PostgreSQL (PG), PotionDB (P), Single (S).}
 %	\caption{Postgres vs PotionDB. P, S and PG stand for, respectively, PotionDB, \emph{Single} and Postgres. All represents all selected queries;  Sub consists of Q3, Q5, Q14 and Q18.}
 		%All represents all selected queries, SubQ consists of Q3, Q5, Q14 and Q18, SubU consists of Q11, Q14 and Q18.}
 		\label{fig:postgres}
@@ -2303,7 +2303,7 @@ For speeding up PostgeSQL, we use asynchronous commit with read committed and a 
 %\end{table}
 
 Figure \ref{fig:postgres_query} shows that
-both \textit{Single} and \textit{PotionDB} outperform \textit{PostgreSQL} (PG) for our read-only workload.
+both \textit{Single} (S) and \textit{PotionDB} (P) outperform \textit{PostgreSQL} (PG) for our read-only workload.
 This is due to two queries - Q11 and Q15.
 The other queries (Q3, Q5, Q14 and Q18) are well supported by PostgreSQL, with a performance similar to \textit{Single}, 
 but far from \textit{PotionDB}. 
@@ -2575,12 +2575,12 @@ Furthermore, neither geo or partial replication are considered, unlike in Potion
 PotionDB is a weakly consistent, partially geo-replicated database designed to efficiently support
 workloads with recurring queries. 
 It is the first system to provide materialized views over geo-partitioned data with incremental view
-maintenance, providing TCC access to the base and view objects.
+maintenance, providing transactional causal consistent access to the base and view objects.
 These views can be used to efficiently answer recurrent complex queries. 
 To support different types of base objects and views, PotionDB combines generic protocols for transaction processing and partial replication 
 with type-specific information encoded in NuCRDTs.
-Our evaluation shows that PotionDB can answer complex queries with lower latency and highher throughput when 
-compared with alternative approaches, even with reasonable update ratios.
+Our evaluation shows that PotionDB can answer complex queries with lower latency and higher 
+throughput than alternative approaches, even with reasonable update ratios.
 
 
 %PotionDB provides transactional causal consistency for transactions accessing 
