@@ -1161,7 +1161,7 @@ received. This is explained in the context of the replication process.
 PotionDB has an after update trigger mechanism that can be associated with 
 objects in a bucket or container.
 When a transaction executes at the initial replica, after an update, the
-trigger runs and it may issue reads and updates to the same or other object.
+trigger runs and it may issue reads and updates to the same or other objects.
 These updates are committed and propagated to other replicas
 as part of the transaction.
 
@@ -1179,43 +1179,43 @@ the customers of each online store.  The container \emph{customers} includes all
 The EU customers bucket is  replicated in the EU location and
 in one or more additional locations for fault tolerance.
 
-PotionDB adopts an operation-based replication approach, where transaction updates 
-are propagated to other replicas. To be more precise, in the context of CRDTs, an update
-executed in a CRDT generates an \emph{effects} operation, and it is this effect update that is
+PotionDB adopts operation-based replication, with transaction updates 
+being propagated to other replicas. To be more precise, an update
+executed in a CRDT generates an \emph{effects} operation that is
 propagated and applied in relevant replicas. We start by describing how the replication process
 guarantees that transaction updates are propagated to all relevant locations. In the end, 
 we discuss the special case of NuCRDTs.
 
-When a transaction commits at a shard, that shard sends its part of the transaction to the replicator.  
+When a transaction commits at a shard, the shard sends its part of the transaction to the replicator.  
 Given how transactions are committed at a shard, it is guaranteed a shard sends the transactions
 ordered by commit timestamp.
 If the shard processes no transaction for some time, it notifies the replicator that there are
 no parts of transactions for the shard until the current timestamp, obtained from the shards' HLC.
 
 The replicator processes the parts of transactions received from shards in timestamp order. 
-For each transaction, the replicator groups the transactions' updates and repartitions the
-updates, one for each updated bucket. The new transaction parts are then queued 
-for replication, one part for each bucket, being propagated in order to all other locations that 
+For each transaction, the replicator groups and repartitions the transaction's updates, 
+one for each updated bucket. The new parts are queued 
+for replication in each bucket, being propagated in order to all locations that 
 replicate the bucket. 
-Note that a location has a logical stream of updates not only for all buckets the location replicates,
-but also for the buckets that a local transaction has updated an object.
+A location has a logical stream of updates for all buckets the location replicates
+and for the buckets that a local transaction has updated an object.
 
 The replicator integrates remote transactions as follows.
 A replicator subscribes to the logical streams of updates for the buckets it replicates from all other 
 locations. For the logical streams of each location, it processes transaction parts in timestamp order.
 For a given timestamp, the replicator groups the parts of the transaction $t$ and verifies if the causal dependencies 
-of the transaction are satisfied by checking whether $t.rc \leq \mathit{vc}_G$.
+of $t$ are satisfied by checking whether $t.rc \leq \mathit{vc}_G$.
 If true, the replicator 
 %repartitions the transaction according to
 %the local shards and 
 forwards the
 % transaction 
 transaction updates to the local shards for execution. 
-After all shards involved in a transaction $t$ end, 
+After all shards involved in $t$ end, 
 %that they have executed their part of the transaction,  
 the global
 vector clock is updated to include the timestamp of $t$. If false, then some transactions
-from other locations need to be applied before executing $t$. So, the replicator continues by processing
+from other locations need to be applied before $t$. So, the replicator continues by processing
 the logical streams from other locations.
 Furthermore, the replicator piggybacks to other locations the information about locally executed transactions.
 For fault-tolerance, a location forwards updates from a failed
@@ -1237,24 +1237,24 @@ effect in the observable state.
 %effect in the observable object state, hence does not need to be propagated, 
 %the update operation just generates a null effect.
 
-In NuCRDTs, the execution of an operation $o$ may make a previous operation  $o_{p}$
-relevant, requiring this previous operation to be propagated to other replicas  
-(e.g.  \code{remove(n)} operation in the maximum NuCRDTs makes the insertion of the second
+In NuCRDTs, the execution of an operation $op$ may make a previous local operation  $op_{p}$
+relevant, requiring $op_{p}$ to be propagated to other replicas  
+(e.g.  \code{remove(n)} in the maximum NuCRDTs makes the insertion of the second
 maximum element relevant). There are two cases to be considered.
 %
-The first case is when operation $o$ is executed initially. Then the effect of
-$o$ will include also the effect of $o_{p}$. Thus, as the combined effects are propagated and applied in 
+First, when $op$ executes in the initial replica, the effect of
+$op$ will include also the effect of $op_{p}$. As the combined effects are propagated and applied in 
 the context of the same transaction, no anomaly is generated.
 %
-The second case happens when the now relevant $o_{p}$ operation was executed in  
-another replica.  This is handled by replication process as follows.  When a location receives
+Second, when the now relevant $op_{p}$ operation was executed in  
+another replica. This is handled by replication process as follows.  When a location receives
 the replication stream from other replicas, it executes the received \emph{effects} in the objects' local copy.
 For NuCRDTs, the execution of an \emph{effect} operation may generate additional 
-\emph{effects} - in our example, the execution of the \emph{effect}s of $o$ would generate
-the effects of $o_{p}$. These extra effects are remotely propagated 
+\emph{effects} - in our example, the execution of the \emph{effect}s of $op$ would generate
+the effects of $op_{p}$. These extra effects are propagated to other replicas
 %to other locations 
 along with the 
-information that a given operation has been executed in the current location. 
+information that $op$ has been executed.
 
 %Our transactional and replication protocols ensure that objects' states evolves monotonically.
 %Clients keep a vector clock representing the latest database snapshot observed, allowing clients to see a consistent state even if they migrate to a different replica.
@@ -1264,9 +1264,10 @@ information that a given operation has been executed in the current location.
 \section{Views and Experience}
 \label{sec:views_for_apps}
 
-In this section, we discuss how materialized views are supported in PotionDB, by using PotionDB
-objects and triggers generated from the view specification. We also discuss
-our experience in defining views for the queries of TPC-H~\cite{tpch}. 
+We now discuss how PotionDB supports materialized views.
+%, by using PotionDB
+%objects and triggers generated from the view specification. We also discuss
+%and our experience in defining views for TPC-H queries. 
 
 \subsection{Generated objects and triggers}
 \label{subsec:generated_view}
@@ -1278,38 +1279,37 @@ objects to hold the view's data and its updates. % the views.
 
 \noindent
 \textbf{Generated objects:}
-The object used for storing the view's data depends on the type of query being performed. 
+The objects used for storing the view's data depends on the type of query. 
 %If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar, such as count or average), the view will be stored in a map CRDT, where the full materialized view is maintained. 
 %If the query has a  \emph{limit} clause or includes an aggregation of type maximum (or minimum),
 %the top-K is used.
 %If the query has a  \emph{limit} clause and an aggregation of type sum (or similar, such as count or average),
 %the top-K counter is used.
-If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar, such as count or average), maximum or minimum, the view will be stored in a map CRDT, where the full materialized view is maintained. 
+If the query has no  \emph{limit} clause and includes either no aggregation or an aggregation of type sum (or similar, such as count or average), maximum or minimum, the full materialized view will be stored in a map CRDT. 
 If the query has a  \emph{limit} clause and no aggregation, or an aggregation of type maximum (or minimum), the top-K is used.
-If the query has a \emph{limit} clause and an aggregation of type sum (or similar, such as count or average), the top-K counter is used.
+If the query has a \emph{limit} clause and an aggregation of type sum (or similar), the top-K counter is used.
 In any case, the elements of the view are maps with multiple columns, one for each
-of the attributes specified in the  \emph{select} of the view definition.  
+attribute specified in the  \emph{select} of the view definition.  
 
-For a given view definition, one or multiple objects are defined - in the language we defined for 
-specifying views  a view that includes variables will lead to multiple objects,
+%For a given view, one or multiple objects are used - 
+For a view that includes variables, multiple objects are used,
 one for each possible value of the variables. 
-In the top sales example presented in Figure~\ref{fig:viewtopsales}, one top-K counter
+In the top sales example of Figure~\ref{fig:viewtopsales}, one top-K counter
 object is created (as needed) for each month of each year, and its PotionDB key includes
 the name of the view plus the month and year.  The top-K counter will have a set
 of entries, each one with the identifier of a product and the total sales of the product. The entry
-could have additional information, such as the description of the product if that was defined
-in the view.
+could have additional information, such as the 
+description of the product if that was defined in the view.
 
 \noindent
 \textbf{Generated triggers:}
-After determining the objects used to represent the view, PotionDB generates triggers to update 
-its contents,
+PotionDB generates triggers to update 
+the contents of view objects,
 %of the view, 
 as base objects are created, updated or deleted.
 % (referred simply as updates). 
-The trigger will be set for the container (or buckets) specified in the \emph{from} clause of the view
-definition.
-If a \emph{where} clause is included in the view definition, updates to objects that do not match the 
+The triggers will be set for the container (or buckets) specified in the \emph{from} clause of the view definition.
+If a \emph{where} clause is included, updates to objects that do not match the 
 defined condition will be ignored.
 
 As a view may be composed by multiple objects, it is first necessary to 
@@ -1317,24 +1317,24 @@ determine which view object must be updated. This is achieved from the view defi
 and the values in the updated base object - in our running example, 
 from the date of a sale, it is immediate to know which view object
 must be updated.
-Depending on the view and the underlying object used to support the view, the appropriate 
-operation on the view object is generated.
-This operation consists in applying the same update performed in the base object to the 
+The exact operation generated to update the view object depends on the type of view object, 
+but it consists in applying the same update performed in the base object to the 
 corresponding view entry map.
-For example, consider the creation of a new sale for a single product $P$, with the value $v_P$. 
+For example, consider the creation of a new sale for product $P$, with the value $v_P$. 
 In this case, the top-K counter of the month and year of the sale is updated by 
 incrementing the total value of sales for $P$ by $v_P$. 
-The underlying functionality of the top-K counter guarantees that the updated entries
-will be propagated to other replicas when necessary, and that every replica keeps the correct top-K
+The underlying functionality of top-K counter guarantees that the updated entries
+will be propagated to other replicas when necessary, and that replicas keep the correct top-K
 elements.
 
 \subsection{Developer-defined views}
 \label{subsec:programmer_view}
 
-When the PotionDB's view language is not sufficient for defining the views an application needs, 
-an application developer can define PotionDB objects to maintain the view's data and the
+A developer can create views by defining the objects to maintain the view's data and the
 triggers to update these view objects.
-
+%When the PotionDB's view language is not sufficient for defining the views an application needs, 
+%a developer can define objects to maintain the view's data and the
+%triggers to update these view objects.
 The top-K and top-K counter NuCRDTs include the logic for replicating only the necessary 
 updates to maintain in all replicas the top elements for data that is updated using set value 
 or increment operations.
@@ -1348,7 +1348,6 @@ update the view objects.
 \subsection{TPC-H in PotionDB}
 
 We now describe our experience applying our 
-%proposed 
 model to the queries defined in TPC-H.
 
 \subsubsection{Data model}
@@ -1374,10 +1373,10 @@ associated with it, which is used to select the bucket to use;
 \item Parts are used across the globe, so they are stored in a single bucket to be fully replicated;
 \end{inparaenum}
 
-Each table row is stored as a map CRDT, with the key of the row (e.g. the identifier of a customer or the combination of part key and supplier key for partsupply) used as the key in PotionDB's identifier of the object. 
-Each column is represented as a CRDT - e.g. the counter CRDT is used for numbers that are updated using numeric operations and the
+Each table row is stored as a map CRDT, with the key of the row (e.g. the identifier of a customer or the combination of part key and supplier key for partsupply) used as the key in PotionDB's object identifier. 
+Each column is a CRDT - e.g. the counter CRDT is used for numbers that are updated using numeric operations and the
 LWW register is used for strings and other numbers.
-When useful, we de-normalize the data model (as it is common in key-value stores and document databases). 
+When useful, we de-normalize the data model (as it is common in NoSQL databases). 
 
 \subsubsection{Views}
 \label{subsec:views_for_queries}
@@ -1399,10 +1398,10 @@ When useful, we de-normalize the data model (as it is common in key-value stores
 %PotionDB automatically generates the necessary objects and update rules for the view(s), ensuring views are correctly updated when any base object is inserted/updated/deleted.
 %Such inference takes out a considerable burden from the application developer.
 
-We have analyzed how to define views in PotionDB for the 22 queries in TPC-H, with different views using different
-underlying CRDTs.
-We now describe the lessons learned. In the next section we present the evaluation of how PotionDB performs on supporting
- different types of queries.
+We analyzed how to define views in PotionDB for all 22 TPC-H queries.
+We now describe the lessons learned. 
+%In the next section we present the evaluation of how PotionDB performs on supporting
+% different types of queries.
 
 \paragraph{De-normalization.} PotionDB is a key-value store and does not directly support advanced database functionality,
 such as joins.  To address this issue, we de-normalize the database whenever necessary.  
@@ -1428,26 +1427,26 @@ ORDER BY Revenue DESC
 
 
 % diferentes tipos de dados
-\paragraph{Data types.} Different types of view require different support from PotionDB underlying data types.
-Figure~\ref{fig:viewlocalsupliers} shows the view to support TPC-H query 5, which computes
+\paragraph{Data types.} Different types of view require different support from PotionDB data types.
+Figure~\ref{fig:viewlocalsupliers} shows the view for TPC-H query 5, which computes
 for each nation in a given region, the revenue from local suppliers. 
-This view is supported by using for each region a map that stores for each nation the sum of the 
+This view uses for each region a map that stores for each nation the sum of the 
 revenue for each \texttt{LineItem}. The map of each region is a CRDT map, with the name of the nation mapping
 directly to a CRDT counter with the revenue for that nation. When a new \texttt{LineItem} is added (or deleted), 
 the corresponding counter is updated. All replicas will have all the values for all nations.
 
 This contrasts with the top sales shown in Figure~\ref{fig:viewtopsales}, that uses a
-top-K counter NuCRDT. In this case, whenever a new sale is inserted, the counters associated with the products are
+top-K counter. In this case, whenever a new sale is inserted, the counters associated with the products are
 updated, but each replica maintains only a partial view of the top-K object - as explained before, replicas only propagate 
 %to all replicas 
 the updates for elements that may belong to the top-K.
 
-Finally, some views are supported by top-K objects. Figure~\ref{fig:q18_view} shows the view to 
-support TPC-H query 18, which can be used to return the top 100 most valuable orders larger than 
+Finally, some views use top-K objects. Figure~\ref{fig:q18_view} shows the view to 
+support TPC-H query 18, which returns the top 100 most valuable orders larger than 
 some given quantity.  In this case, a top-K object is sufficient - the difference with a top-K counter is that,
-while in the top-K an entry in the view is completely defined by the value of an order and can be derived 
+while in the top-K a view entry is completely defined by the value of an order and can be derived 
 from the insert (or update) of an order, in the top-K counter, the value of an entry is the result of an 
-aggregation over multiple values (in the previous example, \texttt{LineItem}s of different orders).
+aggregation over multiple values (in the example, \texttt{LineItem}s of different orders).
 
 
 \begin{figure}[t]
@@ -1468,30 +1467,44 @@ LIMIT 100
 
 % definição de variáveis
 \paragraph{Variables:} As introduced in Section~\ref{subsec:interface}, it is possible to define 
-variables in the specification of views. In some cases, it is important that the view includes information 
-for every possible value of the variables - in this case, a different object is maintained for each
+variables in the specification of views. %In some cases, it is important that the view includes information 
+%for every possible value of the variables - 
+When used, a different object is maintained for each
 value of the variable (or combination of values of multiple variables). 
-For example, for the view presented in Figure~\ref{fig:viewlocalsupliers}, there
-will be a database object for each region and for the view presented in Figure~\ref{fig:viewtopsales}, there 
-will be a database object for each combination of month and year.
+For example, for the view of Figure~\ref{fig:viewlocalsupliers}, there
+will be an object for each region and for the view of Figure~\ref{fig:viewtopsales}, there 
+will be an object for each combination of month and year.
 
 In other cases, the application will only query the database using some specific values of the
-variables. For example,  the specification of the TPC-H query 18 states that quantity will be instantiated with values
-from 312 to 315. In general, it is common for application interfaces to limit the queries a user can perform, 
-leading to a similar situation - e.g. hotel reservation applications allow users to check hotels with an average 
-rating larger than some predefined values.
-Figure~\ref{fig:q18_view} shows how this can be specified in PotionDB for TPC-H query 18. 
-In this case, four objects will be created, one for each value of \texttt{quantity}. Whenever a new
+variables. For example, the specification of the TPC-H query 18 states that quantity will be instantiated with values
+from 312 to 315. 
+Figure~\ref{fig:q18_view} shows how this can be specified in PotionDB, leading to four object, 
+one for each value of \texttt{quantity}. Whenever a new
 order is inserted (or updated), the four objects might need to be updated.
+We note that this situation is common in application, as interfaces often limit the queries a user can 
+perform - e.g. hotel reservation applications allow users to check hotels with an average 
+rating larger than some predefined values.
+%Figure~\ref{fig:q18_view} shows how this can be specified in PotionDB for TPC-H query 18. 
+%In this case, four objects will be created, one for each value of \texttt{quantity}. Whenever a new
+%order is inserted (or updated), the four objects might need to be updated.
 
 % limitações
-\paragraph{Limitations.} The language for specifying views in PotionDB has several limitations, when
-compared with support for defining views in relational databases. The main limitations concern the 
+\paragraph{Limitations.} 
+The language for specifying views in PotionDB has several limitations, including the 
 lack of support for joins and sub-queries, and the limited expressiveness in clauses like select and where. 
-This complicates the specification of views for some complex queries and might even make it 
-impossible to use our view definition language.  In this latter case, the programmer can resort to \emph{manually}
-define a view, by selecting the appropriate objects to store the information and defining the necessary triggers
-to update these objects.
+Supporting full SQL in view definition is not the focus of our work and it is overly complex, as exemplified by the fact that PostgerSQL incremental view 
+maintenance extension \cite{ivm} still lacks many SQL features after 10 years of development. 
+Our work focus on providing the mechanisms to support consistent views over geo-partitioned data. 
+Programmer can always \emph{manually} define a view by selecting the appropriate objects to store the information and 
+defining the necessary triggers to update these objects.
+
+%
+%compared with support for defining views in relational databases. The main limitations concern the 
+%lack of support for joins and sub-queries, and the limited expressiveness in clauses like select and where. 
+%This complicates the specification of views for some complex queries and might even make it 
+%impossible to use our view definition language.  In this latter case, the programmer can resort to \emph{manually}
+%define a view, by selecting the appropriate objects to store the information and defining the necessary triggers
+%to update these objects.
 
 %\vspace{-5pt}
 \begin{figure}[t]
@@ -1515,18 +1528,19 @@ ORDER BY value DESC
 	\caption{Important stock identification query (Q11). %ORDER BY added to answer review.
 	}
 	\vspace{-10pt}
-	\label{fig:q5_view}
+	\label{fig:q11_view}
 \end{figure}
 
-In general, it is possible to circumvent the limitations by defining additional views.
+Sometimes it is possible to circumvent the limitations by defining additional views.
 For example, TPC-H query 11 finds the suppliers stocks in a given nation that represent a significant percentage of the total
-value of available parts in the nation. In the TPC-H specification, this 
-is computed using a having clause with a condition expressed as a subquery.
-In PotionDB, it is necessary to specify two views, as presented in Figure~\ref{fig:q5_view}.
-The \texttt{Q11\_p2} view maintains the total value for each nation, while the \texttt{Q11\_p1} view
-maintains the top parts for each nation. For reaching the result of TPC-H Q11, the application needs
-to read the total value for the nation, and use this value for filtering the top parts (as some of these part may not
-reach the percentage ratio specified in the query).
+value of available parts in the nation. TPC-H specification uses a having clause with a condition expressed as a subquery.
+In PotionDB, we can define view \texttt{Q11\_p2} with the total value for each nation, and view \texttt{Q11\_p1} with 
+the top parts for each nation, as shown in Figure~\ref{fig:q11_view}.
+%The \texttt{Q11\_p2} view maintains the total value for each nation, while the \texttt{Q11\_p1} view
+%maintains the top parts for each nation. 
+The result of Q11 is obtained reading the total value for the nation, and using this value for 
+filtering the top parts (as some parts may not
+reach the percentage ratio specified).
 
 
 \section{Evaluation}
@@ -1551,7 +1565,7 @@ Our prototype was implemented in Go and uses Google's protobufs to serialize/des
 \subsection{Experimental setup}
 \label{subsec:setup}
 
-In our experiments, we compare the following alternative approaches to maintain views:
+We compare the following alternatives to maintain views:
 \begin{itemize}[leftmargin=*,noitemsep,topsep=0pt,parsep=0pt,partopsep=0pt]
 	\item \emph{PotionDB}, our proposed approach where all servers replicate the complete materialized view;
 	\item \emph{Local}, where each server maintains a local view that includes only the objects replicated in the server - in this case, 
@@ -1566,7 +1580,7 @@ In Section~\ref{sec:eval:postgrs} we compare our approach with PostgreSQL.
 %We evaluate PotionDB using TPC-H's dataset, queries and updates, as well as with micro-benchmarks.
 %For the evaluation using TPC-H, we 
 We evaluate PotionDB on Grid'5000's \cite{Grid5000}, using TPC-H's benchmark \cite{tpch}, with a scale factor of 1. %Andre: added at request of reviewer 370B.
-We have modeled the database as discussed in Section~\ref{subsec:dataset} and used data generated by the dbgen tool \cite{tpch}.
+We modeled the database as discussed in Section~\ref{subsec:dataset} and used data generated by dbgen tool \cite{tpch}.
 
 %Andre: rewrote this whole paragraph to address reviewer 370B asking which queries we choose and for some more clarity.
 Unless otherwise stated, our experiments execute TPC-H queries 3, 5, 11, 14, 15 and 18.
@@ -1754,7 +1768,7 @@ For instance, at \textit{PotionDB}'s maximum throughput for 25\% updates, the qu
 %We believe this may be due to network artifacts that lead to latency raising slightly when using over a certain amount of bandwidth - since update transactions have many updates, this threshold is reached with less clients. %TODO: This is... not really a good explanation. Sigh
 
 \textit{Local} throughput improves as the ratio of updates increase. This results from reporting
-the number of executed operations, and that the create transaction includes multiple updates. 
+the number of executed operations with create transactions that includes multiple updates. 
 The overhead for executing a transaction (messages for starting and committing a transaction) is paid
 only once for multiple operations\footnote{In \textit{PotionDB}, if a transaction includes 5 queries/transaction the maximum throughput 
 goes to 4.83M op/s (with latency of 0.68ms), when compared with 1.5M ops/s with (with latency of 0.37 ms) for one query per transaction.}.  
@@ -1769,8 +1783,8 @@ This leads to a slightly lower average latency \mbox{with higher update rates.}
 than \textit{PotionDB}'s due to not having to replicate view updates.
 However, even for 25\% updates, \textit{Single}'s throughput is less than 1/4 of PotionDB.
 
-In summary, PotionDB scales well with modest update ratios, which are common in practice.
-PotionDB provides TCC views while answering complex global queries in sub-millisecond time.
+In summary, %PotionDB scales well with modest update ratios, which are common in practice.
+PotionDB provides scalable TCC viewsm answering complex global queries in sub-millisecond time.
 %Moreover, updates in PotionDB are unaffected by latency between servers.
 
 
@@ -1815,27 +1829,30 @@ as in availability zones in a cloud region, using the extreme case with no added
 	\centering
 	\begin{subfigure}{.485\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/all_queries_noTC}
+	\vspace{-15pt}
 		\caption{All queries}
 		\label{fig:all_queries_noTC}
 	\end{subfigure}%
 	\hspace*{0.4em}
 	\begin{subfigure}{.485\linewidth}
 		\includegraphics[width=1\linewidth]{singleQuery/q3_q5_noLatency}
-		\caption{Single type of query}
+	\vspace{-15pt}
+			\caption{Single type of query}
 		\label{fig:q3_q5_noTC}
 	\end{subfigure}%
-	\vspace*{-0.65em}
+	\vspace{-10pt}
 	\caption{Query performance in single DC.}
 	\label{fig:global_local_single_noTC}
-	\vspace*{-1.2em}
+	\vspace{-15pt}
 \end{figure}
 
 
 Figure \ref{fig:global_local_single_noTC} present the results for read-only workloads.
 The results for \textit{PotionDB} are similar to the previous results - this is expected as all operations are local.
 \textit{Local} and \emph{Single} have much lower latency and higher throughput when compared with the
-geo-distributed setting. This is expected as the cost of contacting other replicas is much lower now - only the
-latency of contacting a node in the same data center. The maximum throughput is still much lower than that
+geo-distributed setting. This is expected due to the low latency for contacting other replicas now.
+% - a intra-DC only the latency of contacting a node in the same data center. 
+The maximum throughput is still much lower than that
 of \textit{PotionDB}, as the need to contact multiple servers for replying to a query induces 
 an higher load in the servers. 
 
